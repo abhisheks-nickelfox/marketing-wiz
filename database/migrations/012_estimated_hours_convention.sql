@@ -1,0 +1,5 @@
+-- Migration 012: Document estimated_hours decimal convention
+-- estimated_hours is stored as a DECIMAL(5,2) representing fractional hours.
+-- 1h 30m is stored as 1.50. The frontend decomposes for display and input;
+-- the backend receives and stores the combined float.
+-- No schema change required.

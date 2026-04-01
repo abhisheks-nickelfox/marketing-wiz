@@ -1,0 +1,17 @@
+# Environment variables — never commit live credentials
+.env
+.env.local
+.env.*.local
+
+# Compiled output
+dist/
+
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
