@@ -6,8 +6,21 @@ import EditTicketModal from '../../components/modals/EditTicketModal'
 import RegenerateTicketModal from '../../components/modals/RegenerateTicketModal'
 import ResolveTicketModal from '../../components/modals/ResolveTicketModal'
 import Toast from '../../components/Toast'
-import { ticketsApi, formatDate, formatHours, timeAgo } from '../../lib/api'
+import { ticketsApi, formatDate, formatHours, timeAgo, getStatusBadges, VALID_TRANSITIONS } from '../../lib/api'
 
+
+const STATUS_LABELS = {
+  draft:             'New',
+  in_progress:       'In Progress',
+  resolved:          'Resolved',
+  internal_review:   'Internal Review',
+  client_review:     'Client Review',
+  compliance_review: 'Compliance Review',
+  approved:          'Approved',
+  closed:            'Closed',
+  revisions:         'Revisions',
+  discarded:         'Discarded',
+}
 
 const AdminTicketDetail = () => {
   const { id } = useParams()
@@ -25,6 +38,10 @@ const AdminTicketDetail = () => {
   const [isResolveModalOpen, setIsResolveModalOpen] = useState(false)
   const [discarding, setDiscarding] = useState(false)
   const [editSaved, setEditSaved] = useState(false)
+  const [transitioning, setTransitioning] = useState(false)
+  const [transitionError, setTransitionError] = useState(null)
+  const [pendingTransitionStatus, setPendingTransitionStatus] = useState(null)
+  const [revisionNotes, setRevisionNotes] = useState('')
 
   const loadData = useCallback(() => {
     Promise.all([ticketsApi.get(id), ticketsApi.getTimeLogs(id)])
@@ -40,8 +57,9 @@ const AdminTicketDetail = () => {
     loadData()
   }, [loadData])
 
+  // 'revision' milestone logs carry hours=0 and must not inflate the total.
   const spentHours = timeLogs
-    .filter((l) => l.log_type !== 'final')
+    .filter((l) => l.log_type !== 'final' && l.log_type !== 'revision')
     .reduce((sum, l) => sum + (parseFloat(l.hours) || 0), 0)
   const progress = ticket?.estimated_hours
     ? Math.min(100, Math.round((spentHours / ticket.estimated_hours) * 100))
@@ -91,6 +109,31 @@ const AdminTicketDetail = () => {
     }
   }
 
+  const handleTransitionSelect = (targetStatus) => {
+    setTransitionError(null)
+    if (targetStatus === 'revisions') {
+      setRevisionNotes('')
+      setPendingTransitionStatus('revisions')
+    } else {
+      handleTransition(targetStatus)
+    }
+  }
+
+  const handleTransition = async (targetStatus, changeNote) => {
+    setTransitioning(true)
+    setTransitionError(null)
+    try {
+      await ticketsApi.transition(ticket.id, targetStatus, changeNote)
+      setPendingTransitionStatus(null)
+      setRevisionNotes('')
+      loadData()
+    } catch (err) {
+      setTransitionError(err.message)
+    } finally {
+      setTransitioning(false)
+    }
+  }
+
   const handleResolveConfirm = async ({ finalComment, hours }) => {
     setActionError(null)
     try {
@@ -105,13 +148,6 @@ const AdminTicketDetail = () => {
     }
   }
 
-  const getWorkStatus = () => {
-    if (ticket.status === 'draft') return { label: 'Pending Approval', style: 'bg-surface-container-high text-on-surface-variant' }
-    if (ticket.status === 'resolved') return { label: 'Done', style: 'bg-emerald-100 text-emerald-700' }
-    if (ticket.status === 'discarded') return { label: 'Discarded', style: 'bg-red-100 text-red-500' }
-    if (spentHours > 0) return { label: 'In Progress', style: 'bg-blue-100 text-blue-700' }
-    return { label: 'Not Started', style: 'bg-surface-container-high text-on-surface-variant' }
-  }
 
   const getPriorityStyle = (p) => {
     const s = {
@@ -123,15 +159,6 @@ const AdminTicketDetail = () => {
     return s[p] || s.normal
   }
 
-  const getStatusStyle = (status) => {
-    const s = {
-      draft: 'bg-surface-container-high text-on-surface-variant',
-      approved: 'bg-emerald-100 text-emerald-700',
-      resolved: 'bg-teal-100 text-teal-700',
-      discarded: 'bg-red-100 text-red-500',
-    }
-    return s[status] || s.draft
-  }
 
   if (loading) {
     return (
@@ -156,6 +183,7 @@ const AdminTicketDetail = () => {
   }
 
   const assignee = ticket.assignee
+  const isClosed = ['closed', 'discarded'].includes(ticket.status)
 
   return (
     <div className="flex">
@@ -227,10 +255,12 @@ const AdminTicketDetail = () => {
               {/* Ticket Metadata */}
               <section className="bg-surface-container-lowest rounded-xl p-5 lg:p-8">
                 <div className="flex flex-wrap items-center gap-3 lg:gap-4 mb-6 lg:mb-8">
-                  <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-bold tracking-wider ${getStatusStyle(ticket.status)}`}>
-                    <span className="w-2 h-2 rounded-full bg-current opacity-70"></span>
-                    {ticket.status.toUpperCase()}
-                  </div>
+                  {getStatusBadges(ticket, spentHours).map(({ label, style }) => (
+                    <div key={label} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-bold tracking-wider ${style}`}>
+                      <span className="w-2 h-2 rounded-full bg-current opacity-70"></span>
+                      {label.toUpperCase()}
+                    </div>
+                  ))}
                   <div className={`px-3 py-1.5 rounded-full text-[10px] font-bold tracking-wider ${getPriorityStyle(ticket.priority)}`}>
                     {ticket.priority.toUpperCase()} PRIORITY
                   </div>
@@ -295,34 +325,100 @@ const AdminTicketDetail = () => {
                 </section>
               )}
 
-              {/* Time Logs */}
-              {timeLogs.length > 0 && (
-                <section>
-                  <h3 className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-on-surface-variant/50 mb-4 lg:mb-6">Time Logs</h3>
-                  <div className="space-y-3">
-                    {timeLogs.map((log) => (
-                      <div key={log.id} className="flex flex-wrap items-center gap-3 lg:gap-4 p-4 bg-surface-container-lowest rounded-lg border border-outline-variant/10">
-                        <span className="font-bold text-sm text-primary-container">{formatHours(log.hours)}</span>
-                        <span className="text-xs text-on-surface-variant capitalize">{log.log_type}</span>
-                        {log.comment && <span className="text-sm text-on-surface flex-1">{log.comment}</span>}
-                        <div className="ml-auto text-right flex flex-col gap-0.5">
-                          <span className="text-[10px] text-on-surface-variant/60 whitespace-nowrap">{formatDate(log.created_at)}</span>
-                          {log.updated_at && new Date(log.updated_at) - new Date(log.created_at) > 1000 && (
-                            <span className="text-[10px] text-on-surface-variant/40 italic whitespace-nowrap">edited {timeAgo(log.updated_at)}</span>
+              {/* Time Logs — grouped by revision cycle */}
+              {timeLogs.length > 0 && (() => {
+                // Sort ascending so we can walk forward through the timeline.
+                const sortedLogs = [...timeLogs].sort(
+                  (a, b) => new Date(a.created_at) - new Date(b.created_at)
+                )
+
+                // Build sections. A 'revision' log acts as a section divider —
+                // it is rendered as an orange banner, not as a time entry.
+                // Unrecognised log_type values (legacy data) are silently skipped.
+                const KNOWN_LOG_TYPES = ['partial', 'estimate', 'final']
+                const sections = []
+                let currentSection = { cycle: 0, label: 'Initial Work', note: null, logs: [] }
+                for (const log of sortedLogs) {
+                  if (log.log_type === 'revision') {
+                    sections.push(currentSection)
+                    currentSection = {
+                      cycle: log.revision_cycle,
+                      label: `Revision ${log.revision_cycle}`,
+                      note: log.comment || null,
+                      logs: [],
+                    }
+                  } else if (KNOWN_LOG_TYPES.includes(log.log_type)) {
+                    currentSection.logs.push(log)
+                  }
+                }
+                sections.push(currentSection)
+
+                const hasMultipleSections = sections.length > 1
+
+                return (
+                  <section>
+                    <h3 className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-on-surface-variant/50 mb-4 lg:mb-6">Time Logs</h3>
+                    <div className="space-y-6">
+                      {sections.map((section) => (
+                        <div key={section.cycle}>
+                          {/* Section header — only show "Initial Work" label when there are revisions */}
+                          {section.cycle === 0 && hasMultipleSections && (
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/40 mb-2">
+                              Initial Work
+                            </p>
+                          )}
+                          {/* Revision banner */}
+                          {section.cycle > 0 && (
+                            <div className="mb-3 rounded-lg bg-orange-50 border-l-4 border-orange-400 px-4 py-3 space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="material-symbols-outlined text-sm text-orange-500">edit_note</span>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-orange-600">
+                                  Revision {section.cycle} — Admin's Note
+                                </p>
+                              </div>
+                              <p className="text-sm text-orange-700 font-medium leading-snug pl-5">
+                                {section.note || <span className="italic opacity-60">No change note provided</span>}
+                              </p>
+                            </div>
+                          )}
+                          {/* Log entries for this cycle */}
+                          {section.logs.length === 0 ? (
+                            <p className="text-xs text-on-surface-variant/40 italic pl-1">No logs for this cycle</p>
+                          ) : (
+                            <div className="space-y-3">
+                              {section.logs.map((log) => (
+                                <div
+                                  key={log.id}
+                                  className="flex flex-wrap items-center gap-3 lg:gap-4 p-4 bg-surface-container-lowest rounded-lg border border-outline-variant/10"
+                                >
+                                  <span className="font-bold text-sm text-primary-container">{formatHours(log.hours)}</span>
+                                  {log.log_type === 'final' && (
+                                    <span className="text-[10px] font-bold bg-teal-50 text-teal-600 px-2 py-0.5 rounded uppercase tracking-wider">Final</span>
+                                  )}
+                                  {log.comment && <span className="text-sm text-on-surface flex-1">{log.comment}</span>}
+                                  <div className="ml-auto text-right flex flex-col gap-0.5">
+                                    <span className="text-[10px] text-on-surface-variant/60 whitespace-nowrap">{formatDate(log.created_at)}</span>
+                                    {log.updated_at && new Date(log.updated_at) - new Date(log.created_at) > 1000 && (
+                                      <span className="text-[10px] text-on-surface-variant/40 italic whitespace-nowrap">edited {timeAgo(log.updated_at)}</span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
                           )}
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )}
+                      ))}
+                    </div>
+                  </section>
+                )
+              })()}
             </div>
 
             {/* RIGHT COLUMN */}
             <div className="lg:col-span-3 space-y-6 lg:space-y-8">
               {/* Quick Actions */}
               <section className="bg-surface-container-lowest rounded-xl p-5 lg:p-6 space-y-3">
-                {ticket.status !== 'resolved' && ticket.status !== 'discarded' && (
+                {!isClosed && (
                   <button
                     className="w-full flex items-center justify-center gap-2 py-3 border border-outline-variant/30 rounded-lg text-xs font-bold uppercase tracking-widest text-on-surface hover:bg-surface-container-low transition-all"
                     onClick={() => { setActionError(null); setShowEditModal(true) }}
@@ -355,7 +451,7 @@ const AdminTicketDetail = () => {
                     </button>
                   </>
                 )}
-                {ticket.status === 'approved' && (
+                {['in_progress', 'revisions'].includes(ticket.status) && (
                   <button
                     className="w-full py-3 bg-emerald-600 text-white rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-emerald-700 active:scale-95 transition-all"
                     onClick={() => { setActionError(null); setIsResolveModalOpen(true) }}
@@ -366,23 +462,70 @@ const AdminTicketDetail = () => {
                     </span>
                   </button>
                 )}
+                {/* Status Transition — admin dropdown */}
+                {!isClosed && ticket.status !== 'draft' && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Move Status</p>
+                    <div className="flex gap-2 relative">
+                      <select
+                        id="status-transition"
+                        value=""
+                        disabled={transitioning}
+                        onChange={(e) => { if (e.target.value) handleTransitionSelect(e.target.value) }}
+                        className="flex-1 border-0 outline-none bg-surface-container-low rounded-lg px-3 py-2.5 text-xs font-semibold text-on-surface focus:ring-2 focus:ring-primary/20 appearance-none cursor-pointer disabled:opacity-50"
+                      >
+                        <option value="" disabled>Select status…</option>
+                        {(VALID_TRANSITIONS[ticket.status] ?? []).map((s) => (
+                            <option key={s} value={s}>
+                              {s === 'draft' ? 'Move to Draft (Unassign)' : STATUS_LABELS[s]}
+                            </option>
+                          ))}
+                      </select>
+                      <span className="material-symbols-outlined text-sm text-on-surface-variant self-center pointer-events-none -ml-8">expand_more</span>
+                    </div>
+                    {transitionError && <p className="text-xs text-error mt-1">{transitionError}</p>}
+                  </div>
+                )}
+
+                {/* Revisions Notes Modal */}
+                {pendingTransitionStatus === 'revisions' && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+                    <div className="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4">
+                      <h3 className="text-base font-extrabold text-on-surface">Revision Notes</h3>
+                      <p className="text-xs text-on-surface-variant">Describe what changes are needed. The assignee will see this note.</p>
+                      <textarea
+                        autoFocus
+                        rows={4}
+                        value={revisionNotes}
+                        onChange={(e) => setRevisionNotes(e.target.value)}
+                        placeholder="e.g. Please revise the copy to be more concise and update the tone..."
+                        className="w-full bg-surface-container-low rounded-lg px-3 py-2.5 text-sm text-on-surface resize-none outline-none focus:ring-2 focus:ring-primary/20 border-0"
+                      />
+                      {transitionError && <p className="text-xs text-error">{transitionError}</p>}
+                      <div className="flex gap-3 pt-1">
+                        <button
+                          onClick={() => { setPendingTransitionStatus(null); setTransitionError(null) }}
+                          className="flex-1 py-2.5 border border-outline-variant/30 rounded-lg text-xs font-bold uppercase tracking-widest text-on-surface-variant hover:bg-surface-container-low transition-all"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={() => handleTransition('revisions', revisionNotes.trim() || undefined)}
+                          disabled={transitioning}
+                          className="flex-1 py-2.5 bg-orange-500 text-white rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-orange-600 active:scale-95 transition-all disabled:opacity-50"
+                        >
+                          {transitioning ? 'Moving…' : 'Send for Revisions'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </section>
 
               {/* Details */}
               <section className="bg-surface-container-lowest rounded-xl p-5 lg:p-6 space-y-4">
                 <h3 className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-on-surface-variant/50">Details</h3>
                 <div className="space-y-3 text-sm">
-                  <div className="flex justify-between items-center">
-                    <span className="text-on-surface-variant">Work Status</span>
-                    {(() => {
-                      const ws = getWorkStatus()
-                      return (
-                        <span className={`px-2 py-0.5 text-[10px] font-bold rounded-sm uppercase tracking-tighter ${ws.style}`}>
-                          {ws.label}
-                        </span>
-                      )
-                    })()}
-                  </div>
                   {ticket.deadline && (
                     <div className="flex justify-between items-center">
                       <span className="text-on-surface-variant">Deadline</span>

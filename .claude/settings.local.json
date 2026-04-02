@@ -13,7 +13,10 @@
       "Bash(do echo:*)",
       "Read(//home/shubham/Documents/MarketingWiz/**)",
       "Bash(done)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(kill 21592)",
+      "Bash(node dist/index.js)",
+      "Bash(node -e \"const c = require\\('./dist/controllers/tickets.controller.js'\\); console.log\\('transitionTicket exported:', typeof c.transitionTicket\\); console.log\\('resolveTicket exported:', typeof c.resolveTicket\\);\")"
     ]
   }
 }

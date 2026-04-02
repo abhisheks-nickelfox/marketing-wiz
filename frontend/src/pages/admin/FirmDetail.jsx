@@ -7,7 +7,7 @@ import AssignApproveModal from '../../components/modals/AssignApproveModal'
 import CreateTicketModal from '../../components/modals/CreateTicketModal'
 import EditTicketModal from '../../components/modals/EditTicketModal'
 import RegenerateTicketModal from '../../components/modals/RegenerateTicketModal'
-import { firmsApi, ticketsApi, formatDate, timeAgo, getStatusBadge } from '../../lib/api'
+import { firmsApi, ticketsApi, formatDate, timeAgo, getStatusBadges } from '../../lib/api'
 import Toast from '../../components/Toast'
 
 const RECENT_THRESHOLD_MS = 15 * 60 * 1000 // 15 minutes
@@ -17,14 +17,6 @@ const isRecent = (isoDate) => {
   return Date.now() - new Date(isoDate).getTime() < RECENT_THRESHOLD_MS
 }
 
-const getWorkStatus = (ticket) => {
-  if (ticket.status === 'draft') return { label: 'Pending Approval', style: 'bg-surface-container-high text-on-surface-variant' }
-  if (ticket.status === 'resolved') return { label: 'Done', style: 'bg-emerald-100 text-emerald-700' }
-  if (ticket.status === 'discarded') return { label: 'Discarded', style: 'bg-red-100 text-red-500' }
-  const spent = ticket.time_spent ?? 0
-  if (spent > 0) return { label: 'In Progress', style: 'bg-blue-100 text-blue-700' }
-  return { label: 'Not Started', style: 'bg-surface-container-high text-on-surface-variant' }
-}
 
 const FirmDetail = () => {
   const { id } = useParams()
@@ -46,6 +38,8 @@ const FirmDetail = () => {
   const [deleteTargetId, setDeleteTargetId] = useState(null)
   const [toastMsg, setToastMsg] = useState('')
   const [showToast, setShowToast] = useState(false)
+  const [showArchived, setShowArchived] = useState(false)
+  const [archivingId, setArchivingId] = useState(null)
 
   // Pagination setup - 10 items per page
   const itemsPerPage = 10
@@ -65,9 +59,9 @@ const FirmDetail = () => {
 
   // Single combined fetch — both firm metadata and tickets are loaded in parallel
   // so stats are never dropped because of a race between two separate effects.
-  const loadData = useCallback(() => {
+  const loadData = useCallback((archived = false) => {
     setLoading(true)
-    Promise.all([firmsApi.get(id), ticketsApi.list({ firm_id: id })])
+    Promise.all([firmsApi.get(id), ticketsApi.list({ firm_id: id, archived })])
       .then(([firmRes, ticketsRes]) => {
         const ticketList = ticketsRes.data ?? []
         setTickets(ticketList)
@@ -76,11 +70,17 @@ const FirmDetail = () => {
         setSearchParams({ page: '1' })
         // Compute stats and merge them into the firm object in one setState call
         const stats = {
-          total: ticketList.length,
-          draft: ticketList.filter((t) => t.status === 'draft').length,
-          approved: ticketList.filter((t) => t.status === 'approved').length,
-          resolved: ticketList.filter((t) => t.status === 'resolved').length,
-          discarded: ticketList.filter((t) => t.status === 'discarded').length,
+          total:             ticketList.length,
+          new:               ticketList.filter((t) => t.status === 'draft').length,
+          in_progress:       ticketList.filter((t) => t.status === 'in_progress').length,
+          resolved:          ticketList.filter((t) => t.status === 'resolved').length,
+          internal_review:   ticketList.filter((t) => t.status === 'internal_review').length,
+          client_review:     ticketList.filter((t) => t.status === 'client_review').length,
+          compliance_review: ticketList.filter((t) => t.status === 'compliance_review').length,
+          approved:          ticketList.filter((t) => t.status === 'approved').length,
+          closed:            ticketList.filter((t) => t.status === 'closed').length,
+          revisions:         ticketList.filter((t) => t.status === 'revisions').length,
+          discarded:         ticketList.filter((t) => t.status === 'discarded').length,
         }
         setFirm({ ...firmRes.data, stats })
       })
@@ -89,8 +89,8 @@ const FirmDetail = () => {
   }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    loadData()
-  }, [loadData])
+    loadData(showArchived)
+  }, [loadData, showArchived])
 
 
   const handleAssignApprove = (ticket) => {
@@ -148,6 +148,36 @@ const FirmDetail = () => {
 
   const handleDiscardCancel = () => {
     setDiscardTargetId(null)
+  }
+
+  const handleArchive = async (ticketId) => {
+    setArchivingId(ticketId)
+    setActionError(null)
+    try {
+      await ticketsApi.archive(ticketId, true)
+      setToastMsg('Ticket archived')
+      setShowToast(true)
+      loadData(showArchived)
+    } catch (err) {
+      setActionError(err.message)
+    } finally {
+      setArchivingId(null)
+    }
+  }
+
+  const handleUnarchive = async (ticketId) => {
+    setArchivingId(ticketId)
+    setActionError(null)
+    try {
+      await ticketsApi.archive(ticketId, false)
+      setToastMsg('Ticket unarchived')
+      setShowToast(true)
+      loadData(showArchived)
+    } catch (err) {
+      setActionError(err.message)
+    } finally {
+      setArchivingId(null)
+    }
   }
 
   const handleApproveComplete = async ({ assignee_id, priority, assigneeName, deadline }) => {
@@ -265,18 +295,24 @@ const FirmDetail = () => {
           {firm.stats && (
             <div className="flex flex-wrap gap-3 mb-6 lg:mb-8">
               {[
-                { label: 'Total', value: firm.stats.total, color: 'bg-surface-container-high text-on-surface-variant' },
-                { label: 'Draft', value: firm.stats.draft, color: 'bg-surface-container-high text-on-surface-variant' },
-                { label: 'Approved', value: firm.stats.approved, color: 'bg-green-100 text-green-700' },
-                { label: 'Resolved', value: firm.stats.resolved, color: 'bg-teal-100 text-teal-700' },
-                { label: 'Discarded', value: firm.stats.discarded, color: 'bg-red-100 text-red-500' },
+                { label: 'Total',         value: firm.stats.total,             color: 'bg-surface-container-high text-on-surface-variant', status: null },
+                { label: 'New',           value: firm.stats.new,               color: 'bg-surface-container-high text-on-surface-variant', status: 'draft' },
+                { label: 'In Progress',   value: firm.stats.in_progress,       color: 'bg-blue-100 text-blue-700',                         status: 'in_progress' },
+                { label: 'Resolved',      value: firm.stats.resolved,          color: 'bg-teal-100 text-teal-700',                         status: 'resolved' },
+                { label: 'Int. Review',   value: firm.stats.internal_review,   color: 'bg-violet-100 text-violet-700',                     status: 'internal_review' },
+                { label: 'Client Review', value: firm.stats.client_review,     color: 'bg-indigo-100 text-indigo-700',                     status: 'client_review' },
+                { label: 'Compliance',    value: firm.stats.compliance_review, color: 'bg-amber-100 text-amber-700',                       status: 'compliance_review' },
+                { label: 'Approved',      value: firm.stats.approved,          color: 'bg-emerald-100 text-emerald-700',                   status: 'approved' },
+                { label: 'Closed',        value: firm.stats.closed,            color: 'bg-emerald-200 text-emerald-800',                   status: 'closed' },
+                { label: 'Revisions',     value: firm.stats.revisions,         color: 'bg-orange-100 text-orange-700',                     status: 'revisions' },
+                { label: 'Discarded',     value: firm.stats.discarded,         color: 'bg-red-100 text-red-500',                           status: 'discarded' },
               ].filter((s) => s.value > 0 || s.label === 'Total').map((s) => (
                 <button
                   key={s.label}
                   onClick={() =>
-                    s.label === 'Total'
-                      ? navigate(`/admin/tickets?firm_id=${id}`)
-                      : navigate(`/admin/tickets?firm_id=${id}&status=${s.label.toLowerCase()}`)
+                    s.status
+                      ? navigate(`/admin/tickets?firm_id=${id}&status=${s.status}`)
+                      : navigate(`/admin/tickets?firm_id=${id}`)
                   }
                   className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold cursor-pointer hover:brightness-95 transition-all ${s.color}`}
                 >
@@ -325,17 +361,48 @@ const FirmDetail = () => {
           )}
 
           {/* Tabs */}
-          <div className="flex gap-8 border-b border-transparent mb-8 lg:mb-10">
-            <button className="pb-3 text-sm font-bold text-primary relative">
-              Tickets
-              <span className="absolute bottom-0 left-0 w-full h-0.5 bg-primary"></span>
+          <div className="flex items-center justify-between border-b border-transparent mb-8 lg:mb-10">
+            <div className="flex gap-8">
+              <button className="pb-3 text-sm font-bold text-primary relative">
+                Tickets
+                <span className="absolute bottom-0 left-0 w-full h-0.5 bg-primary"></span>
+              </button>
+            </div>
+            <button
+              onClick={() => setShowArchived((prev) => !prev)}
+              className={`mb-1 flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${
+                showArchived
+                  ? 'bg-surface-container-high text-on-surface'
+                  : 'text-on-surface-variant hover:bg-surface-container-low'
+              }`}
+            >
+              <span className="material-symbols-outlined text-sm">inventory_2</span>
+              {showArchived ? 'Hide Archived' : 'Show Archived'}
             </button>
           </div>
+
+          {/* Archived view back button */}
+          {showArchived && (
+            <div className="flex items-center gap-3 mb-4">
+              <button
+                onClick={() => setShowArchived(false)}
+                className="flex items-center gap-1.5 text-sm font-medium text-on-surface-variant hover:text-primary transition-colors"
+              >
+                <span className="material-symbols-outlined text-base">arrow_back</span>
+                Back to Tickets
+              </button>
+              <span className="text-xs font-bold bg-surface-container-high text-on-surface-variant px-2.5 py-1 rounded-full uppercase tracking-wider">
+                Archived
+              </span>
+            </div>
+          )}
 
           {/* Tickets List */}
           <div className="flex flex-col gap-4">
             {tickets.length === 0 && (
-              <p className="text-sm text-on-surface-variant italic text-center py-8">No tickets for this firm yet.</p>
+              <p className="text-sm text-on-surface-variant italic text-center py-8">
+                {showArchived ? 'No archived tickets for this firm.' : 'No tickets for this firm yet.'}
+              </p>
             )}
             {paginatedTickets.map((ticket) => {
               const assignee = ticket.assignee ?? null
@@ -345,9 +412,15 @@ const FirmDetail = () => {
                   className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl flex items-stretch transition-all hover:shadow-lg hover:shadow-black/5 overflow-hidden"
                 >
                   <div className={`w-1.5 shrink-0 ${
-                    ticket.status === 'approved' ? 'bg-emerald-600'
-                    : ticket.status === 'resolved' ? 'bg-teal-600'
-                    : ticket.status === 'discarded' ? 'bg-red-400'
+                    ticket.status === 'in_progress'       ? 'bg-blue-500'
+                    : ticket.status === 'resolved'        ? 'bg-teal-600'
+                    : ticket.status === 'internal_review' ? 'bg-violet-500'
+                    : ticket.status === 'client_review'   ? 'bg-indigo-500'
+                    : ticket.status === 'compliance_review' ? 'bg-amber-500'
+                    : ticket.status === 'approved'        ? 'bg-emerald-600'
+                    : ticket.status === 'closed'          ? 'bg-emerald-700'
+                    : ticket.status === 'revisions'       ? 'bg-orange-500'
+                    : ticket.status === 'discarded'       ? 'bg-red-400'
                     : 'bg-gray-400'
                   }`}></div>
                   <div className="flex-1 p-4 lg:p-5 flex flex-col gap-4">
@@ -355,10 +428,12 @@ const FirmDetail = () => {
                       <div className="flex flex-wrap items-center gap-2 lg:gap-3 mb-2">
                         <h3 className="text-sm lg:text-base font-bold text-on-surface">{ticket.title}</h3>
                         <div className="flex flex-wrap gap-2">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${getStatusBadge(ticket.status)}`}>
-                            {ticket.status}
-                          </span>
-                          {(ticket.status === 'approved' || ticket.status === 'draft') && (
+                          {getStatusBadges(ticket).map(({ label, style }) => (
+                            <span key={label} className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${style}`}>
+                              {label}
+                            </span>
+                          ))}
+                          {(ticket.status === 'in_progress' || ticket.status === 'draft') && (
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
                               ticket.priority === 'urgent' ? 'bg-red-100 text-red-700'
                               : ticket.priority === 'high' ? 'bg-red-50 text-red-600'
@@ -378,14 +453,6 @@ const FirmDetail = () => {
                               New
                             </span>
                           )}
-                          {(() => {
-                            const ws = getWorkStatus(ticket)
-                            return (
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${ws.style}`}>
-                                {ws.label}
-                              </span>
-                            )
-                          })()}
                         </div>
                       </div>
                       {ticket.description && (
@@ -438,23 +505,7 @@ const FirmDetail = () => {
                           </button>
                         </>
                       )}
-                      {ticket.status === 'approved' && (
-                        <>
-                          <button
-                            className="px-3 py-1.5 text-xs font-bold text-on-surface border border-outline-variant/30 rounded-lg hover:bg-surface-container-low transition-colors"
-                            onClick={() => handleEdit(ticket)}
-                          >
-                            Edit
-                          </button>
-                          <Link
-                            to={`/admin/tickets/${ticket.id}`}
-                            className="px-4 py-1.5 text-xs font-bold text-primary-container border border-primary-container/30 rounded-lg hover:bg-primary-container/5 transition-colors flex items-center gap-1"
-                          >
-                            View Details
-                          </Link>
-                        </>
-                      )}
-                      {ticket.status === 'resolved' && (
+                      {ticket.status !== 'draft' && (
                         <Link
                           to={`/admin/tickets/${ticket.id}`}
                           className="px-4 py-1.5 text-xs font-bold text-primary-container border border-primary-container/30 rounded-lg hover:bg-primary-container/5 transition-colors flex items-center gap-1"
@@ -462,13 +513,42 @@ const FirmDetail = () => {
                           View Details
                         </Link>
                       )}
-                      {ticket.status === 'discarded' && (
+                      {ticket.status === 'discarded' && !ticket.archived && (
                         <button
                           onClick={() => handleDeletePermanent(ticket.id)}
                           className="text-xs font-bold text-error hover:text-error/80 transition-colors flex items-center gap-1"
                         >
                           <span className="material-symbols-outlined text-sm">delete_forever</span>
                           Delete
+                        </button>
+                      )}
+                      {/* Archive / Unarchive */}
+                      {ticket.archived ? (
+                        <>
+                          <button
+                            onClick={() => handleUnarchive(ticket.id)}
+                            disabled={archivingId === ticket.id}
+                            className="px-3 py-1.5 text-xs font-bold text-on-surface-variant border border-outline-variant/30 rounded-lg hover:bg-surface-container-low transition-colors flex items-center gap-1 disabled:opacity-50"
+                          >
+                            <span className="material-symbols-outlined text-sm">unarchive</span>
+                            Unarchive
+                          </button>
+                          <button
+                            onClick={() => handleDeletePermanent(ticket.id)}
+                            className="text-xs font-bold text-error hover:text-error/80 transition-colors flex items-center gap-1"
+                          >
+                            <span className="material-symbols-outlined text-sm">delete_forever</span>
+                            Delete
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => handleArchive(ticket.id)}
+                          disabled={archivingId === ticket.id}
+                          className="px-3 py-1.5 text-xs font-bold text-on-surface-variant border border-outline-variant/30 rounded-lg hover:bg-surface-container-low transition-colors flex items-center gap-1 disabled:opacity-50"
+                        >
+                          <span className="material-symbols-outlined text-sm">archive</span>
+                          Archive
                         </button>
                       )}
                     </div>

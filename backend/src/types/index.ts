@@ -6,8 +6,18 @@ export type UserRole = 'admin' | 'member' | 'super_admin';
 export type PromptType = 'pm' | 'campaigns' | 'content';
 export type TicketType = 'task' | 'design' | 'development' | 'account_management';
 export type TicketPriority = 'low' | 'normal' | 'high' | 'urgent';
-export type TicketStatus = 'draft' | 'approved' | 'discarded' | 'resolved';
-export type LogType = 'estimate' | 'partial' | 'final';
+export type TicketStatus =
+  | 'draft'
+  | 'in_progress'
+  | 'resolved'
+  | 'internal_review'
+  | 'client_review'
+  | 'compliance_review'
+  | 'approved'
+  | 'closed'
+  | 'revisions'
+  | 'discarded';
+export type LogType = 'estimate' | 'partial' | 'final' | 'revision';
 
 // ─── Domain Models ────────────────────────────────────────────────────────────
 
@@ -87,6 +97,10 @@ export interface Ticket {
   deadline: string | null;
   ai_generated: boolean;
   edited: boolean;
+  archived: boolean;
+  revision_count: number;
+  regeneration_count: number;
+  last_regenerated_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -98,6 +112,7 @@ export interface TimeLog {
   hours: number;
   comment: string;
   log_type: LogType;
+  revision_cycle: number;
   created_at: string;
 }
 

@@ -10,11 +10,15 @@ import {
   regenerateTicketHandler,
   resolveTicket,
   deleteTicket,
+  archiveTicket,
+  transitionTicket,
   updateTicketValidation,
   assignApproveValidation,
   regenerateValidation,
   resolveValidation,
   deleteTicketValidation,
+  archiveTicketValidation,
+  transitionTicketValidation,
   createTicket,
   createTicketValidation,
 } from '../controllers/tickets.controller';
@@ -51,6 +55,12 @@ router.patch('/:id/resolve', requireMember, resolveValidation, resolveTicket);
 
 // DELETE /api/tickets/:id                — admin only, discarded tickets only
 router.delete('/:id', requireAdmin, deleteTicketValidation, deleteTicket);
+
+// PATCH /api/tickets/:id/archive         — admin only
+router.patch('/:id/archive', requireAdmin, archiveTicketValidation, archiveTicket);
+
+// PATCH /api/tickets/:id/transition      — admin only
+router.patch('/:id/transition', requireAdmin, transitionTicketValidation, transitionTicket);
 
 // ─── Time-log sub-resource ────────────────────────────────────────────────────
 

@@ -3,16 +3,8 @@ import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import Sidebar from '../../components/Sidebar'
 import Pagination from '../../components/Pagination'
 import usePagination from '../../hooks/usePagination'
-import { ticketsApi, firmsApi, teamApi, formatDate, formatHours, getStatusBadge } from '../../lib/api'
+import { ticketsApi, firmsApi, teamApi, formatDate, formatHours, getStatusBadges } from '../../lib/api'
 
-const getWorkStatus = (ticket) => {
-  if (ticket.status === 'draft') return { label: 'Pending Approval', style: 'bg-surface-container-high text-on-surface-variant' }
-  if (ticket.status === 'resolved') return { label: 'Done', style: 'bg-emerald-100 text-emerald-700' }
-  if (ticket.status === 'discarded') return { label: 'Discarded', style: 'bg-red-100 text-red-500' }
-  const spent = ticket.time_spent ?? 0
-  if (spent > 0) return { label: 'In Progress', style: 'bg-blue-100 text-blue-700' }
-  return { label: 'Not Started', style: 'bg-surface-container-high text-on-surface-variant' }
-}
 
 const AdminTicketList = () => {
   const location = useLocation()
@@ -118,11 +110,17 @@ const AdminTicketList = () => {
                   label: 'Status',
                   key: 'status',
                   opts: [
-                    ['any', 'Any Status'],
-                    ['draft', 'Draft'],
-                    ['approved', 'Approved'],
-                    ['resolved', 'Resolved'],
-                    ['discarded', 'Discarded'],
+                    ['any',               'Any Status'],
+                    ['draft',             'New'],
+                    ['in_progress',       'In Progress'],
+                    ['resolved',          'Resolved'],
+                    ['internal_review',   'Internal Review'],
+                    ['client_review',     'Client Review'],
+                    ['compliance_review', 'Compliance Review'],
+                    ['approved',          'Approved'],
+                    ['closed',            'Closed'],
+                    ['revisions',         'Revisions'],
+                    ['discarded',         'Discarded'],
                   ],
                 },
                 {
@@ -227,7 +225,6 @@ const AdminTicketList = () => {
                     <th className="px-4 lg:px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant text-center hidden md:table-cell">Est. Time</th>
                     <th className="px-4 lg:px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant text-center hidden md:table-cell">Time Spent</th>
                     <th className="px-4 lg:px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Status</th>
-                    <th className="px-4 lg:px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Work Status</th>
                     <th className="px-4 lg:px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant hidden lg:table-cell">Created</th>
                     <th className="px-4 lg:px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant text-right">Action</th>
                   </tr>
@@ -235,14 +232,14 @@ const AdminTicketList = () => {
                 <tbody className="divide-y divide-outline-variant/5">
                   {loading && (
                     <tr>
-                      <td colSpan={11} className="px-6 py-8 text-center text-on-surface-variant text-sm animate-pulse">
+                      <td colSpan={10} className="px-6 py-8 text-center text-on-surface-variant text-sm animate-pulse">
                         Loading tickets…
                       </td>
                     </tr>
                   )}
                   {!loading && tickets.length === 0 && (
                     <tr>
-                      <td colSpan={11} className="px-6 py-8 text-center text-on-surface-variant text-sm">
+                      <td colSpan={10} className="px-6 py-8 text-center text-on-surface-variant text-sm">
                         No tickets found
                       </td>
                     </tr>
@@ -284,19 +281,13 @@ const AdminTicketList = () => {
                           {ticket.time_spent ? formatHours(ticket.time_spent) : '—'}
                         </td>
                         <td className="px-4 lg:px-6 py-4 lg:py-5">
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${getStatusBadge(ticket.status)}`}>
-                            {ticket.status}
-                          </span>
-                        </td>
-                        <td className="px-4 lg:px-6 py-4 lg:py-5">
-                          {(() => {
-                            const ws = getWorkStatus(ticket)
-                            return (
-                              <span className={`px-2 py-1 text-[10px] font-bold rounded-sm uppercase tracking-tighter ${ws.style}`}>
-                                {ws.label}
+                          <div className="flex flex-wrap gap-1">
+                            {getStatusBadges(ticket).map(({ label, style }) => (
+                              <span key={label} className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${style}`}>
+                                {label}
                               </span>
-                            )
-                          })()}
+                            ))}
+                          </div>
                         </td>
                         <td className="px-4 lg:px-6 py-4 lg:py-5 text-xs text-on-surface-variant hidden lg:table-cell">
                           {formatDate(ticket.created_at)}

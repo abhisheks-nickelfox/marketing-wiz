@@ -4,8 +4,21 @@ import Sidebar from '../../components/Sidebar'
 import NotificationBell from '../../components/NotificationBell'
 import ResolveTicketModal from '../../components/modals/ResolveTicketModal'
 import Toast from '../../components/Toast'
-import { ticketsApi, formatDate, formatHours, timeAgo, getStatusBadge, decimalToHoursMinutes, hoursMinutesToDecimal } from '../../lib/api'
+import { ticketsApi, formatDate, formatHours, timeAgo, getStatusBadge, getStatusBadges, decimalToHoursMinutes, hoursMinutesToDecimal } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
+
+const STATUS_LABELS = {
+  draft:             'New',
+  in_progress:       'In Progress',
+  resolved:          'Resolved',
+  internal_review:   'Internal Review',
+  client_review:     'Client Review',
+  compliance_review: 'Compliance Review',
+  approved:          'Approved',
+  closed:            'Closed',
+  revisions:         'Revisions',
+  discarded:         'Discarded',
+}
 
 const MemberTicketDetail = () => {
   const { id } = useParams()
@@ -57,9 +70,9 @@ const MemberTicketDetail = () => {
     loadData()
   }, [loadData])
 
-  // Exclude the 'final' log from the running total — it's a summary snapshot, not an additional entry
+  // Exclude 'final' (it's a summary snapshot) and 'revision' (hours=0 milestone markers).
   const totalLogged = timeLogs
-    .filter((l) => l.log_type !== 'final')
+    .filter((l) => l.log_type !== 'final' && l.log_type !== 'revision')
     .reduce((sum, l) => sum + (parseFloat(l.hours) || 0), 0)
 
   const handleSaveHours = async () => {
@@ -177,7 +190,8 @@ const MemberTicketDetail = () => {
   }
 
   const isResolved = ticket.status === 'resolved'
-  const isClosed = ticket.status === 'resolved' || ticket.status === 'discarded'
+  const isClosed = ['closed', 'discarded', 'internal_review', 'client_review',
+                    'compliance_review', 'approved'].includes(ticket.status)
   const assignee = ticket.assignee
   const isAssignee = user?.id === assignee?.id
 
@@ -227,9 +241,11 @@ const MemberTicketDetail = () => {
           {/* Page Title */}
           <div className="mb-10 max-w-3xl">
             <div className="flex items-center gap-3 mb-3">
-              <span className={`px-2.5 py-1 text-[10px] font-bold rounded uppercase tracking-wider ${getStatusBadge(ticket.status)}`}>
-                {ticket.status}
-              </span>
+              {getStatusBadges(ticket).map(({ label, style }) => (
+                <span key={label} className={`px-2.5 py-1 text-[10px] font-bold rounded uppercase tracking-wider ${style}`}>
+                  {label}
+                </span>
+              ))}
               {isResolved && (
                 <span className="text-xs font-medium text-teal-600 flex items-center gap-1">
                   <span className="material-symbols-outlined text-sm">check_circle</span>
@@ -276,12 +292,15 @@ const MemberTicketDetail = () => {
                   </p>
                 </div>
 
-                {/* Admin Change Note */}
-                {ticket.change_note && (
-                  <div className="bg-secondary-fixed/30 border-l-4 border-primary p-5 rounded-r-lg">
-                    <p className="text-[10px] font-black text-primary tracking-widest uppercase mb-2">Admin Change Note</p>
-                    <p className="text-sm font-medium text-secondary italic leading-snug">
-                      "{ticket.change_note}"
+                {/* Admin Change Note — shown prominently when ticket is in revisions */}
+                {ticket.status === 'revisions' && ticket.change_note && (
+                  <div className="bg-orange-50 border-l-4 border-orange-400 p-5 rounded-r-lg">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="material-symbols-outlined text-sm text-orange-500">edit_note</span>
+                      <p className="text-[10px] font-black text-orange-600 tracking-widest uppercase">Changes Requested</p>
+                    </div>
+                    <p className="text-sm font-medium text-orange-700 italic leading-snug pl-5">
+                      {ticket.change_note}
                     </p>
                   </div>
                 )}
@@ -339,16 +358,16 @@ const MemberTicketDetail = () => {
                     <p className="text-2xl font-extrabold text-on-surface mt-1">{formatHours(totalLogged)}</p>
                     <p className="text-[10px] text-on-surface-variant/60 uppercase tracking-widest">Total Logged</p>
                   </div>
-                  {timeLogs.filter((l) => l.log_type !== 'final').length > 0 && (
+                  {timeLogs.filter((l) => l.log_type !== 'final' && l.log_type !== 'revision').length > 0 && (
                     <span className="text-[10px] font-bold bg-surface-container-high text-on-surface-variant uppercase tracking-wider px-3 py-1 rounded-full">
-                      {timeLogs.filter((l) => l.log_type !== 'final').length}{' '}
-                      {timeLogs.filter((l) => l.log_type !== 'final').length === 1 ? 'entry' : 'entries'}
+                      {timeLogs.filter((l) => l.log_type !== 'final' && l.log_type !== 'revision').length}{' '}
+                      {timeLogs.filter((l) => l.log_type !== 'final' && l.log_type !== 'revision').length === 1 ? 'entry' : 'entries'}
                     </span>
                   )}
                 </div>
 
-                {/* Log entries */}
-                <div className="px-6 pb-4 space-y-2">
+                {/* Log entries — grouped by revision cycle */}
+                <div className="px-6 pb-4">
                   {timeLogs.length === 0 && (
                     <div className="text-center py-10">
                       <span className="material-symbols-outlined text-3xl text-on-surface-variant/30">schedule</span>
@@ -356,90 +375,154 @@ const MemberTicketDetail = () => {
                     </div>
                   )}
 
-                  {timeLogs.map((log) => (
-                    <div key={log.id} className="group relative bg-surface-container-low rounded-xl px-5 py-4 hover:bg-surface-container transition-colors">
-                      {editingLogId === log.id ? (
-                        /* Edit mode */
-                        <div className="flex items-center gap-2 w-full">
-                          <input
-                            type="number" min="0" max="999" value={editLogHrs}
-                            onChange={(e) => setEditLogHrs(e.target.value)}
-                            className="w-12 border-0 outline-none bg-white rounded-lg px-2 py-1.5 text-xs text-center font-bold focus:ring-0 appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                          />
-                          <span className="text-xs text-on-surface-variant">h</span>
-                          <input
-                            type="number" min="0" max="59" value={editLogMins}
-                            onChange={(e) => setEditLogMins(e.target.value)}
-                            className="w-12 border-0 outline-none bg-white rounded-lg px-2 py-1.5 text-xs text-center font-bold focus:ring-0 appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                          />
-                          <span className="text-xs text-on-surface-variant">m</span>
-                          <input
-                            type="text" value={editLogComment}
-                            onChange={(e) => setEditLogComment(e.target.value)}
-                            className="flex-1 border-0 outline-none bg-white rounded-lg px-3 py-1.5 text-xs focus:ring-0"
-                          />
-                          <button
-                            onClick={handleSaveLogEdit}
-                            disabled={savingEdit}
-                            className="p-1.5 rounded-lg bg-green-50 hover:bg-green-100 disabled:opacity-50 transition-colors"
-                          >
-                            <span className="material-symbols-outlined text-sm text-green-600">check</span>
-                          </button>
-                          <button
-                            onClick={() => setEditingLogId(null)}
-                            className="p-1.5 rounded-lg hover:bg-surface-container-high transition-colors"
-                          >
-                            <span className="material-symbols-outlined text-sm text-on-surface-variant">close</span>
-                          </button>
-                        </div>
-                      ) : (
-                        /* Normal view */
-                        <div className="flex items-start gap-4">
-                          {/* Time pill */}
-                          <div className="flex-shrink-0 bg-orange-50 rounded-lg px-3 py-2 text-center min-w-[56px]">
-                            <p className="text-sm font-extrabold text-primary-container leading-tight">{formatHours(log.hours)}</p>
-                            {log.log_type === 'final' && (
-                              <p className="text-[9px] font-bold uppercase tracking-wider text-primary-container/60 mt-0.5">final</p>
+                  {timeLogs.length > 0 && (() => {
+                    // Sort ascending so we walk forward through history.
+                    const sortedLogs = [...timeLogs].sort(
+                      (a, b) => new Date(a.created_at) - new Date(b.created_at)
+                    )
+
+                    // Build sections. 'revision' logs are dividers, not entries.
+                    // Unrecognised log_type values (legacy data) are silently skipped.
+                    const KNOWN_LOG_TYPES = ['partial', 'estimate', 'final']
+                    const sections = []
+                    let currentSection = { cycle: 0, label: 'Initial Work', note: null, logs: [] }
+                    for (const log of sortedLogs) {
+                      if (log.log_type === 'revision') {
+                        sections.push(currentSection)
+                        currentSection = {
+                          cycle: log.revision_cycle,
+                          label: `Revision ${log.revision_cycle}`,
+                          note: log.comment || null,
+                          logs: [],
+                        }
+                      } else if (KNOWN_LOG_TYPES.includes(log.log_type)) {
+                        currentSection.logs.push(log)
+                      }
+                    }
+                    sections.push(currentSection)
+
+                    const hasMultipleSections = sections.length > 1
+
+                    return (
+                      <div className="space-y-6">
+                        {sections.map((section) => (
+                          <div key={section.cycle}>
+                            {/* "Initial Work" label — only when revisions exist */}
+                            {section.cycle === 0 && hasMultipleSections && (
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/40 mb-2">
+                                Initial Work
+                              </p>
+                            )}
+                            {/* Revision banner */}
+                            {section.cycle > 0 && (
+                              <div className="mb-3 rounded-lg bg-orange-50 border-l-4 border-orange-400 px-4 py-3 space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="material-symbols-outlined text-sm text-orange-500">edit_note</span>
+                                  <p className="text-[10px] font-black uppercase tracking-widest text-orange-600">
+                                    Revision {section.cycle} — Admin's Note
+                                  </p>
+                                </div>
+                                <p className="text-sm text-orange-700 font-medium leading-snug pl-5">
+                                  {section.note || <span className="italic opacity-60">No change note provided</span>}
+                                </p>
+                              </div>
+                            )}
+                            {/* Log entries for this cycle */}
+                            {section.logs.length === 0 ? (
+                              <p className="text-xs text-on-surface-variant/40 italic pl-1">No logs for this cycle</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {section.logs.map((log) => (
+                                  <div key={log.id} className="group relative bg-surface-container-low rounded-xl px-5 py-4 hover:bg-surface-container transition-colors">
+                                    {editingLogId === log.id ? (
+                                      /* Edit mode */
+                                      <div className="flex items-center gap-2 w-full">
+                                        <input
+                                          type="number" min="0" max="999" value={editLogHrs}
+                                          onChange={(e) => setEditLogHrs(e.target.value)}
+                                          className="w-12 border-0 outline-none bg-white rounded-lg px-2 py-1.5 text-xs text-center font-bold focus:ring-0 appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                        />
+                                        <span className="text-xs text-on-surface-variant">h</span>
+                                        <input
+                                          type="number" min="0" max="59" value={editLogMins}
+                                          onChange={(e) => setEditLogMins(e.target.value)}
+                                          className="w-12 border-0 outline-none bg-white rounded-lg px-2 py-1.5 text-xs text-center font-bold focus:ring-0 appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                        />
+                                        <span className="text-xs text-on-surface-variant">m</span>
+                                        <input
+                                          type="text" value={editLogComment}
+                                          onChange={(e) => setEditLogComment(e.target.value)}
+                                          className="flex-1 border-0 outline-none bg-white rounded-lg px-3 py-1.5 text-xs focus:ring-0"
+                                        />
+                                        <button
+                                          onClick={handleSaveLogEdit}
+                                          disabled={savingEdit}
+                                          className="p-1.5 rounded-lg bg-green-50 hover:bg-green-100 disabled:opacity-50 transition-colors"
+                                        >
+                                          <span className="material-symbols-outlined text-sm text-green-600">check</span>
+                                        </button>
+                                        <button
+                                          onClick={() => setEditingLogId(null)}
+                                          className="p-1.5 rounded-lg hover:bg-surface-container-high transition-colors"
+                                        >
+                                          <span className="material-symbols-outlined text-sm text-on-surface-variant">close</span>
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      /* Normal view */
+                                      <div className="flex items-start gap-4">
+                                        {/* Time pill */}
+                                        <div className="flex-shrink-0 bg-orange-50 rounded-lg px-3 py-2 text-center min-w-[56px]">
+                                          <p className="text-sm font-extrabold text-primary-container leading-tight">{formatHours(log.hours)}</p>
+                                          {log.log_type === 'final' && (
+                                            <p className="text-[9px] font-bold uppercase tracking-wider text-primary-container/60 mt-0.5">final</p>
+                                          )}
+                                        </div>
+
+                                        {/* Content */}
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-sm text-on-surface font-medium leading-snug">
+                                            {log.comment || <span className="text-on-surface-variant/40 italic">No comment</span>}
+                                          </p>
+                                          <div className="flex items-center gap-2 mt-1.5">
+                                            <span className="text-[10px] text-on-surface-variant/60">{formatDate(log.created_at)}</span>
+                                            {log.updated_at && new Date(log.updated_at) - new Date(log.created_at) > 1000 && (
+                                              <span className="text-[10px] text-on-surface-variant/40 italic">· edited {timeAgo(log.updated_at)}</span>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        {/* Actions — hover reveal; excluded for final and revision logs */}
+                                        {!isClosed && log.log_type !== 'final' && log.log_type !== 'revision' && (
+                                          <div className="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button
+                                              onClick={() => handleEditLog(log)}
+                                              className="p-1.5 rounded-lg hover:bg-surface-container-high transition-colors"
+                                              title="Edit"
+                                            >
+                                              <span className="material-symbols-outlined text-sm text-on-surface-variant">edit</span>
+                                            </button>
+                                            <button
+                                              onClick={() => handleDeleteLog(log.id)}
+                                              disabled={deletingLogId === log.id}
+                                              className="p-1.5 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-40"
+                                              title="Delete"
+                                            >
+                                              <span className="material-symbols-outlined text-sm text-error">delete</span>
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
                             )}
                           </div>
-
-                          {/* Content */}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-on-surface font-medium leading-snug">
-                              {log.comment || <span className="text-on-surface-variant/40 italic">No comment</span>}
-                            </p>
-                            <div className="flex items-center gap-2 mt-1.5">
-                              <span className="text-[10px] text-on-surface-variant/60">{formatDate(log.created_at)}</span>
-                              {log.updated_at && new Date(log.updated_at) - new Date(log.created_at) > 1000 && (
-                                <span className="text-[10px] text-on-surface-variant/40 italic">· edited {timeAgo(log.updated_at)}</span>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Actions — hover reveal */}
-                          {!isClosed && log.log_type !== 'final' && (
-                            <div className="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button
-                                onClick={() => handleEditLog(log)}
-                                className="p-1.5 rounded-lg hover:bg-surface-container-high transition-colors"
-                                title="Edit"
-                              >
-                                <span className="material-symbols-outlined text-sm text-on-surface-variant">edit</span>
-                              </button>
-                              <button
-                                onClick={() => handleDeleteLog(log.id)}
-                                disabled={deletingLogId === log.id}
-                                className="p-1.5 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-40"
-                                title="Delete"
-                              >
-                                <span className="material-symbols-outlined text-sm text-error">delete</span>
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                        ))}
+                      </div>
+                    )
+                  })()}
                 </div>
 
                 {/* Add Log Form — assignee only */}
@@ -505,13 +588,19 @@ const MemberTicketDetail = () => {
                       {isResolved ? 'Ticket Resolved' : isClosed ? 'Ticket Closed' : 'Active Workflow'}
                     </p>
                     <p className="text-[11px] font-medium text-on-surface-variant">
-                      {isClosed ? `${ticket.status.charAt(0).toUpperCase() + ticket.status.slice(1)} on ${formatDate(ticket.updated_at)}` : `Status: ${ticket.status}`}
+                      {isClosed ? `${STATUS_LABELS[ticket.status] ?? ticket.status} on ${formatDate(ticket.updated_at)}` : `Status: ${STATUS_LABELS[ticket.status] ?? ticket.status}`}
                     </p>
                   </div>
                 </div>
 
-                {!isClosed && isAssignee && (
+                {['in_progress', 'revisions'].includes(ticket.status) && isAssignee && (
                   <>
+                    {ticket.status === 'revisions' && (
+                      <div className="mb-4 flex gap-2 text-orange-600 bg-orange-50 rounded-lg p-3">
+                        <span className="material-symbols-outlined text-sm flex-shrink-0 mt-0.5">edit_note</span>
+                        <p className="text-[11px] font-medium leading-snug">This ticket was sent back for revisions. Review the change note above, make updates, and mark as resolved when done.</p>
+                      </div>
+                    )}
                     <button
                       className="w-full bg-primary-container text-white py-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:opacity-95 transition-all shadow-md active:scale-[0.98] disabled:opacity-60"
                       onClick={() => setIsResolveModalOpen(true)}

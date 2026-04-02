@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import Sidebar from '../../components/Sidebar'
 import NotificationBell from '../../components/NotificationBell'
-import { ticketsApi, formatHours } from '../../lib/api'
+import { ticketsApi, formatHours, getStatusBadges } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
 
 const getPriorityColor = (priority) => {
@@ -17,22 +17,20 @@ const getPriorityColor = (priority) => {
 
 const getStatusDot = (status) => {
   const m = {
-    approved: 'bg-tertiary',
-    draft: 'bg-outline-variant',
-    resolved: 'bg-emerald-500',
-    discarded: 'bg-error',
+    draft:             'bg-outline-variant',
+    in_progress:       'bg-blue-500',
+    resolved:          'bg-emerald-500',
+    internal_review:   'bg-purple-500',
+    client_review:     'bg-indigo-500',
+    compliance_review: 'bg-yellow-500',
+    approved:          'bg-teal-500',
+    closed:            'bg-zinc-500',
+    revisions:         'bg-orange-500',
+    discarded:         'bg-error',
   }
-  return m[status] || 'bg-outline-variant'
+  return m[status] ?? 'bg-outline-variant'
 }
 
-const getWorkStatus = (ticket) => {
-  if (ticket.status === 'draft') return { label: 'Pending Approval', style: 'bg-surface-container-high text-on-surface-variant' }
-  if (ticket.status === 'resolved') return { label: 'Done', style: 'bg-emerald-100 text-emerald-700' }
-  if (ticket.status === 'discarded') return { label: 'Discarded', style: 'bg-red-100 text-red-500' }
-  const spent = ticket.time_spent ?? 0
-  if (spent > 0) return { label: 'In Progress', style: 'bg-blue-100 text-blue-700' }
-  return { label: 'Not Started', style: 'bg-surface-container-high text-on-surface-variant' }
-}
 
 const TicketRow = ({ ticket }) => {
   const spent = ticket.time_spent ?? 0
@@ -57,20 +55,12 @@ const TicketRow = ({ ticket }) => {
         {spent > 0 ? `${spent.toFixed(1)}h` : '—'}
       </td>
       <td className="px-6 py-5">
-        <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${getStatusDot(ticket.status)}`}></div>
-          <span className="text-xs font-semibold text-on-surface-variant capitalize">{ticket.status}</span>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className={`w-2 h-2 rounded-full shrink-0 ${getStatusDot(ticket.status)}`}></div>
+          {getStatusBadges(ticket).map(({ label }) => (
+            <span key={label} className="text-xs font-semibold text-on-surface-variant">{label}</span>
+          ))}
         </div>
-      </td>
-      <td className="px-6 py-5">
-        {(() => {
-          const ws = getWorkStatus(ticket)
-          return (
-            <span className={`px-2 py-1 text-[10px] font-bold rounded-sm uppercase tracking-tighter ${ws.style}`}>
-              {ws.label}
-            </span>
-          )
-        })()}
       </td>
     </tr>
   )
@@ -91,11 +81,12 @@ const MemberTicketList = () => {
       .finally(() => setLoading(false))
   }, [user])
 
-  const approvedTickets = tickets.filter((t) => t.status === 'approved')
+  const activeTickets = tickets.filter((t) => t.status === 'in_progress')
+  const revisionTickets = tickets.filter((t) => t.status === 'revisions')
   const draftTickets = tickets.filter((t) => t.status === 'draft')
   const resolvedTickets = tickets.filter((t) => t.status === 'resolved')
   const totalAssigned = tickets.length
-  const inProgress = approvedTickets.length
+  const inProgress = activeTickets.length
 
   return (
     <div className="flex">
@@ -123,7 +114,7 @@ const MemberTicketList = () => {
               </div>
             </div>
             <div className="bg-surface-container-lowest p-6 rounded-xl border-l-4 border-tertiary">
-              <p className="text-[10px] font-bold tracking-widest text-on-surface-variant uppercase mb-1">Approved</p>
+              <p className="text-[10px] font-bold tracking-widest text-on-surface-variant uppercase mb-1">In Progress</p>
               <div className="flex items-baseline gap-2">
                 <span className="text-3xl font-bold tracking-tight text-on-surface">
                   {String(inProgress).padStart(2, '0')}
@@ -131,11 +122,11 @@ const MemberTicketList = () => {
                 <span className="text-xs text-on-surface-variant font-medium">Active</span>
               </div>
             </div>
-            <div className="bg-surface-container-lowest p-6 rounded-xl border-l-4 border-outline-variant">
-              <p className="text-[10px] font-bold tracking-widest text-on-surface-variant uppercase mb-1">Drafts</p>
+            <div className="bg-surface-container-lowest p-6 rounded-xl border-l-4 border-orange-400">
+              <p className="text-[10px] font-bold tracking-widest text-on-surface-variant uppercase mb-1">Needs Revision</p>
               <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold tracking-tight text-on-surface">{draftTickets.length}</span>
-                <span className="text-xs text-on-surface-variant font-medium">Pending Review</span>
+                <span className="text-3xl font-bold tracking-tight text-on-surface">{revisionTickets.length}</span>
+                <span className="text-xs text-on-surface-variant font-medium">Sent Back</span>
               </div>
             </div>
             <div className="bg-surface-container-lowest p-6 rounded-xl border-l-4 border-emerald-600">
@@ -164,7 +155,7 @@ const MemberTicketList = () => {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-surface-container-high/50">
-                  {['Title', 'Firm', 'Priority', 'Est. Time', 'Spent Time', 'Status', 'Work Status'].map((h) => (
+                  {['Title', 'Firm', 'Priority', 'Est. Time', 'Spent Time', 'Status'].map((h) => (
                     <th key={h} className="px-6 py-4 text-[11px] font-bold tracking-wider text-on-surface-variant uppercase">
                       {h}
                     </th>
@@ -174,28 +165,40 @@ const MemberTicketList = () => {
               <tbody className="divide-y divide-surface-container-low">
                 {loading && (
                   <tr>
-                    <td colSpan={7} className="px-6 py-8 text-center text-on-surface-variant animate-pulse">
+                    <td colSpan={6} className="px-6 py-8 text-center text-on-surface-variant animate-pulse">
                       Loading tickets…
                     </td>
                   </tr>
                 )}
                 {!loading && tickets.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-6 py-8 text-center text-on-surface-variant">
+                    <td colSpan={6} className="px-6 py-8 text-center text-on-surface-variant">
                       No tickets assigned to you yet
                     </td>
                   </tr>
                 )}
 
-                {/* Approved tickets */}
-                {approvedTickets.length > 0 && (
+                {/* Active (in_progress) tickets */}
+                {activeTickets.length > 0 && (
                   <>
                     <tr className="bg-surface-container-low/20">
                       <td className="px-6 py-2 text-[10px] font-extrabold text-primary uppercase tracking-[0.15em]" colSpan="7">
                         Active Tickets
                       </td>
                     </tr>
-                    {approvedTickets.map((t) => <TicketRow key={t.id} ticket={t} />)}
+                    {activeTickets.map((t) => <TicketRow key={t.id} ticket={t} />)}
+                  </>
+                )}
+
+                {/* Revision tickets */}
+                {revisionTickets.length > 0 && (
+                  <>
+                    <tr className="bg-surface-container-low/20">
+                      <td className="px-6 py-2 text-[10px] font-extrabold text-orange-500 uppercase tracking-[0.15em]" colSpan="7">
+                        Needs Revision
+                      </td>
+                    </tr>
+                    {revisionTickets.map((t) => <TicketRow key={t.id} ticket={t} />)}
                   </>
                 )}
 

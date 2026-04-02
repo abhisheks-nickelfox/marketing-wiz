@@ -4,6 +4,19 @@
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api'
 
+export const VALID_TRANSITIONS = {
+  draft:             ['in_progress', 'discarded'],
+  in_progress:       ['resolved', 'discarded'],
+  resolved:          ['internal_review'],
+  internal_review:   ['client_review', 'revisions'],
+  client_review:     ['compliance_review', 'revisions'],
+  compliance_review: ['approved', 'revisions'],
+  approved:          ['closed'],
+  revisions:         ['internal_review'],
+  closed:            [],
+  discarded:         [],
+}
+
 export function getToken() {
   return localStorage.getItem('mw_token')
 }
@@ -121,6 +134,16 @@ export const ticketsApi = {
     request(`/tickets/${id}/time-logs/${logId}`, { method: 'DELETE' }),
   deleteTicket: (id) =>
     request(`/tickets/${id}`, { method: 'DELETE' }),
+  archive: (id, archived) =>
+    request(`/tickets/${id}/archive`, {
+      method: 'PATCH',
+      body: JSON.stringify({ archived }),
+    }),
+  transition: (id, status, changeNote) =>
+    request(`/tickets/${id}/transition`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status, ...(changeNote !== undefined && { change_note: changeNote }) }),
+    }),
 }
 
 // ─── Firms ────────────────────────────────────────────────────────────────────
@@ -190,12 +213,50 @@ export const teamApi = {
  */
 export function getStatusBadge(status) {
   const styles = {
-    draft: 'bg-surface-container-high text-on-surface-variant',
-    approved: 'bg-emerald-100 text-emerald-700',
-    resolved: 'bg-teal-100 text-teal-700',
-    discarded: 'bg-red-100 text-red-500',
+    draft:             'bg-surface-container-high text-on-surface-variant',
+    in_progress:       'bg-blue-100 text-blue-700',
+    resolved:          'bg-teal-100 text-teal-700',
+    internal_review:   'bg-violet-100 text-violet-700',
+    client_review:     'bg-indigo-100 text-indigo-700',
+    compliance_review: 'bg-amber-100 text-amber-700',
+    approved:          'bg-emerald-100 text-emerald-700',
+    closed:            'bg-emerald-200 text-emerald-800',
+    revisions:         'bg-orange-100 text-orange-700',
+    discarded:         'bg-red-100 text-red-500',
   }
   return styles[status] ?? styles.draft
+}
+
+const _STATUS_LABELS = {
+  draft:             'New',
+  in_progress:       'In Progress',
+  resolved:          'Resolved',
+  internal_review:   'Internal Review',
+  client_review:     'Client Review',
+  compliance_review: 'Compliance Review',
+  approved:          'Approved',
+  closed:            'Closed',
+  revisions:         'Revisions',
+  discarded:         'Discarded',
+}
+
+/**
+ * Returns an array of { label, style } badge objects for a ticket's status.
+ * For in_progress tickets: shows "Approved" + "New" until time is logged,
+ * then shows "In Progress" once the member starts working.
+ * Pass spentHours explicitly on detail pages where it's computed from filtered logs.
+ */
+export function getStatusBadges(ticket, spentHours = null) {
+  const spent = spentHours ?? (ticket.time_spent ?? 0)
+  if (ticket.status === 'in_progress') {
+    if (spent > 0)
+      return [{ label: 'In Progress', style: 'bg-blue-100 text-blue-700' }]
+    return [
+      { label: 'Approved', style: 'bg-emerald-100 text-emerald-700' },
+      { label: 'New',      style: 'bg-surface-container-high text-on-surface-variant' },
+    ]
+  }
+  return [{ label: _STATUS_LABELS[ticket.status] ?? ticket.status, style: getStatusBadge(ticket.status) }]
 }
 
 /** Format ISO timestamp → "Oct 24, 2023" */

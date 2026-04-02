@@ -10,8 +10,8 @@ export const createTimeLogValidation = [
   body('hours').isFloat({ min: 0.01 }).withMessage('Hours must be a positive number'),
   body('comment').optional().isString(),
   body('log_type')
-    .isIn(['estimate', 'partial', 'final'])
-    .withMessage('log_type must be estimate | partial | final'),
+    .isIn(['estimate', 'partial', 'final', 'revision'])
+    .withMessage('log_type must be estimate | partial | final | revision'),
 ];
 
 // ─── GET /api/tickets/:id/time-logs ──────────────────────────────────────────
@@ -207,14 +207,15 @@ export async function createTimeLog(req: AuthenticatedRequest, res: Response): P
   const { hours, comment = '', log_type } = req.body as {
     hours: number;
     comment?: string;
-    log_type: 'estimate' | 'partial' | 'final';
+    log_type: 'estimate' | 'partial' | 'final' | 'revision';
   };
 
   try {
-    // Verify ticket exists and member has access
+    // Verify ticket exists and member has access.
+    // revision_count is fetched so new logs are tagged to the current cycle.
     const { data: ticket, error: ticketErr } = await supabase
       .from('tickets')
-      .select('id, assignee_id, status')
+      .select('id, assignee_id, status, revision_count')
       .eq('id', ticketId)
       .single();
 
@@ -228,10 +229,10 @@ export async function createTimeLog(req: AuthenticatedRequest, res: Response): P
       return;
     }
 
-    // Draft tickets have no assignee yet; discarded tickets are closed.
-    // Time logging is only valid on approved (or resolved) tickets.
-    if (ticket.status === 'draft' || ticket.status === 'discarded') {
-      res.status(400).json({ error: 'Cannot log time on a ticket that is not approved' });
+    // Time logging is only valid while actively working: in_progress or revisions.
+    const LOGGABLE_STATUSES = ['in_progress', 'revisions'];
+    if (!LOGGABLE_STATUSES.includes(ticket.status)) {
+      res.status(400).json({ error: 'Cannot log time on a ticket in this status' });
       return;
     }
 
@@ -243,6 +244,9 @@ export async function createTimeLog(req: AuthenticatedRequest, res: Response): P
         hours,
         comment,
         log_type,
+        // Tag every log with the current revision cycle so the UI can group them.
+        // cycle 0 = initial work; cycle N = after the Nth revisions transition.
+        revision_cycle: ticket.revision_count ?? 0,
       })
       .select()
       .single();

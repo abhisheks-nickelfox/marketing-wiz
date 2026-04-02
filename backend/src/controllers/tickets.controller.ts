@@ -132,7 +132,7 @@ export async function listTickets(req: AuthenticatedRequest, res: Response): Pro
 
   try {
     // Both admin and member queries include time_logs so time_spent can be shown in the list.
-    const selectClause = `${BASE_SELECT}, time_logs(hours)`;
+    const selectClause = `${BASE_SELECT}, time_logs(hours, log_type)`;
 
     let query = supabase
       .from('tickets')
@@ -147,14 +147,22 @@ export async function listTickets(req: AuthenticatedRequest, res: Response): Pro
     if (!canViewAll) {
       // Members without view_all_tickets only see their own tickets
       query = query.eq('assignee_id', req.user.id);
+      // Members always see non-archived tickets only
+      query = query.eq('archived', false);
     } else {
       // Admin-style filters
-      const { firm_id, assignee_id, status, type, priority } = req.query as Record<string, string>;
+      const { firm_id, assignee_id, status, type, priority, archived } = req.query as Record<string, string>;
       if (firm_id) query = query.eq('firm_id', firm_id);
       if (assignee_id) query = query.eq('assignee_id', assignee_id);
       if (status) query = query.eq('status', status);
       if (type) query = query.eq('type', type);
       if (priority) query = query.eq('priority', priority);
+      // Archive filter: default to non-archived unless ?archived=true is explicitly passed
+      if (archived === 'true') {
+        query = query.eq('archived', true);
+      } else {
+        query = query.eq('archived', false);
+      }
     }
 
     const { data, error } = await query;
@@ -164,13 +172,13 @@ export async function listTickets(req: AuthenticatedRequest, res: Response): Pro
       return;
     }
 
-    // Compute time_spent (sum of time_logs.hours) per ticket and strip the raw nested array
+    // Compute time_spent per ticket — exclude 'final' (it's a summary snapshot that
+    // duplicates the partial totals) and 'revision' (hours = 0 milestone markers).
     const enriched = (data ?? []).map((t: Record<string, unknown>) => {
-      const timeLogs = t.time_logs as Array<{ hours: number }> | null;
-      const time_spent = (timeLogs ?? []).reduce(
-        (sum: number, l: { hours: number }) => sum + (l.hours ?? 0),
-        0
-      );
+      const timeLogs = t.time_logs as Array<{ hours: number; log_type: string }> | null;
+      const time_spent = (timeLogs ?? [])
+        .filter((l) => l.log_type !== 'final' && l.log_type !== 'revision')
+        .reduce((sum: number, l) => sum + (l.hours ?? 0), 0);
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { time_logs: _tl, ...rest } = t;
       return { ...rest, time_spent: Number(time_spent.toFixed(2)) };
@@ -257,9 +265,9 @@ export async function updateTicket(req: AuthenticatedRequest, res: Response): Pr
     // Members can only update their own tickets and only estimated_hours
     const updates: Record<string, unknown> = {};
 
-    if (req.user.role === 'admin') {
-      if (existing.status === 'resolved' || existing.status === 'discarded') {
-        res.status(400).json({ error: 'Cannot edit a resolved or discarded ticket' });
+    if (req.user.role === 'admin' || req.user.role === 'super_admin') {
+      if (existing.status === 'resolved' || existing.status === 'discarded' || existing.status === 'closed') {
+        res.status(400).json({ error: 'Cannot edit a resolved, discarded, or closed ticket' });
         return;
       }
       const adminFields = ['title', 'description', 'type', 'priority', 'change_note'];
@@ -335,7 +343,7 @@ export async function assignAndApprove(req: AuthenticatedRequest, res: Response)
 
     const updatePayload: Record<string, unknown> = {
       assignee_id,
-      status: 'approved',
+      status: 'in_progress',
       updated_at: new Date().toISOString(),
     };
     if (priority) updatePayload['priority'] = priority;
@@ -504,10 +512,11 @@ export async function resolveTicket(req: AuthenticatedRequest, res: Response): P
   };
 
   try {
-    // Fetch ticket to verify ownership
+    // Fetch ticket to verify ownership.
+    // revision_count is needed to tag the final log to the correct cycle.
     const { data: ticket, error: fetchErr } = await supabase
       .from('tickets')
-      .select('id, assignee_id, status')
+      .select('id, assignee_id, status, revision_count')
       .eq('id', id)
       .single();
 
@@ -516,13 +525,14 @@ export async function resolveTicket(req: AuthenticatedRequest, res: Response): P
       return;
     }
 
-    if (req.user.role !== 'admin' && ticket.assignee_id !== req.user.id) {
+    const isPrivileged = req.user.role === 'admin' || req.user.role === 'super_admin';
+    if (!isPrivileged && ticket.assignee_id !== req.user.id) {
       res.status(403).json({ error: 'Only the assignee can resolve this ticket' });
       return;
     }
 
-    if (ticket.status !== 'approved') {
-      res.status(400).json({ error: 'Only approved tickets can be resolved' });
+    if (!['in_progress', 'revisions'].includes(ticket.status)) {
+      res.status(400).json({ error: 'Cannot resolve a ticket that is not in progress or revisions' });
       return;
     }
 
@@ -563,6 +573,9 @@ export async function resolveTicket(req: AuthenticatedRequest, res: Response): P
         hours: Number(totalHours.toFixed(2)),
         comment: final_comment,
         log_type: 'final',
+        // Tag the final log to the current revision cycle so it appears in the
+        // correct section of the grouped time history view.
+        revision_cycle: ticket.revision_count ?? 0,
       });
     }
 
@@ -617,6 +630,180 @@ export async function deleteTicket(req: AuthenticatedRequest, res: Response): Pr
     res.status(200).json({ message: 'Ticket permanently deleted' });
   } catch (err) {
     console.error('[tickets.controller] deleteTicket error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+// ─── PATCH /api/tickets/:id/archive ──────────────────────────────────────────
+
+export const archiveTicketValidation = [
+  param('id').isUUID('loose').withMessage('Invalid ticket ID'),
+  body('archived').isBoolean().withMessage('archived must be a boolean'),
+];
+
+export async function archiveTicket(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    res.status(400).json({ error: 'Validation failed', details: errors.array() });
+    return;
+  }
+
+  if (!req.user) {
+    res.status(401).json({ error: 'Not authenticated' });
+    return;
+  }
+
+  const { id } = req.params;
+  const { archived } = req.body as { archived: boolean };
+
+  try {
+    const { data: ticket, error: fetchErr } = await supabase
+      .from('tickets')
+      .select('id')
+      .eq('id', id)
+      .single();
+
+    if (fetchErr || !ticket) {
+      res.status(404).json({ error: 'Ticket not found' });
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('tickets')
+      .update({ archived })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      res.status(500).json({ error: error.message });
+      return;
+    }
+
+    res.json({ data });
+  } catch (err) {
+    console.error('[tickets.controller] archiveTicket error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+// ─── PATCH /api/tickets/:id/transition — admin-only status machine ────────────
+
+// State machine: maps each status to the set of statuses it may transition to.
+// Enforced server-side — the client cannot bypass this by sending an arbitrary status.
+const VALID_TRANSITIONS: Record<string, string[]> = {
+  draft:              ['in_progress', 'discarded'],
+  in_progress:        ['resolved', 'discarded'],
+  resolved:           ['internal_review'],
+  internal_review:    ['client_review', 'revisions'],
+  client_review:      ['compliance_review', 'revisions'],
+  compliance_review:  ['approved', 'revisions'],
+  approved:           ['closed'],
+  revisions:          ['internal_review'],
+  closed:             [],
+  discarded:          [],
+};
+
+// All statuses an admin may set via the transition endpoint (excludes discarded).
+// 'draft' is included so admins can unassign/unapprove a ticket back to draft.
+const ADMIN_TRANSITION_TARGETS = [
+  'draft', 'in_progress', 'resolved', 'internal_review', 'client_review',
+  'compliance_review', 'approved', 'closed', 'revisions',
+];
+
+export const transitionTicketValidation = [
+  param('id').isUUID('loose').withMessage('Invalid ticket ID'),
+  body('status')
+    .isIn(ADMIN_TRANSITION_TARGETS)
+    .withMessage('Invalid target status'),
+  body('change_note').optional().isString(),
+];
+
+export async function transitionTicket(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    res.status(400).json({ error: 'Validation failed', details: errors.array() });
+    return;
+  }
+
+  if (!req.user) {
+    res.status(401).json({ error: 'Not authenticated' });
+    return;
+  }
+
+  const { id } = req.params;
+  const { status: targetStatus, change_note } = req.body as { status: string; change_note?: string };
+
+  try {
+    // For revisions transitions we need the current revision_count to increment it
+    // and to tag the milestone log with the new cycle number.
+    const { data: ticket, error: fetchErr } = await supabase
+      .from('tickets')
+      .select('id, status, revision_count')
+      .eq('id', id)
+      .single();
+
+    if (fetchErr || !ticket) {
+      res.status(404).json({ error: 'Ticket not found' });
+      return;
+    }
+
+    // Enforce the state machine — reject any transition not in the allowed map.
+    const allowed = VALID_TRANSITIONS[ticket.status] ?? [];
+    if (!allowed.includes(targetStatus)) {
+      res.status(400).json({
+        error: `Cannot transition from '${ticket.status}' to '${targetStatus}'`,
+      });
+      return;
+    }
+
+    const updates: Record<string, unknown> = {
+      status: targetStatus,
+      updated_at: new Date().toISOString(),
+    };
+    if (change_note !== undefined) updates['change_note'] = change_note;
+
+    // Moving back to draft removes the assignee so the ticket is unassigned again.
+    if (targetStatus === 'draft') {
+      updates['assignee_id'] = null;
+    }
+
+    // When sending to revisions, increment the cycle counter so that subsequent
+    // time logs (and the milestone log below) are tagged to the new cycle.
+    if (targetStatus === 'revisions') {
+      updates['revision_count'] = (ticket.revision_count ?? 0) + 1;
+    }
+
+    const { data, error } = await supabase
+      .from('tickets')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      res.status(500).json({ error: error.message });
+      return;
+    }
+
+    // Insert a revision milestone log so the time log history displays a clear
+    // section header ("Revision N — <admin note>") without requiring a separate
+    // API or join. The log has hours = 0 and is excluded from all time totals.
+    if (targetStatus === 'revisions') {
+      const newCycle = (ticket.revision_count ?? 0) + 1;
+      await supabase.from('time_logs').insert({
+        ticket_id: id,
+        user_id: req.user.id,
+        hours: 0,
+        comment: change_note ?? '',
+        log_type: 'revision',
+        revision_cycle: newCycle,
+      });
+    }
+
+    res.json({ data });
+  } catch (err) {
+    console.error('[tickets.controller] transitionTicket error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
