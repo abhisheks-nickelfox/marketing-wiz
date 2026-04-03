@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Sidebar from '../../components/Sidebar'
 import NotificationBell from '../../components/NotificationBell'
-import { dashboardApi, formatDate, timeAgo } from '../../lib/api'
+import { dashboardApi, formatDate, timeAgo, getStatusBadges } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
 
 const MemberDashboard = () => {
@@ -154,7 +154,7 @@ const MemberDashboard = () => {
                         <p className="text-xs text-on-surface-variant/60">{ticket.firms?.name}</p>
                       </div>
                       <div className="col-span-3">
-                        <p className="text-sm font-bold text-on-surface-variant capitalize">{ticket.status}</p>
+                        <p className="text-sm font-bold text-on-surface-variant">{getStatusBadges(ticket)[0].label}</p>
                       </div>
                       <div className="col-span-2 text-right">
                         <button

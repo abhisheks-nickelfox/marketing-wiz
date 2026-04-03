@@ -16,7 +16,10 @@
       "Bash(npm install:*)",
       "Bash(kill 21592)",
       "Bash(node dist/index.js)",
-      "Bash(node -e \"const c = require\\('./dist/controllers/tickets.controller.js'\\); console.log\\('transitionTicket exported:', typeof c.transitionTicket\\); console.log\\('resolveTicket exported:', typeof c.resolveTicket\\);\")"
+      "Bash(node -e \"const c = require\\('./dist/controllers/tickets.controller.js'\\); console.log\\('transitionTicket exported:', typeof c.transitionTicket\\); console.log\\('resolveTicket exported:', typeof c.resolveTicket\\);\")",
+      "Bash(grep:*)",
+      "Bash(wc:*)",
+      "Bash(ls -la /home/shubham/Documents/MarketingWiz/*.md /home/shubham/Documents/MarketingWiz/.gitignore)"
     ]
   }
 }

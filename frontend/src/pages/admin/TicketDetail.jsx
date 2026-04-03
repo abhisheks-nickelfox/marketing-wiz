@@ -6,7 +6,7 @@ import EditTicketModal from '../../components/modals/EditTicketModal'
 import RegenerateTicketModal from '../../components/modals/RegenerateTicketModal'
 import ResolveTicketModal from '../../components/modals/ResolveTicketModal'
 import Toast from '../../components/Toast'
-import { ticketsApi, formatDate, formatHours, timeAgo, getStatusBadges, VALID_TRANSITIONS } from '../../lib/api'
+import { ticketsApi, formatDate, formatHours, timeAgo, getStatusBadge, getStatusBadges, VALID_TRANSITIONS } from '../../lib/api'
 
 
 const STATUS_LABELS = {
@@ -57,9 +57,9 @@ const AdminTicketDetail = () => {
     loadData()
   }, [loadData])
 
-  // 'revision' milestone logs carry hours=0 and must not inflate the total.
+  // 'revision' and 'transition' milestone logs carry hours=0 and must not inflate the total.
   const spentHours = timeLogs
-    .filter((l) => l.log_type !== 'final' && l.log_type !== 'revision')
+    .filter((l) => l.log_type !== 'final' && l.log_type !== 'revision' && l.log_type !== 'transition')
     .reduce((sum, l) => sum + (parseFloat(l.hours) || 0), 0)
   const progress = ticket?.estimated_hours
     ? Math.min(100, Math.round((spentHours / ticket.estimated_hours) * 100))
@@ -327,31 +327,41 @@ const AdminTicketDetail = () => {
 
               {/* Time Logs — grouped by revision cycle */}
               {timeLogs.length > 0 && (() => {
-                // Sort ascending so we can walk forward through the timeline.
-                const sortedLogs = [...timeLogs].sort(
-                  (a, b) => new Date(a.created_at) - new Date(b.created_at)
-                )
+                const KNOWN_LOG_TYPES = ['partial', 'estimate', 'final', 'transition']
 
-                // Build sections. A 'revision' log acts as a section divider —
-                // it is rendered as an orange banner, not as a time entry.
-                // Unrecognised log_type values (legacy data) are silently skipped.
-                const KNOWN_LOG_TYPES = ['partial', 'estimate', 'final']
-                const sections = []
-                let currentSection = { cycle: 0, label: 'Initial Work', note: null, logs: [] }
-                for (const log of sortedLogs) {
+                // Group by revision_cycle column value — never by sort position.
+                // This is immune to same-second timestamp collisions that caused
+                // revision sections to collapse into "Initial Work" after re-login.
+                const cycleNotes = new Map()
+                const cycleLogsMap = new Map()
+
+                for (const log of timeLogs) {
+                  const cycle = log.revision_cycle ?? 0
                   if (log.log_type === 'revision') {
-                    sections.push(currentSection)
-                    currentSection = {
-                      cycle: log.revision_cycle,
-                      label: `Revision ${log.revision_cycle}`,
-                      note: log.comment || null,
-                      logs: [],
-                    }
-                  } else if (KNOWN_LOG_TYPES.includes(log.log_type)) {
-                    currentSection.logs.push(log)
+                    cycleNotes.set(cycle, log.comment || null)
+                    continue
                   }
+                  if (!KNOWN_LOG_TYPES.includes(log.log_type)) continue
+                  if (!cycleLogsMap.has(cycle)) cycleLogsMap.set(cycle, [])
+                  cycleLogsMap.get(cycle).push(log)
                 }
-                sections.push(currentSection)
+
+                for (const cycle of cycleNotes.keys()) {
+                  if (!cycleLogsMap.has(cycle)) cycleLogsMap.set(cycle, [])
+                }
+                if (!cycleLogsMap.has(0)) cycleLogsMap.set(0, [])
+
+                for (const logs of cycleLogsMap.values()) {
+                  logs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+                }
+
+                const sections = [...cycleLogsMap.keys()]
+                  .sort((a, b) => a - b)
+                  .map((cycle) => ({
+                    cycle,
+                    note: cycleNotes.get(cycle) ?? null,
+                    logs: cycleLogsMap.get(cycle),
+                  }))
 
                 const hasMultipleSections = sections.length > 1
 
@@ -387,22 +397,35 @@ const AdminTicketDetail = () => {
                           ) : (
                             <div className="space-y-3">
                               {section.logs.map((log) => (
-                                <div
-                                  key={log.id}
-                                  className="flex flex-wrap items-center gap-3 lg:gap-4 p-4 bg-surface-container-lowest rounded-lg border border-outline-variant/10"
-                                >
-                                  <span className="font-bold text-sm text-primary-container">{formatHours(log.hours)}</span>
-                                  {log.log_type === 'final' && (
-                                    <span className="text-[10px] font-bold bg-teal-50 text-teal-600 px-2 py-0.5 rounded uppercase tracking-wider">Final</span>
-                                  )}
-                                  {log.comment && <span className="text-sm text-on-surface flex-1">{log.comment}</span>}
-                                  <div className="ml-auto text-right flex flex-col gap-0.5">
-                                    <span className="text-[10px] text-on-surface-variant/60 whitespace-nowrap">{formatDate(log.created_at)}</span>
-                                    {log.updated_at && new Date(log.updated_at) - new Date(log.created_at) > 1000 && (
-                                      <span className="text-[10px] text-on-surface-variant/40 italic whitespace-nowrap">edited {timeAgo(log.updated_at)}</span>
-                                    )}
+                                log.log_type === 'transition' ? (
+                                  /* Status transition audit marker */
+                                  <div key={log.id} className="flex items-center gap-3 px-4 py-2.5 bg-surface-container-lowest rounded-lg border border-outline-variant/10">
+                                    <span className="material-symbols-outlined text-sm text-on-surface-variant/40">arrow_circle_right</span>
+                                    <span className="text-[10px] text-on-surface-variant/50 font-medium uppercase tracking-wider">Moved to</span>
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${getStatusBadge(log.comment)}`}>
+                                      {STATUS_LABELS[log.comment] ?? log.comment}
+                                    </span>
+                                    <span className="text-[10px] text-on-surface-variant/50 ml-auto whitespace-nowrap">{formatDate(log.created_at)}</span>
                                   </div>
-                                </div>
+                                ) : (
+                                  /* Regular time log entry */
+                                  <div
+                                    key={log.id}
+                                    className="flex flex-wrap items-center gap-3 lg:gap-4 p-4 bg-surface-container-lowest rounded-lg border border-outline-variant/10"
+                                  >
+                                    <span className="font-bold text-sm text-primary-container">{formatHours(log.hours)}</span>
+                                    {log.log_type === 'final' && (
+                                      <span className="text-[10px] font-bold bg-teal-50 text-teal-600 px-2 py-0.5 rounded uppercase tracking-wider">Final</span>
+                                    )}
+                                    {log.comment && <span className="text-sm text-on-surface flex-1">{log.comment}</span>}
+                                    <div className="ml-auto text-right flex flex-col gap-0.5">
+                                      <span className="text-[10px] text-on-surface-variant/60 whitespace-nowrap">{formatDate(log.created_at)}</span>
+                                      {log.updated_at && new Date(log.updated_at) - new Date(log.created_at) > 1000 && (
+                                        <span className="text-[10px] text-on-surface-variant/40 italic whitespace-nowrap">edited {timeAgo(log.updated_at)}</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                )
                               ))}
                             </div>
                           )}

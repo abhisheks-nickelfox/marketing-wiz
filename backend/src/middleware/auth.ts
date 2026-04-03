@@ -1,5 +1,5 @@
 import { Response, NextFunction } from 'express';
-import supabase from '../config/supabase';
+import supabase, { anonClient } from '../config/supabase';
 import { AuthenticatedRequest, User } from '../types';
 
 /**
@@ -20,11 +20,11 @@ export async function authenticate(
 
   const token = authHeader.split(' ')[1];
 
-  // Verify token with Supabase Auth
+  // Verify token using the anon-key client — keeps the service-role client clean
   const {
     data: { user: authUser },
     error: authError,
-  } = await supabase.auth.getUser(token);
+  } = await anonClient.auth.getUser(token);
 
   if (authError || !authUser) {
     res.status(401).json({ error: 'Invalid or expired token' });

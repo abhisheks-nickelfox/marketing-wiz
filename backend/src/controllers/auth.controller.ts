@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
-import supabase from '../config/supabase';
+import supabase, { anonClient } from '../config/supabase';
 import { AuthenticatedRequest } from '../types';
 
 // ─── Validation rules ─────────────────────────────────────────────────────────
@@ -25,9 +25,11 @@ export async function login(req: Request, res: Response): Promise<void> {
 
   const { email, password } = req.body as { email: string; password: string };
 
-  // Sign in via Supabase Auth (uses the anon key path under the hood, but
-  // because we are using the service-role client we can call signInWithPassword)
-  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+  // Use the anon client — NOT the service-role client — for signInWithPassword.
+  // Calling it on the service-role singleton attaches the user's JWT to its
+  // internal session, causing all subsequent DB queries to run under user RLS
+  // and hiding admin-owned logs (revision markers, transition logs) from members.
+  const { data: authData, error: authError } = await anonClient.auth.signInWithPassword({
     email,
     password,
   });

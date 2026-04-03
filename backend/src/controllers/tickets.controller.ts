@@ -791,7 +791,7 @@ export async function transitionTicket(req: AuthenticatedRequest, res: Response)
     // API or join. The log has hours = 0 and is excluded from all time totals.
     if (targetStatus === 'revisions') {
       const newCycle = (ticket.revision_count ?? 0) + 1;
-      await supabase.from('time_logs').insert({
+      const { error: markerErr } = await supabase.from('time_logs').insert({
         ticket_id: id,
         user_id: req.user.id,
         hours: 0,
@@ -799,6 +799,25 @@ export async function transitionTicket(req: AuthenticatedRequest, res: Response)
         log_type: 'revision',
         revision_cycle: newCycle,
       });
+      if (markerErr) {
+        console.error('[tickets.controller] Failed to insert revision marker log:', markerErr);
+      }
+    } else {
+      // For all other transitions, insert a zero-hour audit marker so the full
+      // status journey is visible in the Time History card on both admin and
+      // member sides. The target status is stored in `comment` so the UI can
+      // render the correct badge label (e.g. "Internal Review", "Approved").
+      const { error: transitionErr } = await supabase.from('time_logs').insert({
+        ticket_id: id,
+        user_id: req.user.id,
+        hours: 0,
+        comment: targetStatus,
+        log_type: 'transition',
+        revision_cycle: ticket.revision_count ?? 0,
+      });
+      if (transitionErr) {
+        console.error('[tickets.controller] Failed to insert transition log:', transitionErr);
+      }
     }
 
     res.json({ data });
