@@ -13,9 +13,17 @@ const PORT = parseInt(process.env.PORT ?? '3000', 10);
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
 
+const allowedOrigins = [
+  'http://localhost:5173',
+  process.env.FRONTEND_URL ?? 'http://localhost:5173',
+].filter((v, i, a) => a.indexOf(v) === i);
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL ?? 'http://localhost:5173',
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) callback(null, true);
+      else callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
   })
 );

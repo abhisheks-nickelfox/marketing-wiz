@@ -103,7 +103,7 @@ const TranscriptsList = () => {
         prompt_id: selectedPromptId,
         text_notes: notes,
       })
-      navigate(`/admin/firms/${selectedFirmId}`)
+      navigate(`/admin/firms/${selectedFirmId}/unassigned`)
     } catch (err) {
       setProcessError(err.message)
       setProcessing(false)

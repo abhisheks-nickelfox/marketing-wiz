@@ -46,6 +46,14 @@ export const assignApproveValidation = [
     .optional()
     .isIn(['low', 'normal', 'high', 'urgent'])
     .withMessage('Invalid priority'),
+  body('deadline')
+    .optional({ nullable: true })
+    .isISO8601()
+    .withMessage('deadline must be a valid ISO 8601 date'),
+  body('project_id')
+    .optional({ nullable: true })
+    .isUUID('loose')
+    .withMessage('project_id must be a valid UUID'),
 ];
 
 export const regenerateValidation = [
@@ -124,20 +132,32 @@ export async function listTickets(req: AuthenticatedRequest, res: Response): Pro
     return;
   }
 
-  // Base fields shared by both admin and member queries
-  const BASE_SELECT = `id, session_id, firm_id, assignee_id, title, description, type, priority, status,
-       change_note, estimated_hours, ai_generated, edited, created_at, updated_at,
-       firms(name),
-       assignee:users!tickets_assignee_id_fkey(name, email)`;
+  // Status priority: active work surfaces first, terminal statuses sink to bottom
+  const STATUS_PRIORITY: Record<string, number> = {
+    draft: 1,
+    in_progress: 2,
+    revisions: 3,
+    internal_review: 4,
+    client_review: 5,
+    compliance_review: 6,
+    resolved: 7,
+    approved: 8,
+    closed: 9,
+    discarded: 10,
+  };
 
   try {
-    // Both admin and member queries include time_logs so time_spent can be shown in the list.
-    const selectClause = `${BASE_SELECT}, time_logs(hours, log_type)`;
+    const selectClause = `id, session_id, firm_id, assignee_id, project_id, title, description, type, priority, status,
+       change_note, estimated_hours, ai_generated, edited, archived, created_at, updated_at,
+       deadline, regeneration_count, last_regenerated_at, revision_count,
+       firms(name),
+       assignee:users!tickets_assignee_id_fkey(name, email),
+       time_logs(hours, log_type)`;
 
     let query = supabase
       .from('tickets')
       .select(selectClause)
-      .order('created_at', { ascending: false });
+      .order('updated_at', { ascending: false });
 
     const canViewAll =
       req.user.role === 'admin' ||
@@ -145,23 +165,54 @@ export async function listTickets(req: AuthenticatedRequest, res: Response): Pro
       (req.user.permissions ?? []).includes('view_all_tickets');
 
     if (!canViewAll) {
-      // Members without view_all_tickets only see their own tickets
       query = query.eq('assignee_id', req.user.id);
-      // Members always see non-archived tickets only
       query = query.eq('archived', false);
     } else {
-      // Admin-style filters
-      const { firm_id, assignee_id, status, type, priority, archived } = req.query as Record<string, string>;
+      const { firm_id, assignee_id, status, type, priority, archived, project_id, overdue } =
+        req.query as Record<string, string>;
+
       if (firm_id) query = query.eq('firm_id', firm_id);
       if (assignee_id) query = query.eq('assignee_id', assignee_id);
-      if (status) query = query.eq('status', status);
       if (type) query = query.eq('type', type);
       if (priority) query = query.eq('priority', priority);
-      // Archive filter: default to non-archived unless ?archived=true is explicitly passed
-      if (archived === 'true') {
-        query = query.eq('archived', true);
-      } else {
+      if (project_id) query = query.eq('project_id', project_id);
+
+      if (overdue === 'true') {
+        // Overdue filter supersedes the `status` param — the two overdue branches
+        // cover all relevant statuses already.
+        //
+        // Branch 1 (past_deadline): deadline has passed AND status is in an
+        //   active (non-terminal) state. We embed both conditions inside and()
+        //   because Supabase's .or() applies row-level: any row matching either
+        //   branch should be returned.
+        //
+        // Branch 2 (stale_approved): status is 'approved', no deadline set, and
+        //   the ticket has not been touched in 7+ days.
+        const today = new Date().toISOString().split('T')[0];
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+        // Active statuses eligible for past-deadline overdue — must match
+        // PAST_DEADLINE_STATUSES in dashboard.controller.ts.
+        const activeStatuses = 'draft,in_progress,revisions,internal_review,client_review,compliance_review';
+
+        // Supabase .or() filter string with nested and() groups:
+        //   and(deadline.lt.TODAY, status.in.(s1,s2,...))
+        //   and(status.eq.approved, deadline.is.null, updated_at.lt.7_DAYS_AGO)
+        query = query.or(
+          `and(deadline.lt.${today},status.in.(${activeStatuses})),` +
+          `and(status.eq.approved,deadline.is.null,updated_at.lt.${sevenDaysAgo})`
+        );
+
+        // Only non-archived tickets are meaningful on an overdue page
         query = query.eq('archived', false);
+      } else {
+        // Normal (non-overdue) path: honour the `status` filter as before
+        if (status) query = query.eq('status', status);
+        if (archived === 'true') {
+          query = query.eq('archived', true);
+        } else {
+          query = query.eq('archived', false);
+        }
       }
     }
 
@@ -172,8 +223,27 @@ export async function listTickets(req: AuthenticatedRequest, res: Response): Pro
       return;
     }
 
-    // Compute time_spent per ticket — exclude 'final' (it's a summary snapshot that
-    // duplicates the partial totals) and 'revision' (hours = 0 milestone markers).
+    // Batch-fetch project names for all project_ids present in this result set.
+    // This avoids relying on PostgREST FK join detection (unreliable after migrations).
+    const projectIds = [...new Set(
+      (data ?? []).map((t: Record<string, unknown>) => t.project_id).filter(Boolean)
+    )] as string[];
+
+    const projectMap: Record<string, string> = {};
+    if (projectIds.length > 0) {
+      const { data: projects, error: projectsError } = await supabase
+        .from('projects')
+        .select('id, name')
+        .in('id', projectIds);
+      if (projectsError) {
+        console.error('[tickets.controller] listTickets: failed to fetch project names:', projectsError.message);
+      }
+      (projects ?? []).forEach((p: { id: string; name: string }) => {
+        projectMap[p.id] = p.name;
+      });
+    }
+
+    // Compute time_spent and attach project name
     const enriched = (data ?? []).map((t: Record<string, unknown>) => {
       const timeLogs = t.time_logs as Array<{ hours: number; log_type: string }> | null;
       const time_spent = (timeLogs ?? [])
@@ -181,7 +251,21 @@ export async function listTickets(req: AuthenticatedRequest, res: Response): Pro
         .reduce((sum: number, l) => sum + (l.hours ?? 0), 0);
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { time_logs: _tl, ...rest } = t;
-      return { ...rest, time_spent: Number(time_spent.toFixed(2)) };
+      const projectName = t.project_id ? projectMap[t.project_id as string] : undefined;
+      return {
+        ...rest,
+        project: projectName ? { name: projectName } : null,
+        time_spent: Number(time_spent.toFixed(2)),
+      };
+    });
+
+    // Sort: status priority first, then most-recently-updated within same status
+    enriched.sort((a, b) => {
+      const pa = STATUS_PRIORITY[(a as Record<string, unknown>).status as string] ?? 99;
+      const pb = STATUS_PRIORITY[(b as Record<string, unknown>).status as string] ?? 99;
+      if (pa !== pb) return pa - pb;
+      return new Date((b as Record<string, unknown>).updated_at as string).getTime()
+           - new Date((a as Record<string, unknown>).updated_at as string).getTime();
     });
 
     res.json({ data: enriched });
@@ -326,7 +410,7 @@ export async function assignAndApprove(req: AuthenticatedRequest, res: Response)
   }
 
   const { id } = req.params;
-  const { assignee_id, priority, deadline } = req.body as { assignee_id: string; priority?: string; deadline?: string };
+  const { assignee_id, priority, deadline, project_id } = req.body as { assignee_id: string; priority?: string; deadline?: string; project_id?: string };
 
   try {
     // Verify assignee exists
@@ -348,6 +432,7 @@ export async function assignAndApprove(req: AuthenticatedRequest, res: Response)
     };
     if (priority) updatePayload['priority'] = priority;
     if (deadline) updatePayload['deadline'] = deadline;
+    if (project_id) updatePayload['project_id'] = project_id;
 
     const { data, error } = await supabase
       .from('tickets')

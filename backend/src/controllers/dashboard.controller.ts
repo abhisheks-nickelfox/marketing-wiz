@@ -112,22 +112,86 @@ export async function teamWorkload(_req: AuthenticatedRequest, res: Response): P
 }
 
 // ─── GET /api/dashboard/overdue-tickets ───────────────────────────────────────
+//
+// Two overdue categories:
+//   past_deadline  — ticket has a deadline that has passed AND is in an active
+//                    (non-terminal) status: draft, in_progress, revisions,
+//                    internal_review, client_review, compliance_review
+//   stale_approved — ticket is 'approved' with no deadline and hasn't been
+//                    acted on for 7+ days (updated_at used; acceptable for
+//                    staleness detection since the goal is "nobody touched it")
+//
+// No .limit() here — the dashboard frontend slices to 3 itself. A future
+// dedicated overdue page can consume the full list.
+
+// Active statuses that qualify for past-deadline overdue checking.
+// Terminal statuses (resolved, closed, discarded) and approved (handled
+// separately as stale_approved) are intentionally excluded.
+const PAST_DEADLINE_STATUSES = [
+  'draft',
+  'in_progress',
+  'revisions',
+  'internal_review',
+  'client_review',
+  'compliance_review',
+] as const;
 
 export async function overdueTickets(_req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const today = new Date().toISOString().split('T')[0];
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-    // Overdue = has a deadline that has passed, OR no deadline but approved for 7+ days
-    const { data } = await supabase
-      .from('tickets')
-      .select('id, title, priority, firm_id, assignee_id, created_at, deadline, firms(name), assignee:users!tickets_assignee_id_fkey(name)')
-      .eq('status', 'approved')
-      .or(`deadline.lt.${today},and(deadline.is.null,updated_at.lt.${sevenDaysAgo})`)
-      .order('created_at', { ascending: true })
-      .limit(10);
+    const selectClause =
+      'id, title, priority, status, firm_id, project_id, assignee_id, created_at, updated_at, deadline, ' +
+      'firms(name), assignee:users!tickets_assignee_id_fkey(name)';
 
-    res.json({ data: data ?? [] });
+    // Query 1: tickets with a past deadline in any active status
+    const { data: pastDeadlineData, error: err1 } = await supabase
+      .from('tickets')
+      .select(selectClause)
+      .in('status', PAST_DEADLINE_STATUSES as unknown as string[])
+      .lt('deadline', today)
+      .eq('archived', false)
+      .order('deadline', { ascending: true });
+
+    if (err1) {
+      console.error('[dashboard.controller] overdueTickets past_deadline query error:', err1);
+      res.status(500).json({ error: err1.message });
+      return;
+    }
+
+    // Query 2: approved tickets with no deadline that haven't been touched in 7+ days
+    const { data: staleApprovedData, error: err2 } = await supabase
+      .from('tickets')
+      .select(selectClause)
+      .eq('status', 'approved')
+      .is('deadline', null)
+      .lt('updated_at', sevenDaysAgo)
+      .eq('archived', false)
+      .order('updated_at', { ascending: true });
+
+    if (err2) {
+      console.error('[dashboard.controller] overdueTickets stale_approved query error:', err2);
+      res.status(500).json({ error: err2.message });
+      return;
+    }
+
+    // Tag each result with its overdue_type so the frontend can display
+    // contextually appropriate labels ("Past Deadline" vs "Stale — No Activity").
+    // Cast through unknown→Record to satisfy the TS spread constraint on Supabase's
+    // inferred row type (which is typed as a complex union, not a plain object).
+    const tagged = [
+      ...(pastDeadlineData ?? []).map((t) => ({
+        ...(t as unknown as Record<string, unknown>),
+        overdue_type: 'past_deadline' as const,
+      })),
+      ...(staleApprovedData ?? []).map((t) => ({
+        ...(t as unknown as Record<string, unknown>),
+        overdue_type: 'stale_approved' as const,
+      })),
+    ];
+
+    res.json({ data: tagged });
   } catch (err) {
     console.error('[dashboard.controller] overdueTickets error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -165,7 +229,7 @@ export async function memberDashboard(req: AuthenticatedRequest, res: Response):
 
     const { data: recentTickets } = await supabase
       .from('tickets')
-      .select('id, title, status, priority, type, updated_at, firms(name)')
+      .select('id, title, status, priority, type, updated_at, firm_id, project_id, firms(name), project:projects(name)')
       .eq('assignee_id', userId)
       .order('updated_at', { ascending: false })
       .limit(5);

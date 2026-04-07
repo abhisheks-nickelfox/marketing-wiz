@@ -23,6 +23,7 @@ export type LogType = 'estimate' | 'partial' | 'final' | 'revision';
 
 export const PERMISSIONS = [
   { key: 'manage_firms',          label: 'Manage Firms',          description: 'Create and edit client firms' },
+  { key: 'manage_projects',       label: 'Manage Projects',       description: 'Create, edit and archive projects' },
   { key: 'process_transcripts',   label: 'Process Transcripts',   description: 'Access and process meeting transcripts' },
   { key: 'view_all_tickets',      label: 'View All Tickets',      description: 'See all tickets across the team' },
   { key: 'manage_prompts',        label: 'Manage Prompts',        description: 'Edit AI prompt templates' },
@@ -136,6 +137,32 @@ export interface SyncResult {
 
 export interface AuthenticatedRequest extends Request {
   user?: User;
+}
+
+// ─── Projects ─────────────────────────────────────────────────────────────────
+
+export interface Project {
+  id: string;
+  firm_id: string;
+  name: string;
+  description: string | null;
+  status: 'active' | 'archived';
+  created_at: string;
+  updated_at: string;
+  firm_name?: string;
+  ticket_count?: number;
+}
+
+export interface CreateProjectInput {
+  firm_id: string;
+  name: string;
+  description?: string;
+}
+
+export interface UpdateProjectInput {
+  name?: string;
+  description?: string;
+  status?: 'active' | 'archived';
 }
 
 // ─── API response helpers ─────────────────────────────────────────────────────

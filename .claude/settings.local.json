@@ -19,7 +19,12 @@
       "Bash(node -e \"const c = require\\('./dist/controllers/tickets.controller.js'\\); console.log\\('transitionTicket exported:', typeof c.transitionTicket\\); console.log\\('resolveTicket exported:', typeof c.resolveTicket\\);\")",
       "Bash(grep:*)",
       "Bash(wc:*)",
-      "Bash(ls -la /home/shubham/Documents/MarketingWiz/*.md /home/shubham/Documents/MarketingWiz/.gitignore)"
+      "Bash(ls -la /home/shubham/Documents/MarketingWiz/*.md /home/shubham/Documents/MarketingWiz/.gitignore)",
+      "Bash(sed -n '1,15p' /home/shubham/Documents/MarketingWiz/frontend/src/pages/admin/FirmProjects.jsx)",
+      "Bash(sed -n '280,295p' /home/shubham/Documents/MarketingWiz/frontend/src/pages/admin/FirmProjects.jsx)",
+      "Bash(sed -n '1,12p' /home/shubham/Documents/MarketingWiz/frontend/src/pages/admin/ProjectsList.jsx)",
+      "Bash(sed -n '328,340p' /home/shubham/Documents/MarketingWiz/frontend/src/pages/admin/ProjectsList.jsx)",
+      "Bash(node --input-type=module)"
     ]
   }
 }

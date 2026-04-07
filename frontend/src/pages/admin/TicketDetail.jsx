@@ -42,12 +42,16 @@ const AdminTicketDetail = () => {
   const [transitionError, setTransitionError] = useState(null)
   const [pendingTransitionStatus, setPendingTransitionStatus] = useState(null)
   const [revisionNotes, setRevisionNotes] = useState('')
+  const [openCycles, setOpenCycles] = useState(new Set())
 
   const loadData = useCallback(() => {
     Promise.all([ticketsApi.get(id), ticketsApi.getTimeLogs(id)])
       .then(([t, logs]) => {
         setTicket(t.data)
-        setTimeLogs(logs.data ?? [])
+        const logData = logs.data ?? []
+        setTimeLogs(logData)
+        const maxCycle = logData.reduce((max, l) => Math.max(max, l.revision_cycle ?? 0), 0)
+        setOpenCycles(new Set([maxCycle]))
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
@@ -86,10 +90,10 @@ const AdminTicketDetail = () => {
     }
   }
 
-  const handleAssignApprove = async ({ assignee_id, priority, deadline }) => {
+  const handleAssignApprove = async ({ assignee_id, priority, deadline, project_id }) => {
     setActionError(null)
     try {
-      await ticketsApi.assignApprove(id, { assignee_id, priority, deadline })
+      await ticketsApi.assignApprove(id, { assignee_id, priority, deadline, project_id })
       loadData()
     } catch (err) {
       setActionError(err.message)
@@ -368,69 +372,109 @@ const AdminTicketDetail = () => {
                 return (
                   <section>
                     <h3 className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-on-surface-variant/50 mb-4 lg:mb-6">Time Logs</h3>
-                    <div className="space-y-6">
-                      {sections.map((section) => (
-                        <div key={section.cycle}>
-                          {/* Section header — only show "Initial Work" label when there are revisions */}
-                          {section.cycle === 0 && hasMultipleSections && (
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/40 mb-2">
-                              Initial Work
-                            </p>
-                          )}
-                          {/* Revision banner */}
-                          {section.cycle > 0 && (
-                            <div className="mb-3 rounded-lg bg-orange-50 border-l-4 border-orange-400 px-4 py-3 space-y-1">
-                              <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-sm text-orange-500">edit_note</span>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-orange-600">
-                                  Revision {section.cycle} — Admin's Note
+                    <div className="space-y-4">
+                      {sections.map((section) => {
+                        const cycleTotal = section.logs.reduce(
+                          (sum, l) => sum + (parseFloat(l.hours) || 0),
+                          0
+                        )
+                        const entryCount = section.logs.filter(
+                          (l) => l.log_type !== 'final' && l.log_type !== 'transition'
+                        ).length
+                        const isOpen = openCycles.has(section.cycle)
+                        const toggleCycle = () => setOpenCycles((prev) => {
+                          const next = new Set(prev)
+                          if (next.has(section.cycle)) next.delete(section.cycle)
+                          else next.add(section.cycle)
+                          return next
+                        })
+
+                        return (
+                          <div key={section.cycle} className="rounded-xl overflow-hidden shadow-sm">
+                            {/* Revision banner */}
+                            {section.cycle > 0 && (
+                              <div className="bg-orange-50 border-b border-orange-200 px-4 py-3 space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="material-symbols-outlined text-sm text-orange-500">edit_note</span>
+                                  <p className="text-[10px] font-black uppercase tracking-widest text-orange-600">
+                                    Revision {section.cycle} — Admin's Note
+                                  </p>
+                                </div>
+                                <p className="text-sm text-orange-700 font-medium leading-snug pl-5">
+                                  {section.note || <span className="italic opacity-60">No change note provided</span>}
                                 </p>
                               </div>
-                              <p className="text-sm text-orange-700 font-medium leading-snug pl-5">
-                                {section.note || <span className="italic opacity-60">No change note provided</span>}
-                              </p>
-                            </div>
-                          )}
-                          {/* Log entries for this cycle */}
-                          {section.logs.length === 0 ? (
-                            <p className="text-xs text-on-surface-variant/40 italic pl-1">No logs for this cycle</p>
-                          ) : (
-                            <div className="space-y-3">
-                              {section.logs.map((log) => (
-                                log.log_type === 'transition' ? (
-                                  /* Status transition audit marker */
-                                  <div key={log.id} className="flex items-center gap-3 px-4 py-2.5 bg-surface-container-lowest rounded-lg border border-outline-variant/10">
-                                    <span className="material-symbols-outlined text-sm text-on-surface-variant/40">arrow_circle_right</span>
-                                    <span className="text-[10px] text-on-surface-variant/50 font-medium uppercase tracking-wider">Moved to</span>
-                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${getStatusBadge(log.comment)}`}>
-                                      {STATUS_LABELS[log.comment] ?? log.comment}
-                                    </span>
-                                    <span className="text-[10px] text-on-surface-variant/50 ml-auto whitespace-nowrap">{formatDate(log.created_at)}</span>
+                            )}
+
+                            {/* Cycle header — click to collapse/expand */}
+                            <button
+                              onClick={toggleCycle}
+                              className="w-full bg-surface-container-low px-4 py-3 flex items-center justify-between hover:bg-surface-container transition-colors"
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <span
+                                  className="material-symbols-outlined text-sm text-on-surface-variant/50 transition-transform duration-200"
+                                  style={{ transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}
+                                >
+                                  chevron_right
+                                </span>
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/60">
+                                  {section.cycle === 0 ? 'Initial Work' : `Revision ${section.cycle} Logs`}
+                                </p>
+                                <span className="text-[10px] text-on-surface-variant/40">
+                                  {entryCount} {entryCount === 1 ? 'entry' : 'entries'}
+                                </span>
+                              </div>
+                              <span className="text-[11px] font-bold text-on-surface-variant/70 tabular-nums">
+                                {cycleTotal > 0 ? formatHours(cycleTotal) : '—'}
+                              </span>
+                            </button>
+
+                            {/* Accordion body */}
+                            <div className={`grid transition-all duration-200 ease-in-out ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+                              <div className="overflow-hidden min-h-0">
+                                {section.logs.length === 0 ? (
+                                  <div className="bg-surface-container-lowest px-5 py-4">
+                                    <p className="text-xs text-on-surface-variant/40 italic">No logs for this cycle</p>
                                   </div>
                                 ) : (
-                                  /* Regular time log entry */
-                                  <div
-                                    key={log.id}
-                                    className="flex flex-wrap items-center gap-3 lg:gap-4 p-4 bg-surface-container-lowest rounded-lg border border-outline-variant/10"
-                                  >
-                                    <span className="font-bold text-sm text-primary-container">{formatHours(log.hours)}</span>
-                                    {log.log_type === 'final' && (
-                                      <span className="text-[10px] font-bold bg-teal-50 text-teal-600 px-2 py-0.5 rounded uppercase tracking-wider">Final</span>
-                                    )}
-                                    {log.comment && <span className="text-sm text-on-surface flex-1">{log.comment}</span>}
-                                    <div className="ml-auto text-right flex flex-col gap-0.5">
-                                      <span className="text-[10px] text-on-surface-variant/60 whitespace-nowrap">{formatDate(log.created_at)}</span>
-                                      {log.updated_at && new Date(log.updated_at) - new Date(log.created_at) > 1000 && (
-                                        <span className="text-[10px] text-on-surface-variant/40 italic whitespace-nowrap">edited {timeAgo(log.updated_at)}</span>
-                                      )}
-                                    </div>
+                                  <div className="divide-y divide-surface-container-low">
+                                    {section.logs.map((log) => (
+                                      log.log_type === 'transition' ? (
+                                        <div key={log.id} className="flex items-center gap-3 px-4 py-2.5 bg-surface-container-lowest">
+                                          <span className="material-symbols-outlined text-sm text-on-surface-variant/40">arrow_circle_right</span>
+                                          <span className="text-[10px] text-on-surface-variant/50 font-medium uppercase tracking-wider">Moved to</span>
+                                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${getStatusBadge(log.comment)}`}>
+                                            {STATUS_LABELS[log.comment] ?? log.comment}
+                                          </span>
+                                          <span className="text-[10px] text-on-surface-variant/50 ml-auto whitespace-nowrap">{formatDate(log.created_at)}</span>
+                                        </div>
+                                      ) : (
+                                        <div
+                                          key={log.id}
+                                          className="flex flex-wrap items-center gap-3 lg:gap-4 px-4 py-3 bg-surface-container-lowest hover:bg-surface-container transition-colors"
+                                        >
+                                          <span className="font-bold text-sm text-primary-container">{formatHours(log.hours)}</span>
+                                          {log.log_type === 'final' && (
+                                            <span className="text-[10px] font-bold bg-teal-50 text-teal-600 px-2 py-0.5 rounded uppercase tracking-wider">Final</span>
+                                          )}
+                                          {log.comment && <span className="text-sm text-on-surface flex-1">{log.comment}</span>}
+                                          <div className="ml-auto text-right flex flex-col gap-0.5">
+                                            <span className="text-[10px] text-on-surface-variant/60 whitespace-nowrap">{formatDate(log.created_at)}</span>
+                                            {log.updated_at && new Date(log.updated_at) - new Date(log.created_at) > 1000 && (
+                                              <span className="text-[10px] text-on-surface-variant/40 italic whitespace-nowrap">edited {timeAgo(log.updated_at)}</span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )
+                                    ))}
                                   </div>
-                                )
-                              ))}
+                                )}
+                              </div>
                             </div>
-                          )}
-                        </div>
-                      ))}
+                          </div>
+                        )
+                      })}
                     </div>
                   </section>
                 )
@@ -605,6 +649,7 @@ const AdminTicketDetail = () => {
         isOpen={showAssignModal}
         onClose={() => setShowAssignModal(false)}
         ticket={ticket}
+        firmId={ticket?.firm_id}
         onApprove={handleAssignApprove}
       />
       <ResolveTicketModal

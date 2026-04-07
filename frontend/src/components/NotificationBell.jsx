@@ -74,6 +74,13 @@ const NotificationBell = () => {
     setUnreadCount(0)
   }
 
+  const handleDismiss = async (e, notif) => {
+    e.stopPropagation()
+    await notificationsApi.markRead(notif.id).catch(() => {})
+    setNotifications((prev) => prev.filter((n) => n.id !== notif.id))
+    if (!notif.read) setUnreadCount((c) => Math.max(0, c - 1))
+  }
+
   return (
     <div className="relative" ref={panelRef}>
       {/* Bell Button */}
@@ -127,25 +134,33 @@ const NotificationBell = () => {
               </div>
             )}
             {!loading && notifications.map((notif) => (
-              <button
+              <div
                 key={notif.id}
-                onClick={() => handleMarkRead(notif)}
-                className={`w-full text-left px-5 py-4 flex items-start gap-3 hover:bg-surface-container-low transition-colors border-b border-outline-variant/5 last:border-0 ${
-                  !notif.read ? 'bg-[#C84B0E]/3' : ''
+                className={`w-full text-left px-4 py-3.5 flex items-start gap-3 border-b border-outline-variant/5 last:border-0 group ${
+                  !notif.read ? 'bg-[#C84B0E]/5' : ''
                 }`}
               >
-                <div className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${!notif.read ? 'bg-[#C84B0E]' : 'bg-transparent'}`} />
-                <div className="flex-1 min-w-0">
-                  <p className={`text-xs font-bold ${!notif.read ? 'text-on-surface' : 'text-on-surface-variant'}`}>
-                    {notif.title}
-                  </p>
-                  <p className="text-xs text-on-surface-variant mt-0.5 truncate">{notif.message}</p>
-                  <p className="text-[10px] text-on-surface-variant/50 mt-1">{timeAgo(notif.created_at)}</p>
-                </div>
-                {notif.ticket_id && (
-                  <span className="material-symbols-outlined text-on-surface-variant/30 text-sm flex-shrink-0 mt-0.5">chevron_right</span>
-                )}
-              </button>
+                <button
+                  onClick={() => handleMarkRead(notif)}
+                  className="flex items-start gap-3 flex-1 min-w-0 hover:opacity-80 transition-opacity text-left"
+                >
+                  <div className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${!notif.read ? 'bg-[#C84B0E]' : 'bg-transparent'}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-xs font-bold ${!notif.read ? 'text-on-surface' : 'text-on-surface-variant'}`}>
+                      {notif.title}
+                    </p>
+                    <p className="text-xs text-on-surface-variant mt-0.5 line-clamp-2">{notif.message}</p>
+                    <p className="text-[10px] text-on-surface-variant/50 mt-1">{timeAgo(notif.created_at)}</p>
+                  </div>
+                </button>
+                <button
+                  onClick={(e) => handleDismiss(e, notif)}
+                  className="flex-shrink-0 mt-0.5 w-5 h-5 flex items-center justify-center rounded-full text-on-surface-variant/40 hover:bg-surface-container-high hover:text-on-surface transition-colors opacity-0 group-hover:opacity-100"
+                  title="Dismiss"
+                >
+                  <span className="material-symbols-outlined text-sm">close</span>
+                </button>
+              </div>
             ))}
           </div>
         </div>

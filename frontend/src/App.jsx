@@ -4,9 +4,11 @@ import Login from './pages/Login'
 import AdminDashboard from './pages/admin/Dashboard'
 import MemberDashboard from './pages/member/Dashboard'
 import MemberTicketList from './pages/member/TicketList'
+import MemberTicketCategoryList from './pages/member/TicketCategoryList'
 import MemberTicketDetail from './pages/member/TicketDetail'
 import AdminTicketList from './pages/admin/TicketList'
 import AdminTicketDetail from './pages/admin/TicketDetail'
+import OverdueTickets from './pages/admin/OverdueTickets'
 import TranscriptsList from './pages/admin/TranscriptsList'
 import FirmsList from './pages/admin/FirmsList'
 import FirmDetail from './pages/admin/FirmDetail'
@@ -17,6 +19,11 @@ import MemberEdit from './pages/admin/MemberEdit'
 import AddMember from './pages/admin/AddMember'
 import AdminProfile from './pages/admin/Profile'
 import MemberProfile from './pages/member/Profile'
+import ProjectsList from './pages/admin/ProjectsList'
+import ProjectDetail from './pages/admin/ProjectDetail'
+import FirmTickets from './pages/admin/FirmTickets'
+import FirmUnassigned from './pages/admin/FirmUnassigned'
+import FirmProjects from './pages/admin/FirmProjects'
 
 // Protected route wrapper — redirects to /login if not authenticated
 // requiredRole: strict role check ('admin' or 'member')
@@ -77,6 +84,10 @@ function App() {
           element={<ProtectedRoute requiredRole="admin"><AdminTicketList /></ProtectedRoute>}
         />
         <Route
+          path="/admin/tickets/overdue"
+          element={<ProtectedRoute requiredRole="admin"><OverdueTickets /></ProtectedRoute>}
+        />
+        <Route
           path="/admin/tickets/:id"
           element={<ProtectedRoute requiredRole="admin"><AdminTicketDetail /></ProtectedRoute>}
         />
@@ -101,6 +112,16 @@ function App() {
           element={<ProtectedRoute requiredRole="admin"><AdminProfile /></ProtectedRoute>}
         />
 
+        {/* ─── Projects routes ───────────────────────────────────────── */}
+        <Route
+          path="/admin/projects"
+          element={<ProtectedRoute requiredRole="admin"><ProjectsList /></ProtectedRoute>}
+        />
+        <Route
+          path="/admin/projects/:id"
+          element={<ProtectedRoute requiredRole="admin"><ProjectDetail /></ProtectedRoute>}
+        />
+
         {/* ─── Permission-gated routes (admin or member with permission) ── */}
         <Route
           path="/admin/firms"
@@ -113,6 +134,18 @@ function App() {
         <Route
           path="/admin/firms/:id"
           element={<ProtectedRoute requiredPermission="manage_firms"><FirmDetail /></ProtectedRoute>}
+        />
+        <Route
+          path="/admin/firms/:id/tickets"
+          element={<ProtectedRoute requiredPermission="manage_firms"><FirmTickets /></ProtectedRoute>}
+        />
+        <Route
+          path="/admin/firms/:id/unassigned"
+          element={<ProtectedRoute requiredPermission="manage_firms"><FirmUnassigned /></ProtectedRoute>}
+        />
+        <Route
+          path="/admin/firms/:id/projects"
+          element={<ProtectedRoute requiredPermission="manage_firms"><FirmProjects /></ProtectedRoute>}
         />
         <Route
           path="/admin/transcripts"
@@ -131,6 +164,27 @@ function App() {
         <Route
           path="/member/tickets"
           element={<ProtectedRoute requiredRole="member"><MemberTicketList /></ProtectedRoute>}
+        />
+        {/* Category sub-routes — must come before /:id to avoid UUID collision */}
+        <Route
+          path="/member/tickets/revisions"
+          element={<ProtectedRoute requiredRole="member"><MemberTicketCategoryList category="revisions" /></ProtectedRoute>}
+        />
+        <Route
+          path="/member/tickets/new"
+          element={<ProtectedRoute requiredRole="member"><MemberTicketCategoryList category="new" /></ProtectedRoute>}
+        />
+        <Route
+          path="/member/tickets/in-progress"
+          element={<ProtectedRoute requiredRole="member"><MemberTicketCategoryList category="in-progress" /></ProtectedRoute>}
+        />
+        <Route
+          path="/member/tickets/pending"
+          element={<ProtectedRoute requiredRole="member"><MemberTicketCategoryList category="pending" /></ProtectedRoute>}
+        />
+        <Route
+          path="/member/tickets/resolved"
+          element={<ProtectedRoute requiredRole="member"><MemberTicketCategoryList category="resolved" /></ProtectedRoute>}
         />
         <Route
           path="/member/tickets/:id"

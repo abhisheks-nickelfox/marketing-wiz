@@ -1,14 +1,22 @@
 import { useState, useEffect } from 'react'
-import { teamApi } from '../../lib/api'
+import { teamApi, projectsApi } from '../../lib/api'
 
-const AssignApproveModal = ({ isOpen, onClose, ticket, onApprove }) => {
+const AssignApproveModal = ({ isOpen, onClose, ticket, onApprove, firmId }) => {
   const [selectedPriority, setSelectedPriority] = useState('')
   const [selectedMemberId, setSelectedMemberId] = useState('')
+  const [selectedProjectId, setSelectedProjectId] = useState('')
   const [deadline, setDeadline] = useState('')
   const [showPriorityDropdown, setShowPriorityDropdown] = useState(false)
   const [showMemberDropdown, setShowMemberDropdown] = useState(false)
   const [teamMembers, setTeamMembers] = useState([])
+  const [projects, setProjects] = useState([])
   const [loadingTeam, setLoadingTeam] = useState(true)
+
+  // Inline "create project" state
+  const [showNewProjectForm, setShowNewProjectForm] = useState(false)
+  const [newProjectName, setNewProjectName] = useState('')
+  const [creatingProject, setCreatingProject] = useState(false)
+  const [createProjectError, setCreateProjectError] = useState('')
 
   const priorities = [
     { value: 'urgent', label: 'Urgent', color: 'bg-red-900' },
@@ -17,21 +25,67 @@ const AssignApproveModal = ({ isOpen, onClose, ticket, onApprove }) => {
     { value: 'low', label: 'Low', color: 'bg-gray-400' },
   ]
 
+  // Show project dropdown only when firmId is provided and ticket has no project yet
+  const showProjectDropdown = !!firmId && !ticket?.project_id
+
   useEffect(() => {
     if (!isOpen) return
+    setSelectedPriority('')
+    setSelectedMemberId('')
+    setSelectedProjectId('')
+    setDeadline('')
     setLoadingTeam(true)
-    teamApi
-      .list({ role: 'member' })
-      .then((res) => setTeamMembers(res.data ?? []))
-      .catch(console.error)
-      .finally(() => setLoadingTeam(false))
-  }, [isOpen])
+
+    const fetches = [
+      teamApi.list({ role: 'member' }).then((res) => setTeamMembers(res.data ?? [])).catch(console.error),
+    ]
+
+    if (showProjectDropdown) {
+      fetches.push(
+        projectsApi.list(firmId)
+          .then((res) => {
+            const active = (res.data ?? []).filter((p) => p.status === 'active')
+            setProjects(active)
+            if (active.length > 0) setSelectedProjectId(active[0].id)
+          })
+          .catch(console.error)
+      )
+    }
+
+    Promise.all(fetches).finally(() => setLoadingTeam(false))
+  }, [isOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectedMember = teamMembers.find((m) => m.id === selectedMemberId)
 
+  const handleCreateProject = async () => {
+    if (!newProjectName.trim()) return
+    setCreatingProject(true)
+    setCreateProjectError('')
+    try {
+      const res = await projectsApi.create({ firm_id: firmId, name: newProjectName.trim() })
+      const created = res.data
+      setProjects((prev) => [...prev, created])
+      setSelectedProjectId(created.id)
+      setShowNewProjectForm(false)
+      setNewProjectName('')
+    } catch (err) {
+      setCreateProjectError(err.message)
+    } finally {
+      setCreatingProject(false)
+    }
+  }
+
+  const canApprove = selectedPriority && selectedMemberId && (!showProjectDropdown || selectedProjectId)
+
   const handleApprove = () => {
-    if (selectedPriority && selectedMemberId) {
-      onApprove({ priority: selectedPriority, assignee_id: selectedMemberId, assigneeName: selectedMember?.name ?? '', deadline: deadline || null })
+    if (canApprove) {
+      onApprove({
+        priority: selectedPriority,
+        assignee_id: selectedMemberId,
+        assigneeName: selectedMember?.name ?? '',
+        deadline: deadline || null,
+        project_id: selectedProjectId || null,
+      })
       onClose()
     }
   }
@@ -50,7 +104,7 @@ const AssignApproveModal = ({ isOpen, onClose, ticket, onApprove }) => {
         </div>
 
         {/* Content */}
-        <div className="px-8 pb-8 space-y-6">
+        <div className="px-8 pb-8 space-y-6 overflow-y-auto max-h-[70vh]">
           {/* Ticket Summary */}
           <div className="p-6 bg-surface-container-low border border-outline-variant/30 rounded-lg">
             <div className="text-[10px] font-bold text-on-surface-variant tracking-widest uppercase mb-1.5">
@@ -167,6 +221,70 @@ const AssignApproveModal = ({ isOpen, onClose, ticket, onApprove }) => {
             </div>
           </div>
 
+          {/* Project (optional — only when ticket has no project yet) */}
+          {showProjectDropdown && (
+            <div className="space-y-2">
+              <label className="block text-[10px] font-bold text-on-surface-variant tracking-widest uppercase">
+                Project <span className="text-[#C84B0E]">*</span>
+              </label>
+              <select
+                value={selectedProjectId}
+                onChange={(e) => {
+                  if (e.target.value === '__new__') {
+                    setShowNewProjectForm(true)
+                    setNewProjectName('')
+                    setCreateProjectError('')
+                    setSelectedProjectId('')
+                  } else {
+                    setSelectedProjectId(e.target.value)
+                    setShowNewProjectForm(false)
+                  }
+                }}
+                className="w-full px-4 py-3 bg-white border border-outline-variant/60 rounded-lg text-sm text-on-surface hover:border-outline-variant/100 focus:outline-none focus:ring-1 focus:ring-primary-container transition-all"
+              >
+                {projects.length === 0 && <option value="" disabled>No projects yet — create one below</option>}
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+                <option value="__new__">+ Create new project…</option>
+              </select>
+
+              {/* Inline create project form */}
+              {showNewProjectForm && (
+                <div className="mt-2 p-4 bg-surface-container-low border border-outline-variant/30 rounded-lg space-y-3">
+                  <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">New Project Name</p>
+                  <input
+                    type="text"
+                    value={newProjectName}
+                    onChange={(e) => { setNewProjectName(e.target.value); setCreateProjectError('') }}
+                    placeholder="e.g. Newsletter Q2"
+                    className="w-full px-3 py-2 bg-white border border-outline-variant/60 rounded-lg text-sm text-on-surface focus:outline-none focus:ring-1 focus:ring-primary-container transition-all"
+                    autoFocus
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCreateProject() } }}
+                  />
+                  {createProjectError && (
+                    <p className="text-xs text-error">{createProjectError}</p>
+                  )}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleCreateProject}
+                      disabled={creatingProject || !newProjectName.trim()}
+                      className="px-4 py-1.5 text-xs font-bold bg-primary-container text-white rounded-lg hover:brightness-110 transition-all disabled:opacity-50"
+                    >
+                      {creatingProject ? 'Creating…' : 'Create & Select'}
+                    </button>
+                    <button
+                      onClick={() => { setShowNewProjectForm(false); setNewProjectName(''); setCreateProjectError('') }}
+                      className="px-4 py-1.5 text-xs font-bold text-on-surface-variant border border-outline-variant/30 rounded-lg hover:bg-surface-container-low transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Deadline */}
           <div className="space-y-2">
             <label className="block text-[10px] font-bold text-on-surface-variant tracking-widest uppercase">
@@ -202,12 +320,12 @@ const AssignApproveModal = ({ isOpen, onClose, ticket, onApprove }) => {
           </button>
           <button
             className={`px-8 py-2.5 bg-[#C84B0E] text-white font-bold text-sm rounded-lg transition-all shadow-sm ${
-              selectedPriority && selectedMemberId
+              canApprove
                 ? 'hover:bg-[#a23800] cursor-pointer'
                 : 'opacity-50 cursor-not-allowed'
             }`}
             onClick={handleApprove}
-            disabled={!selectedPriority || !selectedMemberId}
+            disabled={!canApprove}
           >
             Final Approve
           </button>

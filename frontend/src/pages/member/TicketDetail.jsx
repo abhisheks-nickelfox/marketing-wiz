@@ -6,6 +6,7 @@ import ResolveTicketModal from '../../components/modals/ResolveTicketModal'
 import Toast from '../../components/Toast'
 import { ticketsApi, formatDate, formatHours, timeAgo, getStatusBadge, getStatusBadges, decimalToHoursMinutes, hoursMinutesToDecimal } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
+import { invalidateMemberTicketsCache } from '../../lib/memberTicketsCache'
 
 const STATUS_LABELS = {
   draft:             'New',
@@ -48,6 +49,8 @@ const MemberTicketDetail = () => {
   const [editLogComment, setEditLogComment] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
 
+  const [openCycles, setOpenCycles] = useState(new Set()) // expanded cycle numbers
+
   const [isResolveModalOpen, setIsResolveModalOpen] = useState(false)
   const [resolving, setResolving] = useState(false)
 
@@ -60,7 +63,11 @@ const MemberTicketDetail = () => {
         const { hrs, mins } = decimalToHoursMinutes(t.estimated_hours)
         setEstimatedHrs(hrs)
         setEstimatedMins(mins)
-        setTimeLogs(logsRes.data ?? [])
+        const logs = logsRes.data ?? []
+        setTimeLogs(logs)
+        // Open only the latest cycle by default
+        const maxCycle = logs.reduce((max, l) => Math.max(max, l.revision_cycle ?? 0), 0)
+        setOpenCycles(new Set([maxCycle]))
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
@@ -100,6 +107,7 @@ const MemberTicketDetail = () => {
         comment: newLogComment,
         log_type: 'partial',
       })
+      invalidateMemberTicketsCache()
       setTimeLogs((prev) => [res.data, ...prev])
       setNewLogHrs('')
       setNewLogMins('')
@@ -116,6 +124,7 @@ const MemberTicketDetail = () => {
     setDeletingLogId(logId)
     try {
       await ticketsApi.deleteTimeLog(id, logId)
+      invalidateMemberTicketsCache()
       setTimeLogs((prev) => prev.filter((l) => l.id !== logId))
     } catch (err) {
       setLogError(err.message)
@@ -140,6 +149,7 @@ const MemberTicketDetail = () => {
         hours: combined,
         comment: editLogComment,
       })
+      invalidateMemberTicketsCache()
       setTimeLogs((prev) => prev.map((l) => l.id === editingLogId ? res.data : l))
       setEditingLogId(null)
     } catch (err) {
@@ -157,6 +167,7 @@ const MemberTicketDetail = () => {
         final_comment: finalComment,
         estimated_hours: hours ? parseFloat(hours) : undefined,
       })
+      invalidateMemberTicketsCache()
       setIsResolveModalOpen(false)
       loadData()
     } catch (err) {
@@ -428,6 +439,14 @@ const MemberTicketDetail = () => {
                             (l) => l.log_type !== 'final' && l.log_type !== 'transition'
                           ).length
 
+                          const isOpen = openCycles.has(section.cycle)
+                          const toggleCycle = () => setOpenCycles((prev) => {
+                            const next = new Set(prev)
+                            if (next.has(section.cycle)) next.delete(section.cycle)
+                            else next.add(section.cycle)
+                            return next
+                          })
+
                           return (
                             <div key={section.cycle} className="rounded-xl overflow-hidden shadow-sm">
                               {/* Revision: admin note banner at top of card */}
@@ -445,9 +464,16 @@ const MemberTicketDetail = () => {
                                 </div>
                               )}
 
-                              {/* Cycle header row */}
-                              <div className="bg-surface-container-low px-4 py-3 flex items-center justify-between">
+                              {/* Cycle header — click to collapse/expand */}
+                              <button
+                                onClick={toggleCycle}
+                                className="w-full bg-surface-container-low px-4 py-3 flex items-center justify-between hover:bg-surface-container transition-colors"
+                              >
                                 <div className="flex items-center gap-2.5">
+                                  <span className="material-symbols-outlined text-sm text-on-surface-variant/50 transition-transform duration-200"
+                                    style={{ transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+                                    chevron_right
+                                  </span>
                                   <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/60">
                                     {section.cycle === 0 ? 'Initial Work' : `Revision ${section.cycle} Logs`}
                                   </p>
@@ -455,14 +481,14 @@ const MemberTicketDetail = () => {
                                     {entryCount} {entryCount === 1 ? 'entry' : 'entries'}
                                   </span>
                                 </div>
-                                {cycleTotal > 0 && (
-                                  <span className="text-[10px] font-bold text-on-surface-variant/60 tabular-nums">
-                                    {formatHours(cycleTotal)}
-                                  </span>
-                                )}
-                              </div>
+                                <span className="text-[11px] font-bold text-on-surface-variant/70 tabular-nums">
+                                  {cycleTotal > 0 ? formatHours(cycleTotal) : '—'}
+                                </span>
+                              </button>
 
-                              {/* Log entries */}
+                              {/* Accordion body — grid-rows transition for smooth open/close */}
+                              <div className={`grid transition-all duration-200 ease-in-out ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+                                <div className="overflow-hidden min-h-0">
                               {section.logs.length === 0 ? (
                                 <div className="bg-surface-container-lowest px-5 py-4">
                                   <p className="text-xs text-on-surface-variant/40 italic">
@@ -570,6 +596,8 @@ const MemberTicketDetail = () => {
                                   ))}
                                 </div>
                               )}
+                                </div>{/* overflow-hidden */}
+                              </div>{/* accordion grid wrapper */}
                             </div>
                           )
                         })}

@@ -188,6 +188,27 @@ export const promptsApi = {
     request(`/prompts/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 }
 
+// ─── Projects ────────────────────────────────────────────────────────────────
+
+export const projectsApi = {
+  list: (firmId) => request(`/projects?firm_id=${firmId}`),
+  listAll: (params = {}) => {
+    const qs = new URLSearchParams(
+      Object.fromEntries(Object.entries(params).filter(([, v]) => v))
+    ).toString()
+    return request(`/projects${qs ? `?${qs}` : ''}`)
+  },
+  get: (id) => request(`/projects/${id}`),
+  create: (body) =>
+    request('/projects', { method: 'POST', body: JSON.stringify(body) }),
+  update: (id, body) =>
+    request(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  archive: (id) =>
+    request(`/projects/${id}/archive`, { method: 'PATCH' }),
+  delete: (id) =>
+    request(`/projects/${id}`, { method: 'DELETE' }),
+}
+
 // ─── Team ─────────────────────────────────────────────────────────────────────
 
 export const teamApi = {
@@ -252,8 +273,7 @@ export function getStatusBadges(ticket, spentHours = null) {
     if (spent > 0)
       return [{ label: 'In Progress', style: 'bg-blue-100 text-blue-700' }]
     return [
-      { label: 'Approved', style: 'bg-emerald-100 text-emerald-700' },
-      { label: 'New',      style: 'bg-surface-container-high text-on-surface-variant' },
+      { label: 'New', style: 'bg-[#C84B0E] text-white' },
     ]
   }
   return [{ label: _STATUS_LABELS[ticket.status] ?? ticket.status, style: getStatusBadge(ticket.status) }]

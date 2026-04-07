@@ -273,7 +273,7 @@ const AdminDashboard = () => {
                 })}
               </div>
               <button
-                onClick={() => navigate('/admin/tickets')}
+                onClick={() => navigate('/admin/tickets/overdue')}
                 className="w-full py-3 rounded-lg border border-outline text-on-surface font-semibold text-sm hover:bg-surface-container transition-colors"
               >
                 View Overdue Tickets

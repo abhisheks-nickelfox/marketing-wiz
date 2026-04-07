@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Sidebar from '../../components/Sidebar'
 import NotificationBell from '../../components/NotificationBell'
-import { dashboardApi, formatDate, timeAgo, getStatusBadges } from '../../lib/api'
+import { dashboardApi, formatHours, timeAgo, getStatusBadges } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
 
 const MemberDashboard = () => {
@@ -105,7 +105,7 @@ const MemberDashboard = () => {
                 Total Hours Logged
               </p>
               <div className="flex items-baseline gap-2">
-                <span className="text-4xl font-extrabold tracking-tighter text-on-surface">{totalHours}h</span>
+                <span className="text-4xl font-extrabold tracking-tighter text-on-surface">{formatHours(totalHours)}</span>
                 <span className="text-xs font-medium text-on-surface-variant/40">All Time</span>
               </div>
             </div>
@@ -148,10 +148,13 @@ const MemberDashboard = () => {
                         </span>
                       </div>
                       <div className="col-span-5">
-                        <p className="font-bold text-on-surface text-sm group-hover:text-primary-container transition-colors">
+                        <button
+                          className="font-bold text-on-surface text-sm group-hover:text-primary-container transition-colors text-left"
+                          onClick={() => navigate(`/member/tickets/${ticket.id}`)}
+                        >
                           {ticket.title}
-                        </p>
-                        <p className="text-xs text-on-surface-variant/60">{ticket.firms?.name}</p>
+                        </button>
+                        <p className="text-xs text-on-surface-variant/60">{ticket.firms?.name}{ticket.project?.name ? ` · ${ticket.project.name}` : ''}</p>
                       </div>
                       <div className="col-span-3">
                         <p className="text-sm font-bold text-on-surface-variant">{getStatusBadges(ticket)[0].label}</p>

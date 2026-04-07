@@ -7,6 +7,7 @@ import ticketRoutes from './tickets';
 import teamRoutes from './team';
 import promptRoutes from './prompts';
 import notificationRoutes from './notifications';
+import projectsRouter from './projects.route';
 
 const router = Router();
 
@@ -23,5 +24,6 @@ router.use('/tickets', ticketRoutes);
 router.use('/team', teamRoutes);
 router.use('/prompts', promptRoutes);
 router.use('/notifications', notificationRoutes);
+router.use('/projects', projectsRouter);
 
 export default router;

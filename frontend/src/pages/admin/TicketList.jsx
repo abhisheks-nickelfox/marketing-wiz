@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react'
-import { Link, useLocation, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import Sidebar from '../../components/Sidebar'
 import Pagination from '../../components/Pagination'
 import usePagination from '../../hooks/usePagination'
-import { ticketsApi, firmsApi, teamApi, formatDate, formatHours, getStatusBadges } from '../../lib/api'
+import { ticketsApi, firmsApi, teamApi, projectsApi, formatDate, formatHours, getStatusBadges } from '../../lib/api'
 
 
 const AdminTicketList = () => {
   const location = useLocation()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const [filters, setFilters] = useState(() => {
@@ -16,6 +17,7 @@ const AdminTicketList = () => {
       firm_id: params.get('firm_id') ?? 'all',
       assignee_id: params.get('assignee_id') ?? 'anyone',
       status: params.get('status') ?? 'any',
+      project_id: params.get('project_id') ?? 'any',
       type: 'any',
       priority: 'any',
     }
@@ -23,6 +25,7 @@ const AdminTicketList = () => {
   const [tickets, setTickets] = useState([])
   const [firms, setFirms] = useState([])
   const [teamMembers, setTeamMembers] = useState([])
+  const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -61,12 +64,14 @@ const AdminTicketList = () => {
       firm_id: params.get('firm_id') ?? 'all',
       assignee_id: params.get('assignee_id') ?? 'anyone',
       status: params.get('status') ?? 'any',
+      project_id: params.get('project_id') ?? 'any',
       type: 'any',
       priority: 'any',
     }
     fetchTickets(initialFilters)
     firmsApi.list().then((res) => setFirms(res.data ?? [])).catch(() => {})
     teamApi.list().then((res) => setTeamMembers(res.data ?? [])).catch(() => {})
+    projectsApi.listAll().then((res) => setProjects(res.data ?? [])).catch(() => {})
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const getPriorityBadge = (priority) => {
@@ -195,6 +200,23 @@ const AdminTicketList = () => {
                   ))}
                 </select>
               </div>
+
+              {/* Project filter */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+                  Project
+                </label>
+                <select
+                  className="bg-surface-container-low border-none rounded-lg text-sm px-4 py-2.5 focus:ring-2 focus:ring-primary-container/20"
+                  value={filters.project_id}
+                  onChange={(e) => setFilters({ ...filters, project_id: e.target.value })}
+                >
+                  <option value="any">Any Project</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div className="flex items-end justify-end border-t border-outline-variant/10 pt-4">
               <button
@@ -219,6 +241,7 @@ const AdminTicketList = () => {
                   <tr className="bg-surface-container-high">
                     <th className="px-4 lg:px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Title</th>
                     <th className="px-4 lg:px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Firm</th>
+                    <th className="px-4 lg:px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant hidden md:table-cell">Project</th>
                     <th className="px-4 lg:px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Assigned To</th>
                     <th className="px-4 lg:px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant hidden lg:table-cell">Type</th>
                     <th className="px-4 lg:px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Priority</th>
@@ -232,14 +255,14 @@ const AdminTicketList = () => {
                 <tbody className="divide-y divide-outline-variant/5">
                   {loading && (
                     <tr>
-                      <td colSpan={10} className="px-6 py-8 text-center text-on-surface-variant text-sm animate-pulse">
+                      <td colSpan={11} className="px-6 py-8 text-center text-on-surface-variant text-sm animate-pulse">
                         Loading tickets…
                       </td>
                     </tr>
                   )}
                   {!loading && tickets.length === 0 && (
                     <tr>
-                      <td colSpan={10} className="px-6 py-8 text-center text-on-surface-variant text-sm">
+                      <td colSpan={11} className="px-6 py-8 text-center text-on-surface-variant text-sm">
                         No tickets found
                       </td>
                     </tr>
@@ -247,12 +270,26 @@ const AdminTicketList = () => {
                   {paginatedItems.map((ticket) => {
                     const assignee = ticket.assignee
                     return (
-                      <tr key={ticket.id} className="hover:bg-surface-container-low transition-colors group">
+                      <tr key={ticket.id} className="hover:bg-surface-container-low transition-colors group cursor-pointer" onClick={() => navigate(`/admin/tickets/${ticket.id}`)}>
                         <td className="px-4 lg:px-6 py-4 lg:py-5">
-                          <span className="text-sm font-semibold text-on-surface line-clamp-1">{ticket.title}</span>
+                          <Link to={`/admin/tickets/${ticket.id}`} className="text-sm font-semibold text-on-surface hover:text-primary-container transition-colors line-clamp-1" onClick={(e) => e.stopPropagation()}>
+                            {ticket.title}
+                          </Link>
                         </td>
                         <td className="px-4 lg:px-6 py-4 lg:py-5 text-sm text-on-surface-variant">
                           {ticket.firms?.name ?? '—'}
+                        </td>
+                        <td className="px-4 lg:px-6 py-4 lg:py-5 hidden md:table-cell">
+                          {ticket.project_id && (ticket.project?.name ?? ticket.project_name) ? (
+                            <Link
+                              to={`/admin/projects/${ticket.project_id}`}
+                              className="text-xs font-medium text-primary-container hover:underline"
+                            >
+                              {ticket.project?.name ?? ticket.project_name}
+                            </Link>
+                          ) : (
+                            <span className="text-xs text-on-surface-variant/50">—</span>
+                          )}
                         </td>
                         <td className="px-4 lg:px-6 py-4 lg:py-5">
                           {assignee ? (

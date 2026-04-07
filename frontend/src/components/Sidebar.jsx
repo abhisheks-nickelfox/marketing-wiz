@@ -16,6 +16,7 @@ const Sidebar = () => {
   const adminLinks = [
     { path: '/admin/dashboard', icon: 'dashboard', label: 'Dashboard' },
     { path: '/admin/transcripts', icon: 'description', label: 'Transcripts' },
+    { path: '/admin/projects', icon: 'folder', label: 'Projects' },
     { path: '/admin/firms', icon: 'business', label: 'Firms' },
     { path: '/admin/tickets', icon: 'confirmation_number', label: 'Tickets' },
     { path: '/admin/team', icon: 'group', label: 'Team' },
@@ -26,6 +27,9 @@ const Sidebar = () => {
     { path: '/member/tickets', icon: 'confirmation_number', label: 'Tickets' },
     ...(perms.includes('process_transcripts')
       ? [{ path: '/admin/transcripts', icon: 'description', label: 'Transcripts' }]
+      : []),
+    ...(perms.includes('manage_projects')
+      ? [{ path: '/admin/projects', icon: 'folder', label: 'Projects' }]
       : []),
     ...(perms.includes('manage_firms')
       ? [{ path: '/admin/firms', icon: 'business', label: 'Firms' }]
