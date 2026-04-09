@@ -8,10 +8,24 @@ import { AuthenticatedRequest } from '../types';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
+const MIN_TRANSCRIPT_WORDS = 50;
+
 export const createTranscriptValidation = [
   body('title').trim().notEmpty().withMessage('title is required'),
   body('call_date').trim().notEmpty().withMessage('call_date is required'),
-  body('raw_transcript').trim().notEmpty().withMessage('raw_transcript is required'),
+  body('raw_transcript')
+    .trim()
+    .notEmpty().withMessage('raw_transcript is required')
+    .custom((v: string) => {
+      const wordCount = v.trim().split(/\s+/).filter(Boolean).length;
+      if (wordCount < MIN_TRANSCRIPT_WORDS) {
+        throw new Error(
+          `Transcript is too short (${wordCount} word${wordCount === 1 ? '' : 's'}). ` +
+          `Minimum ${MIN_TRANSCRIPT_WORDS} words required to generate meaningful tickets.`
+        );
+      }
+      return true;
+    }),
   body('duration_sec')
     .optional({ nullable: true })
     .customSanitizer((v) => (v === '' || v === null || v === undefined ? 0 : Number(v)))
@@ -216,6 +230,18 @@ export async function processTranscript(req: AuthenticatedRequest, res: Response
 
     if (tErr || !transcript) {
       res.status(404).json({ error: 'Transcript not found' });
+      return;
+    }
+
+    // Word count guard — applies to both manual and Fireflies-synced transcripts
+    const rawText = (transcript.raw_transcript as string) ?? '';
+    const wordCount = rawText.trim().split(/\s+/).filter(Boolean).length;
+    if (wordCount < MIN_TRANSCRIPT_WORDS) {
+      res.status(400).json({
+        error:
+          `Transcript is too short (${wordCount} word${wordCount === 1 ? '' : 's'}). ` +
+          `Minimum ${MIN_TRANSCRIPT_WORDS} words required to generate meaningful tickets.`,
+      });
       return;
     }
 

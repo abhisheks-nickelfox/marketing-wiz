@@ -110,10 +110,23 @@ const TranscriptsList = () => {
     }
   }
 
+  const MIN_TRANSCRIPT_WORDS = 50
+  const addBodyWordCount = addBody.trim() ? addBody.trim().split(/\s+/).filter(Boolean).length : 0
+
   const handleAddTranscript = async (e) => {
     e.preventDefault()
     setAddLoading(true)
     setAddError(null)
+
+    if (addBodyWordCount < MIN_TRANSCRIPT_WORDS) {
+      setAddError(
+        `Transcript is too short (${addBodyWordCount} word${addBodyWordCount === 1 ? '' : 's'}). ` +
+        `Please enter at least ${MIN_TRANSCRIPT_WORDS} words to generate meaningful tickets.`
+      )
+      setAddLoading(false)
+      return
+    }
+
     try {
       const participantList = addParticipants
         .split(',')
@@ -666,8 +679,33 @@ const TranscriptsList = () => {
                     value={addBody}
                     onChange={(e) => setAddBody(e.target.value)}
                     placeholder="Paste the full transcript text here…"
-                    className="w-full bg-white border border-outline-variant/25 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary-container/20 outline-none resize-none text-on-surface"
+                    className={`w-full bg-white border rounded-xl py-3 px-4 text-sm focus:ring-2 outline-none resize-none text-on-surface ${
+                      addBody && addBodyWordCount < MIN_TRANSCRIPT_WORDS
+                        ? 'border-error/40 focus:ring-error/20'
+                        : 'border-outline-variant/25 focus:ring-primary-container/20'
+                    }`}
                   />
+                  <div className="flex items-center justify-between mt-1.5 px-1">
+                    <span className={`text-[11px] font-medium ${
+                      addBodyWordCount === 0
+                        ? 'text-on-surface-variant/40'
+                        : addBodyWordCount < MIN_TRANSCRIPT_WORDS
+                        ? 'text-error'
+                        : 'text-green-600'
+                    }`}>
+                      {addBodyWordCount === 0
+                        ? `Minimum ${MIN_TRANSCRIPT_WORDS} words required`
+                        : addBodyWordCount < MIN_TRANSCRIPT_WORDS
+                        ? `${addBodyWordCount} / ${MIN_TRANSCRIPT_WORDS} words — too short`
+                        : `${addBodyWordCount} words`}
+                    </span>
+                    {addBodyWordCount > 0 && addBodyWordCount >= MIN_TRANSCRIPT_WORDS && (
+                      <span className="text-[11px] text-green-600 flex items-center gap-1">
+                        <span className="material-symbols-outlined text-[13px]">check_circle</span>
+                        Good to go
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Client Firm */}
