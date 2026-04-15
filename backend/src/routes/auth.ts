@@ -11,8 +11,10 @@ import {
 import {
   validateOnboardingToken,
   completeOnboarding,
+  uploadOnboardingAvatar,
   validateTokenValidation,
   completeOnboardingValidation,
+  uploadAvatarValidation,
 } from '../controllers/onboarding.controller';
 
 const router = Router();
@@ -36,5 +38,8 @@ router.get('/onboarding/validate', validateTokenValidation, validateOnboardingTo
 
 // POST /api/auth/onboarding/complete
 router.post('/onboarding/complete', completeOnboardingValidation, completeOnboarding);
+
+// POST /api/auth/onboarding/avatar
+router.post('/onboarding/avatar', uploadAvatarValidation, uploadOnboardingAvatar);
 
 export default router;

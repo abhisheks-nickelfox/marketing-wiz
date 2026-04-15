@@ -25,6 +25,7 @@ export default function Input({
       {label && (
         <label htmlFor={inputId} className="text-sm font-medium text-[#414651]">
           {label}
+          {props.required && <span className="text-error-500 ml-0.5">*</span>}
         </label>
       )}
 

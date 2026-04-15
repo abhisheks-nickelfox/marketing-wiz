@@ -135,6 +135,39 @@ export const memberRolesApi = {
     request<{ message: string }>('DELETE', `/member-roles/${id}`),
 };
 
+// ── Onboarding API ────────────────────────────────────────────────────────────
+
+export const onboardingApi = {
+  /** Validates an invite token and returns the invited user's email + name. */
+  validate: (token: string) =>
+    request<{ data: { email: string; name: string } }>(
+      'GET',
+      `/auth/onboarding/validate?token=${encodeURIComponent(token)}`,
+    ).then((r) => r.data),
+
+  /** Uploads a base64-encoded cropped avatar and stores the public URL. */
+  uploadAvatar: (token: string, image: string) =>
+    request<{ data: { avatar_url: string } }>('POST', '/auth/onboarding/avatar', {
+      token,
+      image,
+    }).then((r) => r.data),
+
+  /** Completes onboarding: sets password, updates profile fields, activates account. */
+  complete: (payload: {
+    token: string;
+    first_name: string;
+    last_name: string;
+    phone_number?: string;
+    avatar_url?: string;
+    password: string;
+  }) =>
+    request<{ data: { token: string | null; user?: { id: string; email: string; name: string } } }>(
+      'POST',
+      '/auth/onboarding/complete',
+      payload,
+    ).then((r) => r.data),
+};
+
 // ── Skills API ────────────────────────────────────────────────────────────────
 
 export const skillsApi = {

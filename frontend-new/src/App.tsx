@@ -9,6 +9,7 @@ import Login from './pages/auth/Login';
 import ForgotPassword from './pages/auth/ForgotPassword';
 import ResetLinkSent from './pages/auth/ResetLinkSent';
 import EmailPreview from './pages/auth/EmailPreview';
+import OnboardingPage from './pages/onboarding/OnboardingPage';
 
 // ── Redirects to /login when no token is present ─────────────────────────────
 
@@ -71,6 +72,9 @@ export default function App() {
             <Route path="/reset-link-sent" element={<ResetLinkSent />} />
             <Route path="/email-preview"   element={<EmailPreview />} />
           </Route>
+
+          {/* Public onboarding — accessible without auth (invite link) */}
+          <Route path="/onboarding" element={<OnboardingPage />} />
 
           {/* Protected app shell */}
           <Route element={<ProtectedRoute />}>

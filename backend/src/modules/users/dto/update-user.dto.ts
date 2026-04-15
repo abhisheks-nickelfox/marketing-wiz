@@ -1,5 +1,9 @@
 export interface UpdateUserDto {
   name?: string;
+  first_name?: string;
+  last_name?: string;
+  phone_number?: string;
+  avatar_url?: string;
   password?: string;
   role?: 'admin' | 'member';
   /** Free-text job title — only relevant when role = 'member' */

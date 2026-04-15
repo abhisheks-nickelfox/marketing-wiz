@@ -8,6 +8,10 @@ import type { Skill } from '../skills/skills.service';
 export interface User {
   id: string;
   name: string;
+  first_name: string | null;
+  last_name: string | null;
+  phone_number: string | null;
+  avatar_url: string | null;
   email: string;
   role: 'admin' | 'member' | 'super_admin';
   member_role: string | null;
@@ -20,7 +24,7 @@ export interface User {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-const USER_SELECT = 'id, name, email, role, member_role, status, permissions, created_at, updated_at';
+const USER_SELECT = 'id, name, first_name, last_name, phone_number, avatar_url, email, role, member_role, status, permissions, created_at, updated_at';
 
 /** Attaches skills[] to an array of raw user rows */
 async function attachSkills(users: Record<string, unknown>[]): Promise<User[]> {
@@ -148,7 +152,7 @@ export async function createUser(dto: CreateUserDto): Promise<User> {
 }
 
 export async function updateUser(id: string, dto: UpdateUserDto): Promise<User | null> {
-  const { name, password, role, member_role, permissions, skill_ids, status } = dto;
+  const { name, first_name, last_name, phone_number, avatar_url, password, role, member_role, permissions, skill_ids, status } = dto;
 
   // 1. Update password in Auth if provided
   if (password) {
@@ -158,11 +162,15 @@ export async function updateUser(id: string, dto: UpdateUserDto): Promise<User |
 
   // 2. Build profile update payload
   const patch: Record<string, unknown> = {};
-  if (name !== undefined)        patch.name        = name.trim();
-  if (role !== undefined)        patch.role        = role;
-  if (member_role !== undefined) patch.member_role = member_role.trim() || null;
-  if (permissions !== undefined) patch.permissions = permissions;
-  if (status !== undefined)      patch.status      = status;
+  if (name !== undefined)         patch.name         = name.trim();
+  if (first_name !== undefined)   patch.first_name   = first_name.trim() || null;
+  if (last_name !== undefined)    patch.last_name    = last_name.trim() || null;
+  if (phone_number !== undefined) patch.phone_number = phone_number.trim() || null;
+  if (avatar_url !== undefined)   patch.avatar_url   = avatar_url || null;
+  if (role !== undefined)         patch.role         = role;
+  if (member_role !== undefined)  patch.member_role  = member_role.trim() || null;
+  if (permissions !== undefined)  patch.permissions  = permissions;
+  if (status !== undefined)       patch.status       = status;
 
   let updatedProfile: Record<string, unknown> | null = null;
 

@@ -56,6 +56,8 @@ export async function createUser(req: AuthenticatedRequest, res: Response): Prom
       const token = generateInviteToken(user.id, user.email);
       const inviteLink = `${frontendUrl}/onboarding?token=${encodeURIComponent(token)}`;
 
+      console.log(`[invite] Onboarding link for ${user.email}:\n  ${inviteLink}`);
+
       sendInviteEmail(user.email, user.name, inviteLink).catch((err) => {
         console.error('[users.controller] invite email failed:', err);
       });
