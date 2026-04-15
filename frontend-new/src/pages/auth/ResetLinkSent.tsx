@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Mail01 } from '@untitled-ui/icons-react';
-import AuthLayout from '../../components/AuthLayout';
+import AuthLayout from '../../components/layout/AuthLayout';
 
 export default function ResetLinkSent() {
   return (

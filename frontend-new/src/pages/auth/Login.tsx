@@ -1,27 +1,30 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, AlertCircle } from '@untitled-ui/icons-react';
-import AuthLayout from '../../components/AuthLayout';
+import AuthLayout from '../../components/layout/AuthLayout';
+import { useAuth } from '../../context/AuthContext';
 
 export default function Login() {
-  const [email, setEmail]       = useState('');
+  const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
-  const [showPw, setShowPw]     = useState(false);
-  const [remember, setRemember] = useState(false);
-  const [error, setError]       = useState('');
-  const [loading, setLoading]   = useState(false);
-  const navigate = useNavigate();
+  const [showPw,   setShowPw]   = useState(false);
+  const [error,    setError]    = useState('');
+  const [loading,  setLoading]  = useState(false);
+
+  const { login } = useAuth();
+  const navigate  = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 800));
-    setLoading(false);
-    if (email === 'demo@aiwealth.com' && password === 'password') {
-      navigate('/dashboard');
-    } else {
-      setError('The password you entered is wrong');
+    try {
+      await login(email, password);
+      navigate('/dashboard', { replace: true });
+    } catch (err) {
+      setError((err as Error).message ?? 'Invalid email or password');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -71,13 +74,10 @@ export default function Login() {
                 error ? 'text-error-500' : 'text-gray-400 hover:text-gray-600'
               }`}
             >
-              {showPw
-                ? <EyeOff width={18} height={18} />
-                : <Eye width={18} height={18} />}
+              {showPw ? <EyeOff width={18} height={18} /> : <Eye width={18} height={18} />}
             </button>
           </div>
 
-          {/* Inline error */}
           {error && (
             <p className="flex items-center gap-1.5 text-xs text-error-600 mt-1.5">
               <AlertCircle width={13} height={13} />
@@ -86,17 +86,8 @@ export default function Login() {
           )}
         </div>
 
-        {/* Remember + Forgot */}
-        <div className="flex items-center justify-between">
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={remember}
-              onChange={(e) => setRemember(e.target.checked)}
-              className="w-4 h-4 rounded border-gray-300 accent-brand-700 cursor-pointer"
-            />
-            <span className="text-sm text-gray-600">Remember for 30 days</span>
-          </label>
+        {/* Forgot */}
+        <div className="flex justify-end -mt-2">
           <Link
             to="/forgot-password"
             className="text-sm font-semibold text-brand-700 hover:text-brand-800 transition-colors"

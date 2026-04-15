@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { DayPicker } from 'react-day-picker';
 import { format } from 'date-fns';
 import { Calendar } from '@untitled-ui/icons-react';
 import type { DateRange } from 'react-day-picker';
 import 'react-day-picker/style.css';
+import { useClickOutside } from '../hooks/useClickOutside';
 
 export default function DateRangePicker() {
   const [open, setOpen] = useState(false);
@@ -14,16 +15,7 @@ export default function DateRangePicker() {
 
   const ref = useRef<HTMLDivElement>(null);
 
-  // Close on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
+  useClickOutside(ref, () => setOpen(false));
 
   const label =
     range?.from && range?.to

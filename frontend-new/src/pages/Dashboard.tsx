@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import Header from '../components/Header';
-import MetricCard from '../components/MetricCard';
-import QuickLinks from '../components/QuickLinks';
-import TasksTable from '../components/TasksTable';
+import MetricCard from '../components/dashboard/MetricCard';
+import QuickLinks from '../components/dashboard/QuickLinks';
+import TasksTable from '../components/dashboard/TasksTable';
 import DateRangePicker from '../components/DateRangePicker';
 
 type TimeFilter = 'all' | 'custom' | '30d' | '7d' | '24h';

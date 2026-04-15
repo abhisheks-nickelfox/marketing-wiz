@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { ChevronRight, ChevronDown, Plus } from '@untitled-ui/icons-react';
+import AvatarStack from '../ui/AvatarStack';
+import type { Task } from '../../types';
 
 // Untitled UI-style circle checkbox
 const TaskDot = () => (
@@ -8,37 +10,17 @@ const TaskDot = () => (
   </svg>
 );
 
-// Avatar stack — 3 placeholder circles + +5 overflow + add button
-function AvatarStack() {
-  const colors = ['#D6BBFB', '#93C5FD', '#6EE7B7'];
-  return (
-    <div className="flex items-center">
-      <div className="flex">
-        {colors.map((bg, i) => (
-          <div
-            key={i}
-            className="w-6 h-6 rounded-full border-2 border-white shrink-0"
-            style={{ backgroundColor: bg, marginLeft: i === 0 ? 0 : '-6px', zIndex: colors.length - i, position: 'relative' }}
-          />
-        ))}
-        <div
-          className="w-6 h-6 rounded-full border-2 border-white bg-gray-100 flex items-center justify-center shrink-0"
-          style={{ marginLeft: '-6px', zIndex: 0, position: 'relative' }}
-        >
-          <span className="text-[10px] font-semibold text-gray-500">+5</span>
-        </div>
-      </div>
-      <button
-        className="w-6 h-6 rounded-full border border-dashed border-gray-300 bg-white flex items-center justify-center ml-2 shrink-0 text-gray-400 hover:border-gray-400 transition-colors"
-        aria-label="Add assignee"
-      >
-        <Plus width={10} height={10} />
-      </button>
-    </div>
-  );
-}
-
-interface Task { id: string; title: string; isParent?: boolean; children?: Task[] }
+// Placeholder avatars for static demo data
+const DEMO_AVATARS = [
+  { name: 'Alice', bg: '#D6BBFB' },
+  { name: 'Bob',   bg: '#93C5FD' },
+  { name: 'Carol', bg: '#6EE7B7' },
+  { name: 'Dave',  bg: '#FCA5A5' },
+  { name: 'Eve',   bg: '#FCD34D' },
+  { name: 'Frank', bg: '#A3E635' },
+  { name: 'Grace', bg: '#67E8F9' },
+  { name: 'Hank',  bg: '#C4B5FD' },
+];
 
 const TASKS: Task[] = [
   {
@@ -78,7 +60,9 @@ function TaskRow({ task, depth = 0, expanded, onToggle }: TaskRowProps) {
         </div>
       </td>
 
-      <td className="py-2.5 pr-4"><AvatarStack /></td>
+      <td className="py-2.5 pr-4">
+        <AvatarStack avatars={DEMO_AVATARS} max={3} showAddButton />
+      </td>
 
       <td className="py-2.5 pr-4">
         <span className="text-[11px] font-medium text-gray-700">Tomorrow</span>

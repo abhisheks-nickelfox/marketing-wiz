@@ -1,4 +1,10 @@
-import { ChevronRight, ChevronDown } from '@untitled-ui/icons-react';
+import { ChevronRight } from '@untitled-ui/icons-react';
+import AccountCard from './AccountCard';
+
+const CURRENT_USER = {
+  name: 'Sienna Hewitt',
+  email: 'sienna@aiwealth.com',
+};
 
 export default function Header() {
   return (
@@ -28,17 +34,12 @@ export default function Header() {
       </div>
 
       {/* Right: account card */}
-      <div className="shrink-0 flex items-center gap-2.5 border border-gray-200 rounded-xl px-3 py-2.5 bg-white cursor-pointer relative min-w-[220px]">
-        <div className="relative shrink-0">
-          <div className="w-10 h-10 rounded-full border border-gray-200 bg-warning-200" />
-          <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-success-500 rounded-full border-2 border-white" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-[13px] font-semibold text-gray-900 leading-tight">Sienna Hewitt</p>
-          <p className="text-xs text-gray-500 leading-tight">sienna@aiwealth.com</p>
-        </div>
-        <ChevronDown width={16} height={16} className="text-gray-400 absolute top-2 right-2" />
-      </div>
+      <AccountCard
+        user={CURRENT_USER}
+        showChevron
+        showOnlineDot
+        className="shrink-0 py-2.5"
+      />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Key01 } from '@untitled-ui/icons-react';
-import AuthLayout from '../../components/AuthLayout';
+import AuthLayout from '../../components/layout/AuthLayout';
 
 export default function ForgotPassword() {
   const [email, setEmail]     = useState('');

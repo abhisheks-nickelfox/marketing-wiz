@@ -8,6 +8,9 @@ import teamRoutes from './team';
 import promptRoutes from './prompts';
 import notificationRoutes from './notifications';
 import projectsRouter from './projects.route';
+import usersRouter from '../modules/users/users.routes';
+import skillsRouter from '../modules/skills/skills.routes';
+import memberRolesRouter from '../modules/member-roles/member-roles.routes';
 
 const router = Router();
 
@@ -25,5 +28,10 @@ router.use('/team', teamRoutes);
 router.use('/prompts', promptRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/projects', projectsRouter);
+
+// ── Module-based routes (frontend-new) ───────────────────────────────────────
+router.use('/users', usersRouter);
+router.use('/skills', skillsRouter);
+router.use('/member-roles', memberRolesRouter);
 
 export default router;

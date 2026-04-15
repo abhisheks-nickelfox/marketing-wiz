@@ -8,6 +8,12 @@ import {
   loginValidation,
   updateProfileValidation,
 } from '../controllers/auth.controller';
+import {
+  validateOnboardingToken,
+  completeOnboarding,
+  validateTokenValidation,
+  completeOnboardingValidation,
+} from '../controllers/onboarding.controller';
 
 const router = Router();
 
@@ -22,5 +28,13 @@ router.get('/me', authenticate, me);
 
 // PATCH /api/auth/profile
 router.patch('/profile', authenticate, updateProfileValidation, updateProfile);
+
+// ── Onboarding (public — no auth required) ───────────────────────────────────
+
+// GET /api/auth/onboarding/validate?token=…
+router.get('/onboarding/validate', validateTokenValidation, validateOnboardingToken);
+
+// POST /api/auth/onboarding/complete
+router.post('/onboarding/complete', completeOnboardingValidation, completeOnboarding);
 
 export default router;
