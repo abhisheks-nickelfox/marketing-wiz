@@ -10,7 +10,7 @@ import Button from '../components/ui/Button';
 import Toast from '../components/ui/Toast';
 import ImageCropModal from '../components/ui/ImageCropModal';
 import { useAuth } from '../context/AuthContext';
-import { usersApi, skillsApi, profileApi } from '../lib/api';
+import { skillsApi, profileApi } from '../lib/api';
 import type { User, Skill } from '../lib/api';
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
@@ -50,7 +50,7 @@ function FormRow({ label, sub, children }: { label: string; sub?: string; childr
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
-  const { user: authUser } = useAuth();
+  const { user: authUser, refreshUser } = useAuth();
 
   const [tab,         setTab]         = useState<Tab>('details');
   const [profile,     setProfile]     = useState<User | null>(null);
@@ -80,19 +80,17 @@ export default function SettingsPage() {
   useEffect(() => {
     if (!authUser) return;
 
-    Promise.all([
-      usersApi.get(authUser.id),
-      skillsApi.list(),
-    ])
-      .then(([user, skills]) => {
-        setProfile(user);
-        setAllSkills(skills);
-        setFirstName(user.first_name ?? user.name.split(' ')[0] ?? '');
-        setLastName(user.last_name ?? user.name.split(' ').slice(1).join(' ') ?? '');
-        setMemberRole(user.member_role ?? '');
-        setAvatarUrl(user.avatar_url ?? null);
-        setSelectedIds(user.skills.map((s) => s.id));
-      })
+    // Populate form from auth context (full profile returned by GET /auth/me)
+    setProfile(authUser as User);
+    setFirstName(authUser.first_name ?? authUser.name.split(' ')[0] ?? '');
+    setLastName(authUser.last_name ?? authUser.name.split(' ').slice(1).join(' ') ?? '');
+    setMemberRole(authUser.member_role ?? '');
+    setAvatarUrl(authUser.avatar_url ?? null);
+    setSelectedIds((authUser.skills ?? []).map((s: Skill) => s.id));
+
+    // Load skill catalog for the picker
+    skillsApi.list()
+      .then(setAllSkills)
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [authUser]);
@@ -111,11 +109,12 @@ export default function SettingsPage() {
 
   async function handleCropComplete(dataUrl: string) {
     setCropSrc(null);
-    if (!authUser || !profile) return;
+    if (!authUser) return;
     setUploadingAvatar(true);
     try {
-      await profileApi.update(authUser.id, { avatar_url: dataUrl });
+      await profileApi.uploadAvatar(authUser.id, dataUrl);
       setAvatarUrl(dataUrl);
+      refreshUser().catch(() => {});
     } catch (err) {
       console.error('[SettingsPage] avatar save failed:', err);
     } finally {
@@ -140,6 +139,7 @@ export default function SettingsPage() {
       setProfile(updated);
       setToastMsg('Profile updated successfully');
       setShowToast(true);
+      refreshUser().catch(() => {});
     } catch (err) {
       setToastMsg((err as Error).message);
       setShowToast(true);
@@ -287,8 +287,20 @@ export default function SettingsPage() {
             </div>
           </FormRow>
 
-          {/* Role */}
-          <FormRow label="Role" sub="Your role or job title.">
+          {/* System role (read-only) */}
+          <FormRow label="System role" sub="Your access level in the platform.">
+            <div className="flex items-center gap-2 px-3 py-2.5 border border-[#D5D7DA] rounded-lg bg-gray-50">
+              <span className="text-sm text-[#717680] capitalize">
+                {(profile?.role ?? authUser?.role ?? '').replace('_', ' ')}
+              </span>
+              <span className="ml-auto text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#F4EBFF] text-[#6941C6] capitalize">
+                {(profile?.role ?? authUser?.role ?? '').replace('_', ' ')}
+              </span>
+            </div>
+          </FormRow>
+
+          {/* Job title */}
+          <FormRow label="Job title" sub="Your role or job title within the team.">
             <Input
               value={memberRole}
               onChange={(e) => setMemberRole(e.target.value)}

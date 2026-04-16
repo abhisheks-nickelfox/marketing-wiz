@@ -94,6 +94,10 @@ export async function updateUser(req: AuthenticatedRequest, res: Response): Prom
 
   const hasFields =
     dto.name !== undefined ||
+    dto.first_name !== undefined ||
+    dto.last_name !== undefined ||
+    dto.phone_number !== undefined ||
+    dto.avatar_url !== undefined ||
     dto.password !== undefined ||
     dto.role !== undefined ||
     dto.member_role !== undefined ||

@@ -1,12 +1,12 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { authApi } from '../lib/api';
-import type { AuthUser } from '../lib/api';
+import type { User } from '../lib/api';
 
 const TOKEN_KEY = 'mw_token';
 
 interface AuthState {
-  user: AuthUser | null;
+  user: User | null;
   /** true while the initial token→me check is running */
   initialising: boolean;
 }
@@ -14,6 +14,8 @@ interface AuthState {
 interface AuthContextValue extends AuthState {
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  /** Refresh the current user profile (call after updating profile fields) */
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -21,7 +23,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({ user: null, initialising: true });
 
-  // On mount: if a token exists, verify it and load the user profile
+  // On mount: if a token exists, verify it and load the full user profile
   useEffect(() => {
     const token = localStorage.getItem(TOKEN_KEY);
     if (!token) {
@@ -39,8 +41,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    const { user, token } = await authApi.login(email, password);
+    const { token } = await authApi.login(email, password);
     localStorage.setItem(TOKEN_KEY, token);
+    // Fetch full profile (including first_name, last_name, avatar_url, skills)
+    const user = await authApi.me();
     setState({ user, initialising: false });
   }, []);
 
@@ -49,8 +53,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState({ user: null, initialising: false });
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    try {
+      const user = await authApi.me();
+      setState((prev) => ({ ...prev, user }));
+    } catch {
+      // ignore
+    }
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ ...state, login, logout }}>
+    <AuthContext.Provider value={{ ...state, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

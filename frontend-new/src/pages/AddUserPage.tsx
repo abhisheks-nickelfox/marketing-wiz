@@ -1,70 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UserPlus01, Plus, X } from '@untitled-ui/icons-react';
+import { UserPlus01, Plus } from '@untitled-ui/icons-react';
 import MultiSelect from '../components/ui/MultiSelect';
+import InlineAddPanel from '../components/ui/InlineAddPanel';
 import { usersApi, skillsApi, memberRolesApi } from '../lib/api';
 import type { Skill, MemberRole } from '../lib/api';
-
-// ── System role options ───────────────────────────────────────────────────────
-
-const ROLE_OPTIONS: { value: string; label: string }[] = [
-  { value: 'admin',  label: 'Admin' },
-  { value: 'member', label: 'Member' },
-];
+import { ROLE_OPTIONS } from '../lib/constants';
 
 type SystemRole = 'admin' | 'member';
-
-// ── Reusable inline-add panel ─────────────────────────────────────────────────
-
-interface InlineAddProps {
-  title: string;
-  fields: { key: string; placeholder: string; required?: boolean }[];
-  error: string;
-  saving: boolean;
-  onSave: (values: Record<string, string>) => Promise<void>;
-  onCancel: () => void;
-}
-
-function InlineAddPanel({ title, fields, error, saving, onSave, onCancel }: InlineAddProps) {
-  const [values, setValues] = useState<Record<string, string>>(
-    Object.fromEntries(fields.map((f) => [f.key, '']))
-  );
-
-  return (
-    <div className="mt-2 bg-white border border-[#E9EAEB] rounded-lg p-4 flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-[#414651]">{title}</span>
-        <button type="button" onClick={onCancel} className="text-[#717680] hover:text-[#414651]">
-          <X width={16} height={16} />
-        </button>
-      </div>
-
-      <div className="flex gap-3">
-        {fields.map((f) => (
-          <input
-            key={f.key}
-            type="text"
-            value={values[f.key]}
-            onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
-            placeholder={f.placeholder}
-            className="flex-1 bg-white border border-[#D5D7DA] rounded-lg px-3 py-2 text-sm text-[#181D27] placeholder-[#717680] focus:outline-none focus:ring-2 focus:ring-[#9E77ED] focus:border-transparent"
-          />
-        ))}
-      </div>
-
-      {error && <p className="text-xs text-red-600">{error}</p>}
-
-      <button
-        type="button"
-        onClick={() => onSave(values)}
-        disabled={saving}
-        className="self-start inline-flex items-center gap-2 bg-[#7F56D9] hover:bg-[#6941C6] disabled:opacity-50 text-white text-sm font-semibold px-3 py-2 rounded-lg transition-colors"
-      >
-        {saving ? 'Adding…' : 'Add'}
-      </button>
-    </div>
-  );
-}
 
 // ── AddUserPage ───────────────────────────────────────────────────────────────
 
@@ -112,11 +55,17 @@ export default function AddUserPage() {
       .finally(() => setSkillsLoading(false));
   }, []);
 
-  const memberRoleOptions = memberRoles.map((r) => ({ value: r.id, label: r.name }));
-  const skillOptions      = skills.map((s) => ({
-    value: s.id,
-    label: s.category ? `${s.name} (${s.category})` : s.name,
-  }));
+  const memberRoleOptions = useMemo(
+    () => memberRoles.map((r) => ({ value: r.id, label: r.name })),
+    [memberRoles]
+  );
+  const skillOptions = useMemo(
+    () => skills.map((s) => ({
+      value: s.id,
+      label: s.category ? `${s.name} (${s.category})` : s.name,
+    })),
+    [skills]
+  );
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
 
@@ -187,7 +136,7 @@ export default function AddUserPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
-  const inputCls = 'w-full bg-white border border-[#D5D7DA] rounded-lg px-3 py-2.5 text-base text-[#181D27] placeholder-[#717680] shadow-sm focus:outline-none focus:ring-2 focus:ring-[#9E77ED] focus:border-transparent';
+  const addPageInputCls = 'w-full bg-white border border-[#D5D7DA] rounded-lg px-3 py-2.5 text-base text-[#181D27] placeholder-[#717680] shadow-sm focus:outline-none focus:ring-2 focus:ring-[#9E77ED] focus:border-transparent';
 
   return (
     <main className="flex-1 min-w-0 overflow-y-auto bg-gray-50 p-8">
@@ -207,21 +156,21 @@ export default function AddUserPage() {
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-[#414651]">Name</label>
             <input type="text" value={name} onChange={(e) => setName(e.target.value)}
-              placeholder="Team member" className={inputCls} />
+              placeholder="Team member" className={addPageInputCls} />
           </div>
 
           {/* Email */}
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-[#414651]">Email address</label>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-              placeholder="user@example.com" className={inputCls} />
+              placeholder="user@example.com" className={addPageInputCls} />
           </div>
 
           {/* Password */}
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-[#414651]">Password</label>
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-              placeholder="Min. 8 characters" className={inputCls} />
+              placeholder="Min. 8 characters" className={addPageInputCls} />
           </div>
 
           {/* System Role */}

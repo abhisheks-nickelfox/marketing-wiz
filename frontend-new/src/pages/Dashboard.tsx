@@ -4,6 +4,8 @@ import MetricCard from '../components/dashboard/MetricCard';
 import QuickLinks from '../components/dashboard/QuickLinks';
 import TasksTable from '../components/dashboard/TasksTable';
 import DateRangePicker from '../components/DateRangePicker';
+import WelcomeGuide from '../components/ui/WelcomeGuide';
+import { useAuth } from '../context/AuthContext';
 
 type TimeFilter = 'all' | 'custom' | '30d' | '7d' | '24h';
 type SubTab     = 'tasks' | 'timesheets' | 'transcripts';
@@ -25,9 +27,29 @@ const SUB_TABS: { id: SubTab; label: string }[] = [
 export default function Dashboard() {
   const [activeTime, setActiveTime] = useState<TimeFilter>('all');
   const [activeTab,  setActiveTab]  = useState<SubTab>('tasks');
+  const [guideDismissed, setGuideDismissed] = useState(false);
+
+  const { user } = useAuth();
+
+  // Per-user key — every new admin/member sees the guide once on first login
+  const guideKey = user ? `mw_guide_seen_${user.id}` : null;
+  const showGuide = !guideDismissed && !!guideKey && !localStorage.getItem(guideKey);
+
+  function handleDismissGuide() {
+    if (!guideKey) return;
+    localStorage.setItem(guideKey, '1');
+    setGuideDismissed(true);
+  }
 
   return (
-    <main className="flex-1 min-w-0 overflow-y-auto bg-white">
+    <>
+      {showGuide && (
+        <WelcomeGuide
+          userName={user?.name?.split(' ')[0] ?? 'there'}
+          onDismiss={handleDismissGuide}
+        />
+      )}
+      <main className="flex-1 min-w-0 overflow-y-auto bg-white">
 
       <Header />
 
@@ -90,5 +112,6 @@ export default function Dashboard() {
         )}
       </div>
     </main>
+    </>
   );
 }

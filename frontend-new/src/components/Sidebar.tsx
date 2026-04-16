@@ -59,6 +59,7 @@ export default function Sidebar() {
   const activeNav  = getActiveNav(location.pathname);
 
   const [firmItems, setFirmItems] = useState<{ id: string; label: string }[]>([]);
+  const [firmsLoading, setFirmsLoading] = useState(true);
   const [activeTask, setActiveTask] = useState('');
 
   // Derive active firm from URL
@@ -72,6 +73,9 @@ export default function Sidebar() {
       })
       .catch(() => {
         // Silently fall back to empty list — firms section will show nothing
+      })
+      .finally(() => {
+        setFirmsLoading(false);
       });
   }, []);
 
@@ -113,19 +117,31 @@ export default function Sidebar() {
             active={activeNav === 'inbox'}
             onClick={() => navigate('/inbox')}
           />
-          <NavItem
-            label="Dashboard"
-            icon={<LayoutGrid01 width={20} height={20} />}
-            active={activeNav === 'dashboard'}
-            onClick={() => navigate('/dashboard')}
-          />
-          <ExpandableNavItem
-            label="Firms"
-            icon={<Building02 width={20} height={20} />}
-            items={firmItems}
-            activeItemId={activeFirm}
-            onItemClick={(id) => navigate(`/firms/${id}`)}
-          />
+          <div data-tour="tour-dashboard">
+            <NavItem
+              label="Dashboard"
+              icon={<LayoutGrid01 width={20} height={20} />}
+              active={activeNav === 'dashboard'}
+              onClick={() => navigate('/dashboard')}
+            />
+          </div>
+          {firmsLoading ? (
+            <div className="ml-2 flex flex-col gap-1 py-1">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-7 bg-gray-100 rounded-md animate-pulse mx-1" />
+              ))}
+            </div>
+          ) : (
+            <div data-tour="tour-firms">
+              <ExpandableNavItem
+                label="Firms"
+                icon={<Building02 width={20} height={20} />}
+                items={firmItems}
+                activeItemId={activeFirm}
+                onItemClick={(id) => navigate(`/firms/${id}`)}
+              />
+            </div>
+          )}
         </NavSection>
 
         {/* YOU */}
@@ -147,22 +163,26 @@ export default function Sidebar() {
 
         {/* AI HUB */}
         <NavSection heading="AI HUB">
-          <NavItem
-            label="Transcripts Flow"
-            icon={<Zap width={20} height={20} />}
-            active={activeNav === 'transcripts'}
-            onClick={() => navigate('/transcripts')}
-          />
+          <div data-tour="tour-transcripts">
+            <NavItem
+              label="Transcripts Flow"
+              icon={<Zap width={20} height={20} />}
+              active={activeNav === 'transcripts'}
+              onClick={() => navigate('/transcripts')}
+            />
+          </div>
         </NavSection>
 
         {/* PLATFORM */}
         <NavSection heading="PLATFORM">
-          <NavItem
-            label="Users"
-            icon={<Users01 width={20} height={20} />}
-            active={activeNav === 'users'}
-            onClick={() => navigate('/users')}
-          />
+          <div data-tour="tour-users">
+            <NavItem
+              label="Users"
+              icon={<Users01 width={20} height={20} />}
+              active={activeNav === 'users'}
+              onClick={() => navigate('/users')}
+            />
+          </div>
           <NavItem
             label="Settings"
             icon={<Settings01 width={20} height={20} />}

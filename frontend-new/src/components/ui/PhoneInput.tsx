@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { ChevronDown } from '@untitled-ui/icons-react';
 
 // ── Country list (common codes) ───────────────────────────────────────────────

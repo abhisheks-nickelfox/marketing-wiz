@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Trash01,
@@ -108,12 +108,17 @@ export default function UsersPage({ showToast: initialToast = false }: UsersPage
   }
 
   // ── Page number pills ─────────────────────────────────────────────────────────
-  function buildPageNumbers(): (number | '...')[] {
-    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
-    if (currentPage <= 4) return [1, 2, 3, 4, 5, '...', totalPages];
-    if (currentPage >= totalPages - 3) return [1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
-    return [1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages];
+  function buildPageNumbers(page: number, total: number): (number | '...')[] {
+    if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+    if (page <= 4) return [1, 2, 3, 4, 5, '...', total];
+    if (page >= total - 3) return [1, '...', total - 4, total - 3, total - 2, total - 1, total];
+    return [1, '...', page - 1, page, page + 1, '...', total];
   }
+
+  const pageNumbers = useMemo(
+    () => buildPageNumbers(currentPage, totalPages),
+    [currentPage, totalPages]
+  );
 
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
@@ -336,9 +341,9 @@ export default function UsersPage({ showToast: initialToast = false }: UsersPage
             </button>
 
             <div className="flex items-center gap-0.5">
-              {buildPageNumbers().map((page, i) => (
+              {pageNumbers.map((page, i) => (
                 <button
-                  key={i}
+                  key={typeof page === 'number' ? page : `ellipsis-${i}`}
                   onClick={() => typeof page === 'number' && setCurrentPage(page)}
                   disabled={page === '...'}
                   className={`w-10 h-10 rounded-lg text-sm font-medium transition-colors

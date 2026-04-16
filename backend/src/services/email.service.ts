@@ -235,3 +235,68 @@ export async function sendProfileUpdateEmail(
     html:    baseTemplate(content),
   });
 }
+
+/** Welcome email sent when a user completes onboarding and activates their account. */
+export async function sendWelcomeEmail(
+  userEmail: string,
+  userName: string,
+): Promise<void> {
+  // Use the first word of the full name as the friendly first name
+  const firstName = userName.trim().split(/\s+/)[0] ?? userName.trim();
+
+  const content = `
+    <h2 style="font-size:22px;font-weight:700;color:#181D27;margin:0 0 8px;">
+      You're officially part of the team!
+    </h2>
+    <p style="font-size:15px;color:#535862;margin:0 0 28px;line-height:1.6;">
+      Hi <strong>${userName}</strong>, your account setup is complete. You're now ready to
+      dive into AI Wealth Management — manage transcripts, review tasks, and collaborate
+      with your team.
+    </p>
+
+    <a href="${APP_URL}/dashboard"
+      style="display:inline-block;background:#7F56D9;color:#ffffff;text-decoration:none;
+             font-weight:600;font-size:14px;padding:13px 28px;border-radius:8px;
+             letter-spacing:0.1px;">
+      Go to Dashboard
+    </a>
+
+    <!-- Feature highlights -->
+    <table width="100%" cellpadding="0" cellspacing="0"
+      style="margin-top:32px;border-collapse:collapse;border-radius:8px;overflow:hidden;
+             border:1px solid #E9EAEB;">
+      <tbody>
+        <tr style="background:#F9FAFB;">
+          <td style="padding:14px 16px;width:50%;vertical-align:top;
+                     border-right:1px solid #E9EAEB;">
+            <p style="margin:0 0 4px;font-size:14px;font-weight:600;color:#181D27;">
+              📋 Transcripts
+            </p>
+            <p style="margin:0;font-size:13px;color:#535862;line-height:1.5;">
+              Import and process meeting transcripts automatically
+            </p>
+          </td>
+          <td style="padding:14px 16px;width:50%;vertical-align:top;
+                     background:#F9FAFB;">
+            <p style="margin:0 0 4px;font-size:14px;font-weight:600;color:#181D27;">
+              ✅ Tasks
+            </p>
+            <p style="margin:0;font-size:13px;color:#535862;line-height:1.5;">
+              Review, assign and track AI-generated tasks
+            </p>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p style="font-size:12px;color:#A4A7AE;margin:24px 0 0;line-height:1.6;">
+      This is an automated message. No action is needed.
+    </p>
+  `;
+
+  await sendEmail({
+    to:      userEmail,
+    subject: `Welcome to the team, ${firstName}! 🎉`,
+    html:    baseTemplate(content),
+  });
+}

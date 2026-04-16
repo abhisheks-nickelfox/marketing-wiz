@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight, FilterLines } from '@untitled-ui/icons-react';
 import AvatarStack from '../ui/AvatarStack';
-import Badge from '../ui/Badge';
+import { PriorityBadge, TaskStatusBadge } from '../tasks/TaskBadges';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -14,8 +14,8 @@ interface Project {
   client:    string;
   assignees: { name: string; bg: string }[];
   dueDate:   string;
-  priority:  'High' | 'Medium' | 'Low';
-  status:    'Inprogress' | 'Todo' | 'Completed' | 'Blocked' | 'In Review';
+  priority:  'low' | 'normal' | 'high' | 'urgent';
+  status:    'in_progress' | 'draft' | 'resolved' | 'discarded' | 'internal_review';
   children?: Omit<Project, 'children'>[];
 }
 
@@ -32,76 +32,47 @@ const PROJECTS: Project[] = [
   {
     id: '1', name: 'Website changes For AWP', tag: 'Website design', tagColor: '#EFF8FF',
     dot: '#F79009', client: 'Ashwati Capital', assignees: AVATARS, dueDate: 'Tomorrow',
-    priority: 'High', status: 'Inprogress',
+    priority: 'high', status: 'in_progress',
     children: [
-      { id: '1-1', name: 'Home page redesign',   dot: '#F79009', client: 'Ashwati Capital', assignees: AVATARS.slice(0,2), dueDate: 'Tomorrow', priority: 'High', status: 'Inprogress' },
-      { id: '1-2', name: 'Copy & Content update', dot: '#F79009', client: 'Ashwati Capital', assignees: AVATARS.slice(0,2), dueDate: 'Tomorrow', priority: 'Medium', status: 'Todo' },
+      { id: '1-1', name: 'Home page redesign',   dot: '#F79009', client: 'Ashwati Capital', assignees: AVATARS.slice(0,2), dueDate: 'Tomorrow', priority: 'high', status: 'in_progress' },
+      { id: '1-2', name: 'Copy & Content update', dot: '#F79009', client: 'Ashwati Capital', assignees: AVATARS.slice(0,2), dueDate: 'Tomorrow', priority: 'normal', status: 'draft' },
     ],
   },
   {
     id: '2', name: 'Marketing Landing page',
     dot: '#2E90FA', client: 'Ashwati Capital', assignees: AVATARS.slice(0,3), dueDate: 'Tomorrow',
-    priority: 'High', status: 'Inprogress',
+    priority: 'high', status: 'in_progress',
     children: [
-      { id: '2-1', name: 'SEO Optimization', dot: '#2E90FA', client: 'Ashwati Capital', assignees: AVATARS.slice(0,2), dueDate: 'Tomorrow', priority: 'High', status: 'Inprogress' },
+      { id: '2-1', name: 'SEO Optimization', dot: '#2E90FA', client: 'Ashwati Capital', assignees: AVATARS.slice(0,2), dueDate: 'Tomorrow', priority: 'high', status: 'in_progress' },
     ],
   },
   {
     id: '3', name: 'Website changes For AWP', tag: 'Website design', tagColor: '#F4F3FF',
     dot: '#7F56D9', client: 'IGA Health', assignees: AVATARS, dueDate: 'Tomorrow',
-    priority: 'High', status: 'Inprogress',
+    priority: 'high', status: 'in_progress',
   },
   {
     id: '4', name: 'Marketing Landing page',
     dot: '#17B26A', client: 'IGA Health', assignees: AVATARS.slice(1,4), dueDate: 'Tomorrow',
-    priority: 'High', status: 'Inprogress',
+    priority: 'high', status: 'in_progress',
   },
   {
     id: '5', name: 'Website changes For AWP', tag: 'Website design', tagColor: '#EFF8FF',
     dot: '#F04438', client: 'Ashwati Capital', assignees: AVATARS, dueDate: 'Tomorrow',
-    priority: 'High', status: 'Inprogress',
+    priority: 'high', status: 'in_progress',
   },
   {
     id: '6', name: 'Website changes For AWP', tag: 'Website design', tagColor: '#FFF6ED',
     dot: '#FAC515', client: 'Ashwati Capital', assignees: AVATARS.slice(0,3), dueDate: 'Tomorrow',
-    priority: 'High', status: 'Inprogress',
+    priority: 'high', status: 'in_progress',
   },
   {
     id: '7', name: 'Marketing Landing page',
     dot: '#EE46BC', client: 'IGA Health', assignees: AVATARS.slice(0,2), dueDate: 'Tomorrow',
-    priority: 'High', status: 'Inprogress',
+    priority: 'high', status: 'in_progress',
   },
 ];
 
-// ── Priority badge helper ─────────────────────────────────────────────────────
-
-function PriorityBadge({ priority }: { priority: Project['priority'] }) {
-  const map: Record<Project['priority'], string> = {
-    High:   'bg-error-50 text-error-700 border border-error-200',
-    Medium: 'bg-warning-50 text-warning-700 border border-warning-200',
-    Low:    'bg-gray-50 text-gray-700 border border-gray-200',
-  };
-  return (
-    <span className={`inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-md ${map[priority]}`}>
-      {priority}
-    </span>
-  );
-}
-
-function StatusBadge({ status }: { status: Project['status'] }) {
-  const map: Record<Project['status'], string> = {
-    Inprogress: 'bg-[#F4F3FF] text-[#5925DC] border border-[#D9D6FE]',
-    Todo:       'bg-gray-50 text-gray-700 border border-gray-200',
-    Completed:  'bg-[#ECFDF3] text-[#027A48] border border-[#ABEFC6]',
-    Blocked:    'bg-error-50 text-error-700 border border-error-200',
-    'In Review':'bg-[#FFFAEB] text-[#B54708] border border-[#FEDF89]',
-  };
-  return (
-    <span className={`inline-flex items-center text-[11px] font-medium px-2.5 py-0.5 rounded-full ${map[status]}`}>
-      {status}
-    </span>
-  );
-}
 
 // ── Project dot (concentric rings) ───────────────────────────────────────────
 
@@ -186,7 +157,7 @@ function ProjectRow({ project, depth = 0, expanded, onToggle }: RowProps) {
 
       {/* Status */}
       <td className="py-2.5">
-        <StatusBadge status={project.status} />
+        <TaskStatusBadge status={project.status} />
       </td>
     </tr>
   );

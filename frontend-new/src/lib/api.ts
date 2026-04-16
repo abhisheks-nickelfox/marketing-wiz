@@ -13,24 +13,41 @@ async function request<T>(
   body?: unknown,
 ): Promise<T> {
   const token = getToken();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-  });
+  try {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      method,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    });
 
-  const json = (await res.json()) as unknown;
+    let json: unknown;
+    try {
+      json = await res.json();
+    } catch {
+      throw new Error(`Server error (${res.status}). Please try again.`);
+    }
 
-  if (!res.ok) {
-    const err = json as { error?: string };
-    throw new Error(err.error ?? `Request failed with status ${res.status}`);
+    if (!res.ok) {
+      const err = json as { error?: string };
+      throw new Error(err.error ?? `Request failed with status ${res.status}`);
+    }
+
+    return json as T;
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error('Request timed out. Please try again.');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  return json as T;
 }
 
 // ── Auth API ──────────────────────────────────────────────────────────────────
@@ -50,8 +67,9 @@ export const authApi = {
       password,
     }).then((r) => r.data),
 
+  /** Returns full profile including first_name, last_name, avatar_url, skills, etc. */
   me: () =>
-    request<{ data: AuthUser }>('GET', '/auth/me').then((r) => r.data),
+    request<{ data: User }>('GET', '/auth/me').then((r) => r.data),
 };
 
 // ── Shared types ─────────────────────────────────────────────────────────────
@@ -244,6 +262,7 @@ export interface Task {
   id: string;
   session_id: string | null;
   firm_id: string;
+  project_id: string | null;
   assignee_id: string | null;
   title: string;
   description: string | null;
