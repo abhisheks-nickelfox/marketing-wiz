@@ -1,3 +1,4 @@
+import logger from '../config/logger';
 import { Response } from 'express';
 import supabase from '../config/supabase';
 import { AuthenticatedRequest } from '../types';
@@ -71,7 +72,7 @@ export async function adminDashboard(_req: AuthenticatedRequest, res: Response):
       },
     });
   } catch (err) {
-    console.error('[dashboard.controller] adminDashboard error:', err);
+    logger.error('[dashboard.controller] adminDashboard error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -106,7 +107,7 @@ export async function teamWorkload(_req: AuthenticatedRequest, res: Response): P
 
     res.json({ data: results });
   } catch (err) {
-    console.error('[dashboard.controller] teamWorkload error:', err);
+    logger.error('[dashboard.controller] teamWorkload error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -155,7 +156,7 @@ export async function overdueTickets(_req: AuthenticatedRequest, res: Response):
       .order('deadline', { ascending: true });
 
     if (err1) {
-      console.error('[dashboard.controller] overdueTickets past_deadline query error:', err1);
+      logger.error('[dashboard.controller] overdueTickets past_deadline query error:', err1);
       res.status(500).json({ error: err1.message });
       return;
     }
@@ -171,7 +172,7 @@ export async function overdueTickets(_req: AuthenticatedRequest, res: Response):
       .order('updated_at', { ascending: true });
 
     if (err2) {
-      console.error('[dashboard.controller] overdueTickets stale_approved query error:', err2);
+      logger.error('[dashboard.controller] overdueTickets stale_approved query error:', err2);
       res.status(500).json({ error: err2.message });
       return;
     }
@@ -193,7 +194,7 @@ export async function overdueTickets(_req: AuthenticatedRequest, res: Response):
 
     res.json({ data: tagged });
   } catch (err) {
-    console.error('[dashboard.controller] overdueTickets error:', err);
+    logger.error('[dashboard.controller] overdueTickets error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -243,7 +244,7 @@ export async function memberDashboard(req: AuthenticatedRequest, res: Response):
       },
     });
   } catch (err) {
-    console.error('[dashboard.controller] memberDashboard error:', err);
+    logger.error('[dashboard.controller] memberDashboard error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

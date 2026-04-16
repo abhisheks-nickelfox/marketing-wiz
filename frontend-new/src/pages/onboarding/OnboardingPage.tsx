@@ -176,14 +176,29 @@ export default function OnboardingPage() {
   // ── Error state ─────────────────────────────────────────────────────────────
 
   if (tokenError) {
+    const alreadyUsed = tokenError.toLowerCase().includes('already been used');
+
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
         <div className="max-w-md w-full text-center">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-error-50 mb-4">
-            <AlertCircle width={28} height={28} className="text-error-500" />
+          <div className={`inline-flex items-center justify-center w-14 h-14 rounded-full mb-4 ${alreadyUsed ? 'bg-success-50' : 'bg-error-50'}`}>
+            {alreadyUsed ? (
+              <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="text-success-600">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                <polyline points="22 4 12 14.01 9 11.01" />
+              </svg>
+            ) : (
+              <AlertCircle width={28} height={28} className="text-error-500" />
+            )}
           </div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Invite link invalid</h2>
-          <p className="text-sm text-gray-500 mb-6">{tokenError}</p>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">
+            {alreadyUsed ? "You're already registered" : 'Invite link invalid'}
+          </h2>
+          <p className="text-sm text-gray-500 mb-6">
+            {alreadyUsed
+              ? 'Your account has already been set up. Log in to access your dashboard.'
+              : tokenError}
+          </p>
           <button
             onClick={() => navigate('/login', { replace: true })}
             className="text-sm font-semibold text-brand-600 hover:text-brand-700"

@@ -1,4 +1,4 @@
-import { Ticket, TicketDraft, TicketType, TicketPriority } from '../types';
+import { Task, TaskDraft, TaskType, TaskPriority } from '../types';
 
 // Lazy-initialise Groq client (OpenAI-compatible) so the import doesn't throw when no key is set
 let openaiClient: import('openai').OpenAI | null = null;
@@ -18,29 +18,29 @@ function getOpenAI(): import('openai').OpenAI | null {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const VALID_TYPES: TicketType[] = ['task', 'design', 'development', 'account_management'];
-const VALID_PRIORITIES: TicketPriority[] = ['low', 'normal', 'high', 'urgent'];
+const VALID_TYPES: TaskType[] = ['task', 'design', 'development', 'account_management'];
+const VALID_PRIORITIES: TaskPriority[] = ['low', 'normal', 'high', 'urgent'];
 
-function sanitizeTicketDraft(raw: Record<string, unknown>): TicketDraft {
+function sanitizeTaskDraft(raw: Record<string, unknown>): TaskDraft {
   return {
-    title: String(raw.title ?? 'Untitled ticket'),
+    title: String(raw.title ?? 'Untitled task'),
     description: String(raw.description ?? ''),
-    type: VALID_TYPES.includes(raw.type as TicketType)
-      ? (raw.type as TicketType)
+    type: VALID_TYPES.includes(raw.type as TaskType)
+      ? (raw.type as TaskType)
       : 'task',
-    priority: VALID_PRIORITIES.includes(raw.priority as TicketPriority)
-      ? (raw.priority as TicketPriority)
+    priority: VALID_PRIORITIES.includes(raw.priority as TaskPriority)
+      ? (raw.priority as TaskPriority)
       : 'normal',
   };
 }
 
-function parseDraftsFromText(text: string): TicketDraft[] | null {
+function parseDraftsFromText(text: string): TaskDraft[] | null {
   const match = text.match(/\[[\s\S]*\]/);
   if (!match) return null;
   try {
     const parsed = JSON.parse(match[0]) as unknown[];
     if (!Array.isArray(parsed) || parsed.length === 0) return null;
-    return parsed.map((t) => sanitizeTicketDraft(t as Record<string, unknown>));
+    return parsed.map((t) => sanitizeTaskDraft(t as Record<string, unknown>));
   } catch {
     return null;
   }
@@ -80,13 +80,13 @@ export async function generateTickets(
   transcript: string,
   systemPrompt: string,
   notes: string
-): Promise<TicketDraft[]> {
+): Promise<TaskDraft[]> {
   const client = getOpenAI();
 
   if (!client) {
     throw new Error(
       'AI service is not configured: GROQ_API_KEY is missing. ' +
-      'Add it to backend/.env to enable ticket generation.'
+      'Add it to backend/.env to enable task generation.'
     );
   }
 
@@ -117,7 +117,7 @@ export async function generateTickets(
   const drafts = parseDraftsFromText(text);
   if (!drafts) {
     throw new Error(
-      'AI returned an unexpected response — could not parse tickets. Please try again.'
+      'AI returned an unexpected response — could not parse tasks. Please try again.'
     );
   }
 
@@ -130,15 +130,15 @@ export async function generateTickets(
  */
 export async function regenerateTicket(
   transcript: string,
-  originalTicket: Ticket,
+  originalTicket: Task,
   additionalInstruction: string
-): Promise<TicketDraft> {
+): Promise<TaskDraft> {
   const client = getOpenAI();
 
   if (!client) {
     throw new Error(
       'AI service is not configured: GROQ_API_KEY is missing. ' +
-      'Add it to backend/.env to enable ticket regeneration.'
+      'Add it to backend/.env to enable task regeneration.'
     );
   }
 
@@ -168,16 +168,16 @@ export async function regenerateTicket(
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
     throw new Error(
-      'AI returned an unexpected response — could not parse ticket. Please try again.'
+      'AI returned an unexpected response — could not parse task. Please try again.'
     );
   }
 
   try {
     const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
-    return sanitizeTicketDraft(parsed);
+    return sanitizeTaskDraft(parsed);
   } catch {
     throw new Error(
-      'AI returned malformed JSON — could not parse ticket. Please try again.'
+      'AI returned malformed JSON — could not parse task. Please try again.'
     );
   }
 }

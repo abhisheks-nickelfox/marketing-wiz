@@ -1,3 +1,4 @@
+import logger from '../../config/logger';
 import { Response } from 'express';
 import { validationResult } from 'express-validator';
 import { AuthenticatedRequest } from '../../types';
@@ -8,7 +9,7 @@ export async function listMemberRoles(_req: AuthenticatedRequest, res: Response)
     const roles = await memberRolesService.findAllMemberRoles();
     res.json({ data: roles });
   } catch (err) {
-    console.error('[member-roles.controller] listMemberRoles error:', err);
+    logger.error('[member-roles.controller] listMemberRoles error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -29,7 +30,7 @@ export async function createMemberRole(req: AuthenticatedRequest, res: Response)
       res.status(409).json({ error: e.message });
       return;
     }
-    console.error('[member-roles.controller] createMemberRole error:', err);
+    logger.error('[member-roles.controller] createMemberRole error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -39,7 +40,7 @@ export async function deleteMemberRole(req: AuthenticatedRequest, res: Response)
     await memberRolesService.deleteMemberRole(req.params.id);
     res.json({ message: 'Member role deleted successfully' });
   } catch (err) {
-    console.error('[member-roles.controller] deleteMemberRole error:', err);
+    logger.error('[member-roles.controller] deleteMemberRole error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

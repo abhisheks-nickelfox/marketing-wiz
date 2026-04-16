@@ -1,7 +1,8 @@
+import logger from '../config/logger';
 import { Request, Response } from 'express';
 import { body, query, validationResult } from 'express-validator';
 import { verifyInviteToken } from '../services/invite.service';
-import { findUserById, updateUser } from '../modules/users/users.service';
+import { findUserById, fetchInviteNonce, storeInviteNonce, updateUser } from '../modules/users/users.service';
 import supabase from '../config/supabase';
 
 // ── Validation ────────────────────────────────────────────────────────────────
@@ -45,6 +46,13 @@ export async function validateOnboardingToken(
   try {
     const payload = verifyInviteToken(token);
 
+    // Nonce check — reject if a newer invite has been sent since this token was issued
+    const currentNonce = await fetchInviteNonce(payload.userId);
+    if (!currentNonce || currentNonce !== payload.nonce) {
+      res.status(400).json({ error: 'This invite link has expired. Please ask an admin to resend it.' });
+      return;
+    }
+
     const user = await findUserById(payload.userId);
     if (!user) {
       res.status(400).json({ error: 'User not found' });
@@ -85,6 +93,13 @@ export async function completeOnboarding(
   try {
     const payload = verifyInviteToken(token);
 
+    // Nonce check — reject if a newer invite has been sent since this token was issued
+    const currentNonce = await fetchInviteNonce(payload.userId);
+    if (!currentNonce || currentNonce !== payload.nonce) {
+      res.status(400).json({ error: 'This invite link has expired. Please ask an admin to resend it.' });
+      return;
+    }
+
     const user = await findUserById(payload.userId);
     if (!user) {
       res.status(400).json({ error: 'User not found' });
@@ -96,6 +111,9 @@ export async function completeOnboarding(
     }
 
     const fullName = `${first_name.trim()} ${last_name.trim()}`.trim();
+
+    // Clear the nonce so this token can never be replayed, then activate account
+    await storeInviteNonce(payload.userId, null);
 
     // Set password, update name/profile fields, and activate the account
     await updateUser(payload.userId, {
@@ -159,6 +177,13 @@ export async function uploadOnboardingAvatar(
   try {
     const payload = verifyInviteToken(token);
 
+    // Nonce check — reject stale tokens (a new invite was sent after this one)
+    const currentNonce = await fetchInviteNonce(payload.userId);
+    if (!currentNonce || currentNonce !== payload.nonce) {
+      res.status(400).json({ error: 'This invite link has expired. Please ask an admin to resend it.' });
+      return;
+    }
+
     let finalUrl: string;
 
     // ── Try Supabase Storage upload ───────────────────────────────────────────
@@ -180,7 +205,7 @@ export async function uploadOnboardingAvatar(
 
     if (uploadError) {
       // Storage bucket not set up — store base64 data URL directly (local dev)
-      console.warn('[onboarding] Storage upload failed, using data URL fallback:', uploadError.message);
+      logger.warn('[onboarding] Storage upload failed, using data URL fallback:', uploadError.message);
       finalUrl = image; // data URL stored directly
     } else {
       const { data: urlData } = supabase.storage

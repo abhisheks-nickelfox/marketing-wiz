@@ -79,6 +79,9 @@ export default function EditUserDrawer({ user, open, onClose, onSaved }: EditUse
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
   const [selectedSkillIds,setSelectedSkillIds]= useState<string[]>([]);
 
+  // Live user data — refreshed from API each time the drawer opens
+  const [liveUser, setLiveUser] = useState<User | null>(null);
+
   // Catalogs
   const [memberRoles,        setMemberRoles]        = useState<MemberRole[]>([]);
   const [memberRolesLoading, setMemberRolesLoading] = useState(true);
@@ -99,17 +102,30 @@ export default function EditUserDrawer({ user, open, onClose, onSaved }: EditUse
 
   const isMember = roles.includes('member');
 
-  // Populate form when user changes
+  // Fetch fresh user data each time the drawer opens to avoid stale status/fields
   useEffect(() => {
-    if (!user) return;
-    setName(user.name);
-    setRoles([user.role === 'super_admin' ? 'admin' : user.role]);
-    setStatus([user.status]);
-    setSelectedSkillIds(user.skills.map((s) => s.id));
-    setError('');
-    setShowRoleForm(false);
-    setShowSkillForm(false);
-  }, [user]);
+    if (!open || !user) return;
+    usersApi.get(user.id).then((fresh) => {
+      setLiveUser(fresh);
+      setName(fresh.name);
+      setRoles([fresh.role === 'super_admin' ? 'admin' : fresh.role]);
+      setStatus([fresh.status]);
+      setSelectedSkillIds(fresh.skills.map((s) => s.id));
+      setError('');
+      setShowRoleForm(false);
+      setShowSkillForm(false);
+    }).catch(() => {
+      // Fallback to prop data if fetch fails
+      setLiveUser(user);
+      setName(user.name);
+      setRoles([user.role === 'super_admin' ? 'admin' : user.role]);
+      setStatus([user.status]);
+      setSelectedSkillIds(user.skills.map((s) => s.id));
+      setError('');
+      setShowRoleForm(false);
+      setShowSkillForm(false);
+    });
+  }, [open, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load catalogs once
   useEffect(() => {
@@ -121,16 +137,16 @@ export default function EditUserDrawer({ user, open, onClose, onSaved }: EditUse
       .finally(() => setSkillsLoading(false));
   }, []);
 
-  // Set member role selection after catalogs + user are both loaded
+  // Set member role selection after catalogs + live user are both ready
   useEffect(() => {
-    if (!user || memberRolesLoading) return;
-    if (user.member_role) {
-      const match = memberRoles.find((r) => r.name === user.member_role);
+    if (!liveUser || memberRolesLoading) return;
+    if (liveUser.member_role) {
+      const match = memberRoles.find((r) => r.name === liveUser.member_role);
       setSelectedRoleIds(match ? [match.id] : []);
     } else {
       setSelectedRoleIds([]);
     }
-  }, [user, memberRoles, memberRolesLoading]);
+  }, [liveUser, memberRoles, memberRolesLoading]);
 
   // ── Catalog add handlers ────────────────────────────────────────────────────
 
@@ -161,7 +177,7 @@ export default function EditUserDrawer({ user, open, onClose, onSaved }: EditUse
   // ── Save ────────────────────────────────────────────────────────────────────
 
   async function handleSave() {
-    if (!user) return;
+    if (!liveUser) return;
     if (!name.trim() || roles.length === 0 || status.length === 0) {
       setError('Name, role and status are required.');
       return;
@@ -173,7 +189,7 @@ export default function EditUserDrawer({ user, open, onClose, onSaved }: EditUse
 
     setSaving(true); setError('');
     try {
-      const updated = await usersApi.update(user.id, {
+      const updated = await usersApi.update(liveUser.id, {
         name:        name.trim(),
         role:        roles[0] as 'admin' | 'member',
         member_role: memberRoleName ?? (isMember ? undefined : ''),
@@ -204,17 +220,17 @@ export default function EditUserDrawer({ user, open, onClose, onSaved }: EditUse
       open={open}
       onClose={onClose}
       title="Edit team member"
-      subtitle={user ? `Updating ${user.name}'s profile` : undefined}
+      subtitle={liveUser ? `Updating ${liveUser.name}'s profile` : undefined}
     >
-      {user && (
+      {liveUser && (
         <div className="flex flex-col gap-5">
 
           {/* Avatar preview */}
           <div className="flex items-center gap-3 pb-4 border-b border-[#F2F4F7]">
-            <Avatar name={user.name} size="lg" />
+            <Avatar name={liveUser.name} size="lg" />
             <div>
-              <p className="text-sm font-semibold text-[#181D27]">{user.name}</p>
-              <p className="text-sm text-[#717680]">{user.email}</p>
+              <p className="text-sm font-semibold text-[#181D27]">{liveUser.name}</p>
+              <p className="text-sm text-[#717680]">{liveUser.email}</p>
             </div>
           </div>
 

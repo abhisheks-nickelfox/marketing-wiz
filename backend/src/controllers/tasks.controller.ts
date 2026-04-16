@@ -7,7 +7,7 @@ import { AuthenticatedRequest, Task } from '../types';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
-export const createTicketValidation = [
+export const createTaskValidation = [
   body('firm_id')
     .customSanitizer((v) => (v && typeof v === 'string' && v.trim() ? v.trim() : undefined))
     .notEmpty().withMessage('firm_id is required')
@@ -24,8 +24,8 @@ export const createTicketValidation = [
   body('description').optional().isString(),
 ];
 
-export const updateTicketValidation = [
-  param('id').isUUID('loose').withMessage('Invalid ticket ID'),
+export const updateTaskValidation = [
+  param('id').isUUID('loose').withMessage('Invalid task ID'),
   body('title').optional().notEmpty().withMessage('Title cannot be blank'),
   body('description').optional().isString(),
   body('type')
@@ -41,7 +41,7 @@ export const updateTicketValidation = [
 ];
 
 export const assignApproveValidation = [
-  param('id').isUUID('loose').withMessage('Invalid ticket ID'),
+  param('id').isUUID('loose').withMessage('Invalid task ID'),
   body('assignee_id').isUUID('loose').withMessage('assignee_id must be a valid UUID'),
   body('priority')
     .optional()
@@ -58,25 +58,25 @@ export const assignApproveValidation = [
 ];
 
 export const regenerateValidation = [
-  param('id').isUUID('loose').withMessage('Invalid ticket ID'),
+  param('id').isUUID('loose').withMessage('Invalid task ID'),
   body('additional_instruction').optional().isString(),
 ];
 
 export const resolveValidation = [
-  param('id').isUUID('loose').withMessage('Invalid ticket ID'),
+  param('id').isUUID('loose').withMessage('Invalid task ID'),
   body('final_comment').optional().isString(),
   body('estimated_hours').optional().isFloat({ min: 0, max: 999.99 }).withMessage('Hours must be >= 0'),
 ];
 
-export const deleteTicketValidation = [
+export const deleteTaskValidation = [
   param('id')
     .custom((v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v))
-    .withMessage('Invalid ticket ID'),
+    .withMessage('Invalid task ID'),
 ];
 
-// ─── POST /api/tickets ────────────────────────────────────────────────────────
+// ─── POST /api/tasks ──────────────────────────────────────────────────────────
 
-export async function createTicket(req: AuthenticatedRequest, res: Response): Promise<void> {
+export async function createTask(req: AuthenticatedRequest, res: Response): Promise<void> {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     res.status(400).json({ error: errors.array().map(e => e.msg).join(', '), details: errors.array() });
@@ -113,21 +113,21 @@ export async function createTicket(req: AuthenticatedRequest, res: Response): Pr
       .single();
 
     if (error) {
-      logger.error('[tickets.controller] createTicket error:', error);
+      logger.error('[tasks.controller] createTask error:', error);
       res.status(500).json({ error: error.message });
       return;
     }
 
     res.status(201).json({ data: ticket });
   } catch (err) {
-    logger.error('[tickets.controller] createTicket error:', err);
+    logger.error('[tasks.controller] createTask error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
 
-// ─── GET /api/tickets ─────────────────────────────────────────────────────────
+// ─── GET /api/tasks ───────────────────────────────────────────────────────────
 
-export async function listTickets(req: AuthenticatedRequest, res: Response): Promise<void> {
+export async function listTasks(req: AuthenticatedRequest, res: Response): Promise<void> {
   if (!req.user) {
     res.status(401).json({ error: 'Not authenticated' });
     return;
@@ -238,7 +238,7 @@ export async function listTickets(req: AuthenticatedRequest, res: Response): Pro
         .select('id, name')
         .in('id', projectIds);
       if (projectsError) {
-        logger.error('[tickets.controller] listTickets: failed to fetch project names:', projectsError.message);
+        logger.error('[tasks.controller] listTasks: failed to fetch project names:', projectsError.message);
       }
       (projects ?? []).forEach((p: { id: string; name: string }) => {
         projectMap[p.id] = p.name;
@@ -272,14 +272,14 @@ export async function listTickets(req: AuthenticatedRequest, res: Response): Pro
 
     res.json({ data: enriched });
   } catch (err) {
-    logger.error('[tickets.controller] listTickets error:', err);
+    logger.error('[tasks.controller] listTasks error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
 
-// ─── GET /api/tickets/:id ─────────────────────────────────────────────────────
+// ─── GET /api/tasks/:id ───────────────────────────────────────────────────────
 
-export async function getTicket(req: AuthenticatedRequest, res: Response): Promise<void> {
+export async function getTask(req: AuthenticatedRequest, res: Response): Promise<void> {
   if (!req.user) {
     res.status(401).json({ error: 'Not authenticated' });
     return;
@@ -298,11 +298,11 @@ export async function getTicket(req: AuthenticatedRequest, res: Response): Promi
       .single();
 
     if (error || !ticket) {
-      res.status(404).json({ error: 'Ticket not found' });
+      res.status(404).json({ error: 'Task not found' });
       return;
     }
 
-    // Members can only see their own tickets unless they have view_all_tickets permission
+    // Members can only see their own tasks unless they have view_all_tickets permission
     const canViewAll =
       req.user.role === 'admin' ||
       req.user.role === 'super_admin' ||
@@ -315,14 +315,14 @@ export async function getTicket(req: AuthenticatedRequest, res: Response): Promi
 
     res.json({ data: ticket });
   } catch (err) {
-    logger.error('[tickets.controller] getTicket error:', err);
+    logger.error('[tasks.controller] getTask error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
 
-// ─── PATCH /api/tickets/:id ───────────────────────────────────────────────────
+// ─── PATCH /api/tasks/:id ─────────────────────────────────────────────────────
 
-export async function updateTicket(req: AuthenticatedRequest, res: Response): Promise<void> {
+export async function updateTask(req: AuthenticatedRequest, res: Response): Promise<void> {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     res.status(400).json({ error: 'Validation failed', details: errors.array() });
@@ -344,16 +344,16 @@ export async function updateTicket(req: AuthenticatedRequest, res: Response): Pr
       .single();
 
     if (fetchErr || !existing) {
-      res.status(404).json({ error: 'Ticket not found' });
+      res.status(404).json({ error: 'Task not found' });
       return;
     }
 
-    // Members can only update their own tickets and only estimated_hours
+    // Members can only update their own tasks and only estimated_hours
     const updates: Record<string, unknown> = {};
 
     if (req.user.role === 'admin' || req.user.role === 'super_admin') {
       if (existing.status === 'resolved' || existing.status === 'discarded' || existing.status === 'closed') {
-        res.status(400).json({ error: 'Cannot edit a resolved, discarded, or closed ticket' });
+        res.status(400).json({ error: 'Cannot edit a resolved, discarded, or closed task' });
         return;
       }
       const adminFields = ['title', 'description', 'type', 'priority', 'change_note'];
@@ -368,7 +368,7 @@ export async function updateTicket(req: AuthenticatedRequest, res: Response): Pr
         return;
       }
       if (existing.status === 'resolved' || existing.status === 'discarded') {
-        res.status(400).json({ error: 'Cannot edit a closed ticket' });
+        res.status(400).json({ error: 'Cannot edit a closed task' });
         return;
       }
       if ('estimated_hours' in req.body) {
@@ -397,12 +397,12 @@ export async function updateTicket(req: AuthenticatedRequest, res: Response): Pr
 
     res.json({ data });
   } catch (err) {
-    logger.error('[tickets.controller] updateTicket error:', err);
+    logger.error('[tasks.controller] updateTask error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
 
-// ─── PATCH /api/tickets/:id/assign-approve ────────────────────────────────────
+// ─── PATCH /api/tasks/:id/assign-approve ─────────────────────────────────────
 
 export async function assignAndApprove(req: AuthenticatedRequest, res: Response): Promise<void> {
   const errors = validationResult(req);
@@ -450,28 +450,28 @@ export async function assignAndApprove(req: AuthenticatedRequest, res: Response)
     }
 
     if (!data) {
-      res.status(404).json({ error: 'Ticket not found or not in draft status' });
+      res.status(404).json({ error: 'Task not found or not in draft status' });
       return;
     }
 
     // Create a notification for the assignee
     await supabase.from('notifications').insert({
       user_id: assignee_id,
-      title: 'New ticket assigned',
+      title: 'New task assigned',
       message: data.title,
       ticket_id: data.id,
     });
 
     res.json({ data });
   } catch (err) {
-    logger.error('[tickets.controller] assignAndApprove error:', err);
+    logger.error('[tasks.controller] assignAndApprove error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
 
-// ─── PATCH /api/tickets/:id/discard ──────────────────────────────────────────
+// ─── PATCH /api/tasks/:id/discard ────────────────────────────────────────────
 
-export async function discardTicket(req: AuthenticatedRequest, res: Response): Promise<void> {
+export async function discardTask(req: AuthenticatedRequest, res: Response): Promise<void> {
   const { id } = req.params;
 
   try {
@@ -492,20 +492,20 @@ export async function discardTicket(req: AuthenticatedRequest, res: Response): P
     }
 
     if (!data) {
-      res.status(404).json({ error: 'Ticket not found or not in draft status' });
+      res.status(404).json({ error: 'Task not found or not in draft status' });
       return;
     }
 
     res.json({ data });
   } catch (err) {
-    logger.error('[tickets.controller] discardTicket error:', err);
+    logger.error('[tasks.controller] discardTask error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
 
-// ─── POST /api/tickets/:id/regenerate ────────────────────────────────────────
+// ─── POST /api/tasks/:id/regenerate ──────────────────────────────────────────
 
-export async function regenerateTicketHandler(
+export async function regenerateTaskContent(
   req: AuthenticatedRequest,
   res: Response
 ): Promise<void> {
@@ -527,12 +527,12 @@ export async function regenerateTicketHandler(
       .single();
 
     if (ticketErr || !ticket) {
-      res.status(404).json({ error: 'Ticket not found' });
+      res.status(404).json({ error: 'Task not found' });
       return;
     }
 
     if (ticket.status !== 'draft') {
-      res.status(400).json({ error: 'Only draft tickets can be regenerated' });
+      res.status(400).json({ error: 'Only draft tasks can be regenerated' });
       return;
     }
 
@@ -573,14 +573,14 @@ export async function regenerateTicketHandler(
 
     res.json({ data: updated });
   } catch (err) {
-    logger.error('[tickets.controller] regenerateTicket error:', err);
+    logger.error('[tasks.controller] regenerateTaskContent error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
 
-// ─── PATCH /api/tickets/:id/resolve ──────────────────────────────────────────
+// ─── PATCH /api/tasks/:id/resolve ────────────────────────────────────────────
 
-export async function resolveTicket(req: AuthenticatedRequest, res: Response): Promise<void> {
+export async function resolveTask(req: AuthenticatedRequest, res: Response): Promise<void> {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     res.status(400).json({ error: 'Validation failed', details: errors.array() });
@@ -608,18 +608,18 @@ export async function resolveTicket(req: AuthenticatedRequest, res: Response): P
       .single();
 
     if (fetchErr || !ticket) {
-      res.status(404).json({ error: 'Ticket not found' });
+      res.status(404).json({ error: 'Task not found' });
       return;
     }
 
     const isPrivileged = req.user.role === 'admin' || req.user.role === 'super_admin';
     if (!isPrivileged && ticket.assignee_id !== req.user.id) {
-      res.status(403).json({ error: 'Only the assignee can resolve this ticket' });
+      res.status(403).json({ error: 'Only the assignee can resolve this task' });
       return;
     }
 
     if (!['in_progress', 'revisions'].includes(ticket.status)) {
-      res.status(400).json({ error: 'Cannot resolve a ticket that is not in progress or revisions' });
+      res.status(400).json({ error: 'Cannot resolve a task that is not in progress or revisions' });
       return;
     }
 
@@ -668,14 +668,14 @@ export async function resolveTicket(req: AuthenticatedRequest, res: Response): P
 
     res.json({ data: updated });
   } catch (err) {
-    logger.error('[tickets.controller] resolveTicket error:', err);
+    logger.error('[tasks.controller] resolveTask error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
 
-// ─── DELETE /api/tickets/:id ──────────────────────────────────────────────────
+// ─── DELETE /api/tasks/:id ────────────────────────────────────────────────────
 
-export async function deleteTicket(req: AuthenticatedRequest, res: Response): Promise<void> {
+export async function deleteTask(req: AuthenticatedRequest, res: Response): Promise<void> {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     res.status(400).json({ error: errors.array().map(e => e.msg).join(', ') });
@@ -693,12 +693,12 @@ export async function deleteTicket(req: AuthenticatedRequest, res: Response): Pr
       .single();
 
     if (fetchErr || !ticket) {
-      res.status(404).json({ error: 'Ticket not found' });
+      res.status(404).json({ error: 'Task not found' });
       return;
     }
 
     if (ticket.status !== 'discarded') {
-      res.status(400).json({ error: 'Only discarded tickets can be permanently deleted' });
+      res.status(400).json({ error: 'Only discarded tasks can be permanently deleted' });
       return;
     }
 
@@ -709,26 +709,26 @@ export async function deleteTicket(req: AuthenticatedRequest, res: Response): Pr
       .eq('id', id);
 
     if (deleteErr) {
-      logger.error('[tickets.controller] deleteTicket DB error:', deleteErr);
+      logger.error('[tasks.controller] deleteTask DB error:', deleteErr);
       res.status(500).json({ error: deleteErr.message });
       return;
     }
 
-    res.status(200).json({ message: 'Ticket permanently deleted' });
+    res.status(200).json({ message: 'Task permanently deleted' });
   } catch (err) {
-    logger.error('[tickets.controller] deleteTicket error:', err);
+    logger.error('[tasks.controller] deleteTask error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
 
-// ─── PATCH /api/tickets/:id/archive ──────────────────────────────────────────
+// ─── PATCH /api/tasks/:id/archive ────────────────────────────────────────────
 
-export const archiveTicketValidation = [
-  param('id').isUUID('loose').withMessage('Invalid ticket ID'),
+export const archiveTaskValidation = [
+  param('id').isUUID('loose').withMessage('Invalid task ID'),
   body('archived').isBoolean().withMessage('archived must be a boolean'),
 ];
 
-export async function archiveTicket(req: AuthenticatedRequest, res: Response): Promise<void> {
+export async function archiveTask(req: AuthenticatedRequest, res: Response): Promise<void> {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     res.status(400).json({ error: 'Validation failed', details: errors.array() });
@@ -751,7 +751,7 @@ export async function archiveTicket(req: AuthenticatedRequest, res: Response): P
       .single();
 
     if (fetchErr || !ticket) {
-      res.status(404).json({ error: 'Ticket not found' });
+      res.status(404).json({ error: 'Task not found' });
       return;
     }
 
@@ -769,12 +769,12 @@ export async function archiveTicket(req: AuthenticatedRequest, res: Response): P
 
     res.json({ data });
   } catch (err) {
-    logger.error('[tickets.controller] archiveTicket error:', err);
+    logger.error('[tasks.controller] archiveTask error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
 
-// ─── PATCH /api/tickets/:id/transition — admin-only status machine ────────────
+// ─── PATCH /api/tasks/:id/transition — admin-only status machine ──────────────
 
 // State machine: maps each status to the set of statuses it may transition to.
 // Enforced server-side — the client cannot bypass this by sending an arbitrary status.
@@ -792,21 +792,21 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
 };
 
 // All statuses an admin may set via the transition endpoint (excludes discarded).
-// 'draft' is included so admins can unassign/unapprove a ticket back to draft.
+// 'draft' is included so admins can unassign/unapprove a task back to draft.
 const ADMIN_TRANSITION_TARGETS = [
   'draft', 'in_progress', 'resolved', 'internal_review', 'client_review',
   'compliance_review', 'approved', 'closed', 'revisions',
 ];
 
-export const transitionTicketValidation = [
-  param('id').isUUID('loose').withMessage('Invalid ticket ID'),
+export const transitionTaskValidation = [
+  param('id').isUUID('loose').withMessage('Invalid task ID'),
   body('status')
     .isIn(ADMIN_TRANSITION_TARGETS)
     .withMessage('Invalid target status'),
   body('change_note').optional().isString(),
 ];
 
-export async function transitionTicket(req: AuthenticatedRequest, res: Response): Promise<void> {
+export async function transitionTask(req: AuthenticatedRequest, res: Response): Promise<void> {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     res.status(400).json({ error: 'Validation failed', details: errors.array() });
@@ -831,7 +831,7 @@ export async function transitionTicket(req: AuthenticatedRequest, res: Response)
       .single();
 
     if (fetchErr || !ticket) {
-      res.status(404).json({ error: 'Ticket not found' });
+      res.status(404).json({ error: 'Task not found' });
       return;
     }
 
@@ -839,7 +839,7 @@ export async function transitionTicket(req: AuthenticatedRequest, res: Response)
     const allowed = VALID_TRANSITIONS[ticket.status] ?? [];
     if (!allowed.includes(targetStatus)) {
       res.status(400).json({
-        error: `Cannot transition from '${ticket.status}' to '${targetStatus}'`,
+        error: `Cannot transition task from '${ticket.status}' to '${targetStatus}'`,
       });
       return;
     }
@@ -887,7 +887,7 @@ export async function transitionTicket(req: AuthenticatedRequest, res: Response)
         revision_cycle: newCycle,
       });
       if (markerErr) {
-        logger.error('[tickets.controller] Failed to insert revision marker log:', markerErr);
+        logger.error('[tasks.controller] Failed to insert revision marker log:', markerErr);
       }
     } else {
       // For all other transitions, insert a zero-hour audit marker so the full
@@ -903,13 +903,13 @@ export async function transitionTicket(req: AuthenticatedRequest, res: Response)
         revision_cycle: ticket.revision_count ?? 0,
       });
       if (transitionErr) {
-        logger.error('[tickets.controller] Failed to insert transition log:', transitionErr);
+        logger.error('[tasks.controller] Failed to insert transition log:', transitionErr);
       }
     }
 
     res.json({ data });
   } catch (err) {
-    logger.error('[tickets.controller] transitionTicket error:', err);
+    logger.error('[tasks.controller] transitionTask error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

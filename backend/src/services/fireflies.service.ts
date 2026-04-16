@@ -1,3 +1,4 @@
+import logger from '../config/logger';
 import supabase from '../config/supabase';
 import { SyncResult } from '../types';
 
@@ -76,7 +77,7 @@ export async function syncTranscripts(): Promise<SyncResult> {
 
   const apiKey = process.env.FIREFLIES_API_KEY;
   if (!apiKey) {
-    console.warn('[fireflies.service] No FIREFLIES_API_KEY — skipping sync');
+    logger.warn('[fireflies.service] No FIREFLIES_API_KEY — skipping sync');
     result.errors.push('FIREFLIES_API_KEY not configured');
     return result;
   }

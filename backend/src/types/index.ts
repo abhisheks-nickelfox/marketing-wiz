@@ -4,9 +4,9 @@ import { Request } from 'express';
 
 export type UserRole = 'admin' | 'member' | 'super_admin';
 export type PromptType = 'pm' | 'campaigns' | 'content';
-export type TicketType = 'task' | 'design' | 'development' | 'account_management';
-export type TicketPriority = 'low' | 'normal' | 'high' | 'urgent';
-export type TicketStatus =
+export type TaskType = 'task' | 'design' | 'development' | 'account_management';
+export type TaskPriority = 'low' | 'normal' | 'high' | 'urgent';
+export type TaskStatus =
   | 'draft'
   | 'in_progress'
   | 'resolved'
@@ -25,7 +25,7 @@ export const PERMISSIONS = [
   { key: 'manage_firms',          label: 'Manage Firms',          description: 'Create and edit client firms' },
   { key: 'manage_projects',       label: 'Manage Projects',       description: 'Create, edit and archive projects' },
   { key: 'process_transcripts',   label: 'Process Transcripts',   description: 'Access and process meeting transcripts' },
-  { key: 'view_all_tickets',      label: 'View All Tickets',      description: 'See all tickets across the team' },
+  { key: 'view_all_tickets',      label: 'View All Tasks',        description: 'See all tasks across the team' },
   { key: 'manage_prompts',        label: 'Manage Prompts',        description: 'Edit AI prompt templates' },
 ] as const;
 
@@ -83,16 +83,16 @@ export interface ProcessingSession {
   created_at: string;
 }
 
-export interface Ticket {
+export interface Task {
   id: string;
   session_id: string | null;
   firm_id: string;
   assignee_id: string | null;
   title: string;
   description: string;
-  type: TicketType;
-  priority: TicketPriority;
-  status: TicketStatus;
+  type: TaskType;
+  priority: TaskPriority;
+  status: TaskStatus;
   change_note: string;
   estimated_hours: number | null;
   deadline: string | null;
@@ -119,11 +119,11 @@ export interface TimeLog {
 
 // ─── AI / Service types ───────────────────────────────────────────────────────
 
-export interface TicketDraft {
+export interface TaskDraft {
   title: string;
   description: string;
-  type: TicketType;
-  priority: TicketPriority;
+  type: TaskType;
+  priority: TaskPriority;
 }
 
 export interface SyncResult {

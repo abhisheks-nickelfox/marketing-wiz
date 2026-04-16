@@ -1,3 +1,4 @@
+import logger from '../config/logger';
 import { Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
 import supabase, { anonClient } from '../config/supabase';
@@ -111,7 +112,7 @@ export async function updateProfile(req: AuthenticatedRequest, res: Response): P
 
     res.json({ data });
   } catch (err) {
-    console.error('[auth.controller] updateProfile error:', err);
+    logger.error('[auth.controller] updateProfile error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

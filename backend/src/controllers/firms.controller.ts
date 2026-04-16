@@ -1,3 +1,4 @@
+import logger from '../config/logger';
 import { Response } from 'express';
 import { body, param, validationResult } from 'express-validator';
 import supabase from '../config/supabase';
@@ -89,7 +90,7 @@ export async function listFirms(_req: AuthenticatedRequest, res: Response): Prom
 
     res.json({ data: firmsWithStats });
   } catch (err) {
-    console.error('[firms.controller] listFirms error:', err);
+    logger.error('[firms.controller] listFirms error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -124,7 +125,7 @@ export async function createFirm(req: AuthenticatedRequest, res: Response): Prom
 
     res.status(201).json({ data });
   } catch (err) {
-    console.error('[firms.controller] createFirm error:', err);
+    logger.error('[firms.controller] createFirm error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -171,7 +172,7 @@ export async function getFirm(req: AuthenticatedRequest, res: Response): Promise
 
     res.json({ data: { ...firm, tickets: ticketList, stats } });
   } catch (err) {
-    console.error('[firms.controller] getFirm error:', err);
+    logger.error('[firms.controller] getFirm error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -220,7 +221,7 @@ export async function updateFirm(req: AuthenticatedRequest, res: Response): Prom
 
     res.json({ data });
   } catch (err) {
-    console.error('[firms.controller] updateFirm error:', err);
+    logger.error('[firms.controller] updateFirm error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -259,7 +260,7 @@ export async function deleteFirm(req: AuthenticatedRequest, res: Response): Prom
 
     res.json({ message: 'Firm deleted successfully' });
   } catch (err) {
-    console.error('[firms.controller] deleteFirm error:', err);
+    logger.error('[firms.controller] deleteFirm error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

@@ -1,3 +1,4 @@
+import logger from '../config/logger';
 import { Response } from 'express';
 import { body, param, validationResult } from 'express-validator';
 import supabase from '../config/supabase';
@@ -43,7 +44,7 @@ export async function listPrompts(_req: AuthenticatedRequest, res: Response): Pr
 
     res.json({ data });
   } catch (err) {
-    console.error('[prompts.controller] listPrompts error:', err);
+    logger.error('[prompts.controller] listPrompts error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -85,7 +86,7 @@ export async function createPrompt(req: AuthenticatedRequest, res: Response): Pr
 
     res.status(201).json({ data });
   } catch (err) {
-    console.error('[prompts.controller] createPrompt error:', err);
+    logger.error('[prompts.controller] createPrompt error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -134,7 +135,7 @@ export async function updatePrompt(req: AuthenticatedRequest, res: Response): Pr
 
     res.json({ data });
   } catch (err) {
-    console.error('[prompts.controller] updatePrompt error:', err);
+    logger.error('[prompts.controller] updatePrompt error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

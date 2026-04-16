@@ -1,3 +1,4 @@
+import logger from '../../config/logger';
 import supabase from '../../config/supabase';
 import type { CreateUserDto } from './dto/create-user.dto';
 import type { UpdateUserDto } from './dto/update-user.dto';
@@ -143,7 +144,7 @@ export async function createUser(dto: CreateUserDto): Promise<User> {
       await replaceSkills(userId, skill_ids);
     } catch (err) {
       // Non-fatal — user was created, skills failed
-      console.error('[users.service] skill assignment failed after user creation:', err);
+      logger.error('[users.service] skill assignment failed after user creation:', err);
     }
   }
 
@@ -205,6 +206,28 @@ export async function updateUser(id: string, dto: UpdateUserDto): Promise<User |
 
   const [user] = await attachSkills([updatedProfile]);
   return user ?? null;
+}
+
+// ── Invite nonce helpers ─────────────────────────────────────────────────────
+
+/** Writes a new nonce into users.invite_nonce, making any previous token stale. */
+export async function storeInviteNonce(userId: string, nonce: string | null): Promise<void> {
+  const { error } = await supabase
+    .from('users')
+    .update({ invite_nonce: nonce })
+    .eq('id', userId);
+  if (error) throw new Error(error.message);
+}
+
+/** Returns the current invite_nonce for a user, or null if none is set. */
+export async function fetchInviteNonce(userId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('users')
+    .select('invite_nonce')
+    .eq('id', userId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data as { invite_nonce: string | null } | null)?.invite_nonce ?? null;
 }
 
 export async function deleteUser(id: string, requesterId: string): Promise<void> {

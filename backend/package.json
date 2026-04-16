@@ -16,7 +16,8 @@
     "express-validator": "^7.0.1",
     "node-cron": "^4.2.1",
     "nodemailer": "^8.0.5",
-    "openai": "^4.20.1"
+    "openai": "^4.20.1",
+    "winston": "^3.19.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

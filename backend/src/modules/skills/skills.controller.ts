@@ -1,3 +1,4 @@
+import logger from '../../config/logger';
 import { Response } from 'express';
 import { validationResult } from 'express-validator';
 import { AuthenticatedRequest } from '../../types';
@@ -10,7 +11,7 @@ export async function listSkills(_req: AuthenticatedRequest, res: Response): Pro
     const skills = await skillsService.findAllSkills();
     res.json({ data: skills });
   } catch (err) {
-    console.error('[skills.controller] listSkills error:', err);
+    logger.error('[skills.controller] listSkills error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -33,7 +34,7 @@ export async function createSkill(req: AuthenticatedRequest, res: Response): Pro
       res.status(409).json({ error: e.message });
       return;
     }
-    console.error('[skills.controller] createSkill error:', err);
+    logger.error('[skills.controller] createSkill error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -47,7 +48,7 @@ export async function deleteSkill(req: AuthenticatedRequest, res: Response): Pro
     await skillsService.deleteSkill(id);
     res.json({ message: 'Skill deleted successfully' });
   } catch (err) {
-    console.error('[skills.controller] deleteSkill error:', err);
+    logger.error('[skills.controller] deleteSkill error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

@@ -6,33 +6,33 @@ import TasksTable from '../components/dashboard/TasksTable';
 import DateRangePicker from '../components/DateRangePicker';
 
 type TimeFilter = 'all' | 'custom' | '30d' | '7d' | '24h';
-type SubTab = 'tasks' | 'timesheets' | 'transcripts';
+type SubTab     = 'tasks' | 'timesheets' | 'transcripts';
 
 const TIME_FILTERS: { id: TimeFilter; label: string }[] = [
-  { id: 'all',    label: 'All time' },
-  { id: 'custom', label: 'Custom' },
-  { id: '30d',    label: '30 days' },
-  { id: '7d',     label: '7 days' },
-  { id: '24h',    label: '24 hours' },
+  { id: 'all',    label: 'All time'  },
+  { id: 'custom', label: 'Custom'    },
+  { id: '30d',    label: '30 days'   },
+  { id: '7d',     label: '7 days'    },
+  { id: '24h',    label: '24 hours'  },
 ];
 
 const SUB_TABS: { id: SubTab; label: string }[] = [
-  { id: 'tasks',       label: 'Tasks' },
-  { id: 'timesheets',  label: 'Timesheets' },
+  { id: 'tasks',       label: 'Tasks'       },
+  { id: 'timesheets',  label: 'Timesheets'  },
   { id: 'transcripts', label: 'Transcripts' },
 ];
 
 export default function Dashboard() {
   const [activeTime, setActiveTime] = useState<TimeFilter>('all');
-  const [activeTab, setActiveTab]   = useState<SubTab>('tasks');
+  const [activeTab,  setActiveTab]  = useState<SubTab>('tasks');
 
   return (
     <main className="flex-1 min-w-0 overflow-y-auto bg-white">
 
       <Header />
 
-      {/* Time tabs + date picker */}
-      <div className="flex items-center justify-between px-8 pt-3">
+      {/* Time filter + date picker */}
+      <div className="flex items-center justify-between px-8 pt-4">
         <div className="flex items-center gap-0.5 bg-gray-50 border border-gray-200 rounded-lg p-0.5">
           {TIME_FILTERS.map(({ id, label }) => (
             <button
@@ -58,7 +58,7 @@ export default function Dashboard() {
           <button
             key={id}
             onClick={() => setActiveTab(id)}
-            className={`pb-2.5 pt-2 mr-4 text-[15px] font-semibold transition-all border-b-2 ${
+            className={`pb-2.5 pt-2 mr-5 text-[14px] font-semibold transition-all border-b-2 ${
               activeTab === id
                 ? 'text-brand-700 border-brand-600'
                 : 'text-gray-500 border-transparent hover:text-gray-700'

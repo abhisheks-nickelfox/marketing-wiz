@@ -1,3 +1,4 @@
+import logger from '../config/logger';
 import { Response } from 'express';
 import { body, validationResult } from 'express-validator';
 import supabase from '../config/supabase';
@@ -80,7 +81,7 @@ export async function listTeam(req: AuthenticatedRequest, res: Response): Promis
 
     res.json({ data: membersWithStats });
   } catch (err) {
-    console.error('[team.controller] listTeam error:', err);
+    logger.error('[team.controller] listTeam error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -166,7 +167,7 @@ export async function getTeamMember(req: AuthenticatedRequest, res: Response): P
       },
     });
   } catch (err) {
-    console.error('[team.controller] getTeamMember error:', err);
+    logger.error('[team.controller] getTeamMember error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -234,7 +235,7 @@ export async function createTeamMember(req: AuthenticatedRequest, res: Response)
 
     res.status(201).json({ data: profile });
   } catch (err) {
-    console.error('[team.controller] createTeamMember error:', err);
+    logger.error('[team.controller] createTeamMember error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -288,7 +289,7 @@ export async function deleteTeamMember(req: AuthenticatedRequest, res: Response)
 
     res.json({ message: 'User deleted successfully' });
   } catch (err) {
-    console.error('[team.controller] deleteTeamMember error:', err);
+    logger.error('[team.controller] deleteTeamMember error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -367,7 +368,7 @@ export async function updateTeamMember(req: AuthenticatedRequest, res: Response)
 
     res.json({ data });
   } catch (err) {
-    console.error('[team.controller] updateTeamMember error:', err);
+    logger.error('[team.controller] updateTeamMember error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

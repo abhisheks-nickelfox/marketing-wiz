@@ -27,12 +27,16 @@ export interface InviteTokenPayload {
   userId: string;
   email: string;
   exp: number;
+  /** Random nonce stored in users.invite_nonce — re-inviting rotates this,
+   *  immediately invalidating any previously issued link. */
+  nonce: string;
 }
 
-/** Generates a signed invite token valid for 24 hours. */
-export function generateInviteToken(userId: string, email: string): string {
+/** Generates a signed invite token valid for 24 hours.
+ *  `nonce` must have been stored in users.invite_nonce before calling this. */
+export function generateInviteToken(userId: string, email: string, nonce: string): string {
   const payload = b64url(
-    JSON.stringify({ userId, email, exp: Date.now() + EXPIRY_MS }),
+    JSON.stringify({ userId, email, exp: Date.now() + EXPIRY_MS, nonce }),
   );
   return `${payload}.${sign(payload)}`;
 }

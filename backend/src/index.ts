@@ -1,3 +1,4 @@
+import logger from './config/logger';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -44,7 +45,7 @@ app.use((_req, res) => {
 // ─── Global error handler ─────────────────────────────────────────────────────
 
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('[server] Unhandled error:', err);
+  logger.error('[server] Unhandled error:', err);
   res.status(500).json({ error: 'Internal server error' });
 });
 
@@ -70,7 +71,7 @@ async function seedSuperAdmin(): Promise<void> {
       .maybeSingle();
 
     if (existing) {
-      console.log('[seed] Super admin already exists — skipping super-admin seed.');
+      logger.info('[seed] Super admin already exists — skipping super-admin seed.');
       return;
     }
 
@@ -88,11 +89,11 @@ async function seedSuperAdmin(): Promise<void> {
       const { data: { users: authUsers } } = await supabase.auth.admin.listUsers();
       const orphan = authUsers.find((u) => u.email === email);
       if (!orphan) {
-        console.error('[seed] Failed to create super admin auth user and no orphan found:', authError.message);
+        logger.error('[seed] Failed to create super admin auth user and no orphan found:', authError.message);
         return;
       }
       userId = orphan.id;
-      console.log('[seed] Found orphaned auth user for super admin — creating missing profile row.');
+      logger.info('[seed] Found orphaned auth user for super admin — creating missing profile row.');
     } else {
       userId = authData.user.id;
     }
@@ -103,13 +104,13 @@ async function seedSuperAdmin(): Promise<void> {
       .insert({ id: userId, email, name, role: 'super_admin', permissions: [] });
 
     if (profileError) {
-      console.error('[seed] Failed to insert super admin profile:', profileError.message);
+      logger.error('[seed] Failed to insert super admin profile:', profileError.message);
       return;
     }
 
-    console.log(`[seed] Super admin created — email: ${email}`);
+    logger.info(`[seed] Super admin created — email: ${email}`);
   } catch (err) {
-    console.error('[seed] seedSuperAdmin threw unexpectedly:', err);
+    logger.error('[seed] seedSuperAdmin threw unexpectedly:', err);
   }
 }
 
@@ -122,16 +123,16 @@ async function seedSuperAdmin(): Promise<void> {
 // that don't have the key configured.
 
 async function runFirefliesSync(): Promise<void> {
-  console.log('[cron] Starting Fireflies sync…');
+  logger.info('[cron] Starting Fireflies sync…');
   try {
     const result = await syncTranscripts();
-    console.log(
+    logger.info(
       `[cron] Fireflies sync complete — synced: ${result.synced}, created: ${result.created}, updated: ${result.updated}` +
       (result.errors.length > 0 ? `, errors: ${result.errors.join('; ')}` : '')
     );
   } catch (err) {
     // Catch-all so an unexpected throw never kills the cron task itself
-    console.error('[cron] Fireflies sync threw unexpectedly:', err);
+    logger.error('[cron] Fireflies sync threw unexpectedly:', err);
   }
 }
 
@@ -143,8 +144,8 @@ cron.schedule('*/15 * * * *', () => {
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`MarketingWiz API running on http://localhost:${PORT}`);
-  console.log(`Network access: http://172.16.31.158:${PORT}`);
+  logger.info(`MarketingWiz API running on http://localhost:${PORT}`);
+  logger.info(`Network access: http://172.16.31.158:${PORT}`);
   void seedSuperAdmin();
   void runFirefliesSync();
 });

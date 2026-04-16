@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   ArrowRight,
   UserPlus01,
+  Send01,
 } from '@untitled-ui/icons-react';
 import Toast from '../components/ui/Toast';
 import StatusBadge from '../components/users/StatusBadge';
@@ -32,6 +33,7 @@ export default function UsersPage({ showToast: initialToast = false }: UsersPage
   const [currentPage,  setCurrentPage] = useState(1);
   const [showToast,    setShowToast]   = useState(initialToast);
   const [deletingId,   setDeletingId]  = useState<string | null>(null);
+  const [resendingId,  setResendingId] = useState<string | null>(null);
   const [editUser,     setEditUser]    = useState<User | null>(null);
 
   // ── Fetch users ──────────────────────────────────────────────────────────────
@@ -75,6 +77,19 @@ export default function UsersPage({ showToast: initialToast = false }: UsersPage
   function handleUserSaved(updated: User) {
     setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
     setShowToast(true);
+  }
+
+  // ── Resend invite ─────────────────────────────────────────────────────────────
+  async function handleResendInvite(id: string) {
+    setResendingId(id);
+    try {
+      await usersApi.resendInvite(id);
+      setShowToast(true);
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setResendingId(null);
+    }
   }
 
   // ── Delete ────────────────────────────────────────────────────────────────────
@@ -176,7 +191,7 @@ export default function UsersPage({ showToast: initialToast = false }: UsersPage
                   <th className="px-6 py-3 text-left">
                     <span className="text-xs font-semibold text-[#717680]">Skills</span>
                   </th>
-                  <th className="px-6 py-3 w-[90px]" />
+                  <th className="px-6 py-3 w-[124px]" />
                 </tr>
               </thead>
               <tbody>
@@ -260,9 +275,35 @@ export default function UsersPage({ showToast: initialToast = false }: UsersPage
                           </div>
                         </td>
 
-                        {/* Actions */}
-                        <td className="px-4 py-4">
-                          <div className="flex items-center gap-0.5">
+                        {/* Actions — fixed 3-slot row; resend is invisible when not applicable
+                             so Edit + Delete stay pinned at the same position every row */}
+                        <td className="px-6 py-4">
+                          <div className="flex items-center justify-end gap-1">
+                            {/* Slot 1: Resend invite — visible only for invited users */}
+                            <button
+                              onClick={() => handleResendInvite(user.id)}
+                              disabled={resendingId === user.id}
+                              className={`p-1.5 rounded-lg transition-colors ${
+                                user.status === 'invited'
+                                  ? 'hover:bg-gray-100 text-[#717680] hover:text-[#6941C6] disabled:opacity-40'
+                                  : 'invisible pointer-events-none'
+                              }`}
+                              title="Resend invite"
+                              aria-hidden={user.status !== 'invited'}
+                            >
+                              <Send01 width={16} height={16} />
+                            </button>
+
+                            {/* Slot 2: Edit */}
+                            <button
+                              onClick={() => setEditUser(user)}
+                              className="p-1.5 rounded-lg hover:bg-gray-100 text-[#717680] hover:text-[#414651] transition-colors"
+                              title="Edit user"
+                            >
+                              <Edit01 width={16} height={16} />
+                            </button>
+
+                            {/* Slot 3: Delete */}
                             <button
                               onClick={() => handleDelete(user.id)}
                               disabled={deletingId === user.id}
@@ -270,13 +311,6 @@ export default function UsersPage({ showToast: initialToast = false }: UsersPage
                               title="Delete user"
                             >
                               <Trash01 width={16} height={16} />
-                            </button>
-                            <button
-                              onClick={() => setEditUser(user)}
-                              className="p-1.5 rounded-lg hover:bg-gray-100 text-[#717680] hover:text-[#414651] transition-colors"
-                              title="Edit user"
-                            >
-                              <Edit01 width={16} height={16} />
                             </button>
                           </div>
                         </td>
@@ -335,7 +369,7 @@ export default function UsersPage({ showToast: initialToast = false }: UsersPage
       {/* Success toast */}
       {showToast && (
         <Toast
-          message="Profile updated successfully"
+          message={resendingId ? 'Invite resent' : 'Profile updated successfully'}
           subtitle="The team member has been notified by email."
           onClose={() => setShowToast(false)}
         />

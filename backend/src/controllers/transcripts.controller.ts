@@ -1,3 +1,4 @@
+import logger from '../config/logger';
 import { Response } from 'express';
 import { body, param, validationResult } from 'express-validator';
 import crypto from 'crypto';
@@ -77,7 +78,7 @@ export async function listTranscripts(req: AuthenticatedRequest, res: Response):
 
     res.json({ data });
   } catch (err) {
-    console.error('[transcripts.controller] listTranscripts error:', err);
+    logger.error('[transcripts.controller] listTranscripts error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -92,7 +93,7 @@ export async function syncTranscriptsHandler(
     const result = await syncTranscripts();
     res.json({ data: result });
   } catch (err) {
-    console.error('[transcripts.controller] syncTranscripts error:', err);
+    logger.error('[transcripts.controller] syncTranscripts error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -102,7 +103,7 @@ export async function syncTranscriptsHandler(
 export async function createTranscript(req: AuthenticatedRequest, res: Response): Promise<void> {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    console.error('[transcripts.controller] createTranscript validation errors:', errors.array());
+    logger.error('[transcripts.controller] createTranscript validation errors:', errors.array());
     res.status(400).json({ error: errors.array().map((e) => e.msg).join(', '), details: errors.array() });
     return;
   }
@@ -144,14 +145,14 @@ export async function createTranscript(req: AuthenticatedRequest, res: Response)
       .single();
 
     if (error) {
-      console.error('[transcripts.controller] createTranscript DB error:', error);
+      logger.error('[transcripts.controller] createTranscript DB error:', error);
       res.status(500).json({ error: error.message });
       return;
     }
 
     res.status(201).json({ data: transcript });
   } catch (err) {
-    console.error('[transcripts.controller] createTranscript error:', err);
+    logger.error('[transcripts.controller] createTranscript error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -194,7 +195,7 @@ export async function toggleArchive(req: AuthenticatedRequest, res: Response): P
 
     res.json({ data });
   } catch (err) {
-    console.error('[transcripts.controller] toggleArchive error:', err);
+    logger.error('[transcripts.controller] toggleArchive error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -315,7 +316,7 @@ export async function processTranscript(req: AuthenticatedRequest, res: Response
       },
     });
   } catch (err) {
-    console.error('[transcripts.controller] processTranscript error:', err);
+    logger.error('[transcripts.controller] processTranscript error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

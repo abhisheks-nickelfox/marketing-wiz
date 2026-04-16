@@ -1,3 +1,4 @@
+import logger from '../config/logger';
 import { Response } from 'express';
 import { validationResult } from 'express-validator';
 import supabase from '../config/supabase';
@@ -26,7 +27,7 @@ export async function listNotifications(req: AuthenticatedRequest, res: Response
 
     res.json({ data: data ?? [] });
   } catch (err) {
-    console.error('[notifications.controller] listNotifications error:', err);
+    logger.error('[notifications.controller] listNotifications error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -53,7 +54,7 @@ export async function unreadCount(req: AuthenticatedRequest, res: Response): Pro
 
     res.json({ data: { count: count ?? 0 } });
   } catch (err) {
-    console.error('[notifications.controller] unreadCount error:', err);
+    logger.error('[notifications.controller] unreadCount error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -88,7 +89,7 @@ export async function markRead(req: AuthenticatedRequest, res: Response): Promis
 
     res.json({ message: 'Marked as read' });
   } catch (err) {
-    console.error('[notifications.controller] markRead error:', err);
+    logger.error('[notifications.controller] markRead error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -115,7 +116,7 @@ export async function markAllRead(req: AuthenticatedRequest, res: Response): Pro
 
     res.json({ message: 'All notifications marked as read' });
   } catch (err) {
-    console.error('[notifications.controller] markAllRead error:', err);
+    logger.error('[notifications.controller] markAllRead error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

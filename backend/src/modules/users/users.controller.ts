@@ -1,3 +1,5 @@
+import logger from '../../config/logger';
+import crypto from 'crypto';
 import { Response } from 'express';
 import { validationResult } from 'express-validator';
 import { AuthenticatedRequest } from '../../types';
@@ -14,7 +16,7 @@ export async function listUsers(_req: AuthenticatedRequest, res: Response): Prom
     const users = await usersService.findAllUsers();
     res.json({ data: users });
   } catch (err) {
-    console.error('[users.controller] listUsers error:', err);
+    logger.error('[users.controller] listUsers error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -32,7 +34,7 @@ export async function getUser(req: AuthenticatedRequest, res: Response): Promise
     }
     res.json({ data: user });
   } catch (err) {
-    console.error('[users.controller] getUser error:', err);
+    logger.error('[users.controller] getUser error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -53,13 +55,16 @@ export async function createUser(req: AuthenticatedRequest, res: Response): Prom
     if (user.status === 'invited') {
       const frontendUrl =
         process.env.FRONTEND_URL?.trim() ?? 'http://localhost:5173';
-      const token = generateInviteToken(user.id, user.email);
+      // Rotate nonce first — this invalidates any previously issued token
+      const nonce = crypto.randomBytes(16).toString('hex');
+      await usersService.storeInviteNonce(user.id, nonce);
+      const token = generateInviteToken(user.id, user.email, nonce);
       const inviteLink = `${frontendUrl}/onboarding?token=${encodeURIComponent(token)}`;
 
-      console.log(`[invite] Onboarding link for ${user.email}:\n  ${inviteLink}`);
+      logger.info(`[invite] Onboarding link for ${user.email}:\n  ${inviteLink}`);
 
       sendInviteEmail(user.email, user.name, inviteLink).catch((err) => {
-        console.error('[users.controller] invite email failed:', err);
+        logger.error('[users.controller] invite email failed:', err);
       });
     }
 
@@ -70,7 +75,7 @@ export async function createUser(req: AuthenticatedRequest, res: Response): Prom
       res.status(400).json({ error: e.message });
       return;
     }
-    console.error('[users.controller] createUser error:', err);
+    logger.error('[users.controller] createUser error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -102,23 +107,34 @@ export async function updateUser(req: AuthenticatedRequest, res: Response): Prom
   }
 
   try {
+    // Fetch current state before updating so we can diff for the notification email
+    const before = await usersService.findUserById(id);
+    if (!before) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
     const user = await usersService.updateUser(id, dto);
     if (!user) {
       res.status(404).json({ error: 'User not found' });
       return;
     }
 
-    // Send notification email to the member (non-blocking — never fail the request)
+    // Send notification email only for fields that actually changed
     const changes: Record<string, unknown> = {};
-    if (dto.name        !== undefined) changes.name        = dto.name;
-    if (dto.role        !== undefined) changes.role        = dto.role;
-    if (dto.member_role !== undefined) changes.member_role = dto.member_role;
-    if (dto.status      !== undefined) changes.status      = dto.status;
-    if (dto.skill_ids   !== undefined) changes.skills      = user.skills.map((s) => s.name);
+    if (dto.name        !== undefined && dto.name        !== before.name)        changes.name        = dto.name;
+    if (dto.role        !== undefined && dto.role        !== before.role)        changes.role        = dto.role;
+    if (dto.member_role !== undefined && dto.member_role !== before.member_role) changes.member_role = dto.member_role;
+    if (dto.status      !== undefined && dto.status      !== before.status)      changes.status      = dto.status;
+    if (dto.skill_ids   !== undefined) {
+      const beforeIds = (before.skills ?? []).map((s) => s.id).sort().join(',');
+      const afterIds  = (dto.skill_ids ?? []).slice().sort().join(',');
+      if (beforeIds !== afterIds) changes.skills = user.skills.map((s) => s.name);
+    }
 
     if (Object.keys(changes).length > 0) {
       sendProfileUpdateEmail(user.email, user.name, changes).catch((err) => {
-        console.error('[users.controller] email notification failed:', err);
+        logger.error('[users.controller] email notification failed:', err);
       });
     }
 
@@ -129,7 +145,42 @@ export async function updateUser(req: AuthenticatedRequest, res: Response): Prom
       res.status(400).json({ error: e.message });
       return;
     }
-    console.error('[users.controller] updateUser error:', err);
+    logger.error('[users.controller] updateUser error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+// ─── POST /api/users/:id/resend-invite ───────────────────────────────────────
+
+export async function resendInvite(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const { id } = req.params;
+
+  try {
+    const user = await usersService.findUserById(id);
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    if (user.status !== 'invited') {
+      res.status(400).json({ error: 'User is not in invited status' });
+      return;
+    }
+
+    const frontendUrl = process.env.FRONTEND_URL?.trim() ?? 'http://localhost:5173';
+    // Rotate nonce — immediately invalidates the previous invite link
+    const nonce = crypto.randomBytes(16).toString('hex');
+    await usersService.storeInviteNonce(user.id, nonce);
+    const token = generateInviteToken(user.id, user.email, nonce);
+    const inviteLink = `${frontendUrl}/onboarding?token=${encodeURIComponent(token)}`;
+
+    logger.info(`[invite] Resending onboarding link for ${user.email}:\n  ${inviteLink}`);
+
+    await sendInviteEmail(user.email, user.name, inviteLink);
+
+    res.json({ message: 'Invite resent successfully' });
+  } catch (err) {
+    logger.error('[users.controller] resendInvite error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -149,7 +200,7 @@ export async function deleteUser(req: AuthenticatedRequest, res: Response): Prom
       res.status(400).json({ error: e.message });
       return;
     }
-    console.error('[users.controller] deleteUser error:', err);
+    logger.error('[users.controller] deleteUser error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

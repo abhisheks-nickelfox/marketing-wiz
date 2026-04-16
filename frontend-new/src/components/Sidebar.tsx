@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Inbox01,
   LayoutGrid01,
@@ -15,27 +15,7 @@ import {
 import NavSection from './sidebar/NavSection';
 import NavItem from './sidebar/NavItem';
 import ExpandableNavItem from './sidebar/ExpandableNavItem';
-
-// ── Firms data (from Figma / screenshot) ─────────────────────────────────────
-const FIRMS = [
-  { id: 'ancora',            label: 'Ancora' },
-  { id: 'awp',               label: 'Accelerated Wealth Partners', bold: true },
-  { id: 'azimuth',           label: 'Azimuth Capital' },
-  { id: 'badgley',           label: 'Badgley Phelps' },
-  { id: 'brand-asset',       label: 'Brand Asset Management' },
-  { id: 'coastal',           label: 'Coastal Bridge Advisors' },
-  { id: 'fairway',           label: 'Fairway Wealth' },
-  { id: 'focus',             label: 'Focus Partners Wealth' },
-  { id: 'fpw',               label: 'FPW | Bordeaux Wealth' },
-  { id: 'icon',              label: 'ICON Wealth' },
-  { id: 'ida',               label: 'IDA Wealth' },
-  { id: 'kovitz',            label: 'Kovitz' },
-  { id: 'family-office',     label: 'Family Office Partners' },
-  { id: 'fiduciary',         label: 'The Fiduciary Group' },
-  { id: 'portfolio',         label: 'Portfolio Strategy Group' },
-  { id: 'sagepoint',         label: 'SagePoint Capital Partners' },
-  { id: 'scs',               label: 'SCS Financial' },
-];
+import { firmsApi } from '../lib/api';
 
 // ── My Tasks sub-items (from Figma / screenshot) ──────────────────────────────
 const MY_TASKS = [
@@ -55,11 +35,45 @@ const MY_TASKS = [
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 
+/** Maps the current pathname to a nav item ID for active highlighting. */
+function getActiveNav(pathname: string): string {
+  if (pathname === '/dashboard' || pathname === '/') return 'dashboard';
+  if (pathname.startsWith('/users'))                 return 'users';
+  if (pathname.startsWith('/inbox'))                 return 'inbox';
+  if (pathname.startsWith('/timesheet'))             return 'timesheet';
+  if (pathname.startsWith('/transcripts'))           return 'transcripts';
+  if (pathname.startsWith('/settings'))              return 'settings';
+  if (pathname.startsWith('/firms'))                 return 'firms';
+  return '';
+}
+
+/** Extract the firm id from a /firms/:id pathname */
+function getActiveFirmId(pathname: string): string {
+  const match = pathname.match(/^\/firms\/([^/]+)/);
+  return match ? match[1] : '';
+}
+
 export default function Sidebar() {
-  const navigate = useNavigate();
-  const [activeFirm, setActiveFirm]   = useState('awp');
-  const [activeTask, setActiveTask]   = useState('');
-  const [activeNav,  setActiveNav]    = useState('users');
+  const navigate   = useNavigate();
+  const location   = useLocation();
+  const activeNav  = getActiveNav(location.pathname);
+
+  const [firmItems, setFirmItems] = useState<{ id: string; label: string }[]>([]);
+  const [activeTask, setActiveTask] = useState('');
+
+  // Derive active firm from URL
+  const activeFirm = getActiveFirmId(location.pathname);
+
+  // Fetch firms from API on mount
+  useEffect(() => {
+    firmsApi.list()
+      .then((firms) => {
+        setFirmItems(firms.map((f) => ({ id: f.id, label: f.name })));
+      })
+      .catch(() => {
+        // Silently fall back to empty list — firms section will show nothing
+      });
+  }, []);
 
   return (
     <aside className="w-64 shrink-0 bg-white border-r border-gray-200 flex flex-col h-screen sticky top-0 overflow-y-auto">
@@ -97,20 +111,20 @@ export default function Sidebar() {
             label="Inbox"
             icon={<Inbox01 width={20} height={20} />}
             active={activeNav === 'inbox'}
-            onClick={() => setActiveNav('inbox')}
+            onClick={() => navigate('/inbox')}
           />
           <NavItem
             label="Dashboard"
             icon={<LayoutGrid01 width={20} height={20} />}
             active={activeNav === 'dashboard'}
-            onClick={() => setActiveNav('dashboard')}
+            onClick={() => navigate('/dashboard')}
           />
           <ExpandableNavItem
             label="Firms"
             icon={<Building02 width={20} height={20} />}
-            items={FIRMS}
+            items={firmItems}
             activeItemId={activeFirm}
-            onItemClick={setActiveFirm}
+            onItemClick={(id) => navigate(`/firms/${id}`)}
           />
         </NavSection>
 
@@ -127,7 +141,7 @@ export default function Sidebar() {
             label="Timesheet"
             icon={<Clock width={20} height={20} />}
             active={activeNav === 'timesheet'}
-            onClick={() => setActiveNav('timesheet')}
+            onClick={() => navigate('/timesheet')}
           />
         </NavSection>
 
@@ -137,7 +151,7 @@ export default function Sidebar() {
             label="Transcripts Flow"
             icon={<Zap width={20} height={20} />}
             active={activeNav === 'transcripts'}
-            onClick={() => setActiveNav('transcripts')}
+            onClick={() => navigate('/transcripts')}
           />
         </NavSection>
 
@@ -147,13 +161,13 @@ export default function Sidebar() {
             label="Users"
             icon={<Users01 width={20} height={20} />}
             active={activeNav === 'users'}
-            onClick={() => { setActiveNav('users'); navigate('/users'); }}
+            onClick={() => navigate('/users')}
           />
           <NavItem
             label="Settings"
             icon={<Settings01 width={20} height={20} />}
             active={activeNav === 'settings'}
-            onClick={() => setActiveNav('settings')}
+            onClick={() => navigate('/settings')}
           />
         </NavSection>
 

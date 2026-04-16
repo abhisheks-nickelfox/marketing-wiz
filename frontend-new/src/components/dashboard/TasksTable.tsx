@@ -1,141 +1,318 @@
 import { useState } from 'react';
-import { ChevronRight, ChevronDown, Plus } from '@untitled-ui/icons-react';
+import { ChevronDown, ChevronRight, FilterLines } from '@untitled-ui/icons-react';
 import AvatarStack from '../ui/AvatarStack';
-import type { Task } from '../../types';
+import Badge from '../ui/Badge';
 
-// Untitled UI-style circle checkbox
-const TaskDot = () => (
-  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="shrink-0">
-    <circle cx="5" cy="5" r="4" stroke="#D0D5DD" strokeWidth="2"/>
-  </svg>
-);
+// ── Types ─────────────────────────────────────────────────────────────────────
 
-// Placeholder avatars for static demo data
-const DEMO_AVATARS = [
+interface Project {
+  id:        string;
+  name:      string;
+  tag?:      string;
+  tagColor?: string;
+  dot:       string;        // dot color
+  client:    string;
+  assignees: { name: string; bg: string }[];
+  dueDate:   string;
+  priority:  'High' | 'Medium' | 'Low';
+  status:    'Inprogress' | 'Todo' | 'Completed' | 'Blocked' | 'In Review';
+  children?: Omit<Project, 'children'>[];
+}
+
+// ── Dummy data ────────────────────────────────────────────────────────────────
+
+const AVATARS = [
   { name: 'Alice', bg: '#D6BBFB' },
   { name: 'Bob',   bg: '#93C5FD' },
   { name: 'Carol', bg: '#6EE7B7' },
   { name: 'Dave',  bg: '#FCA5A5' },
-  { name: 'Eve',   bg: '#FCD34D' },
-  { name: 'Frank', bg: '#A3E635' },
-  { name: 'Grace', bg: '#67E8F9' },
-  { name: 'Hank',  bg: '#C4B5FD' },
 ];
 
-const TASKS: Task[] = [
+const PROJECTS: Project[] = [
   {
-    id: '1',
-    title: 'Website redesign  For AWP',
-    isParent: true,
+    id: '1', name: 'Website changes For AWP', tag: 'Website design', tagColor: '#EFF8FF',
+    dot: '#F79009', client: 'Ashwati Capital', assignees: AVATARS, dueDate: 'Tomorrow',
+    priority: 'High', status: 'Inprogress',
     children: [
-      { id: '1-1', title: 'Home page design' },
-      { id: '1-2', title: 'Copy Creation' },
-      { id: '1-3', title: 'Meta Tags' },
+      { id: '1-1', name: 'Home page redesign',   dot: '#F79009', client: 'Ashwati Capital', assignees: AVATARS.slice(0,2), dueDate: 'Tomorrow', priority: 'High', status: 'Inprogress' },
+      { id: '1-2', name: 'Copy & Content update', dot: '#F79009', client: 'Ashwati Capital', assignees: AVATARS.slice(0,2), dueDate: 'Tomorrow', priority: 'Medium', status: 'Todo' },
     ],
+  },
+  {
+    id: '2', name: 'Marketing Landing page',
+    dot: '#2E90FA', client: 'Ashwati Capital', assignees: AVATARS.slice(0,3), dueDate: 'Tomorrow',
+    priority: 'High', status: 'Inprogress',
+    children: [
+      { id: '2-1', name: 'SEO Optimization', dot: '#2E90FA', client: 'Ashwati Capital', assignees: AVATARS.slice(0,2), dueDate: 'Tomorrow', priority: 'High', status: 'Inprogress' },
+    ],
+  },
+  {
+    id: '3', name: 'Website changes For AWP', tag: 'Website design', tagColor: '#F4F3FF',
+    dot: '#7F56D9', client: 'IGA Health', assignees: AVATARS, dueDate: 'Tomorrow',
+    priority: 'High', status: 'Inprogress',
+  },
+  {
+    id: '4', name: 'Marketing Landing page',
+    dot: '#17B26A', client: 'IGA Health', assignees: AVATARS.slice(1,4), dueDate: 'Tomorrow',
+    priority: 'High', status: 'Inprogress',
+  },
+  {
+    id: '5', name: 'Website changes For AWP', tag: 'Website design', tagColor: '#EFF8FF',
+    dot: '#F04438', client: 'Ashwati Capital', assignees: AVATARS, dueDate: 'Tomorrow',
+    priority: 'High', status: 'Inprogress',
+  },
+  {
+    id: '6', name: 'Website changes For AWP', tag: 'Website design', tagColor: '#FFF6ED',
+    dot: '#FAC515', client: 'Ashwati Capital', assignees: AVATARS.slice(0,3), dueDate: 'Tomorrow',
+    priority: 'High', status: 'Inprogress',
+  },
+  {
+    id: '7', name: 'Marketing Landing page',
+    dot: '#EE46BC', client: 'IGA Health', assignees: AVATARS.slice(0,2), dueDate: 'Tomorrow',
+    priority: 'High', status: 'Inprogress',
   },
 ];
 
-interface TaskRowProps { task: Task; depth?: number; expanded?: boolean; onToggle?: () => void }
+// ── Priority badge helper ─────────────────────────────────────────────────────
 
-function TaskRow({ task, depth = 0, expanded, onToggle }: TaskRowProps) {
+function PriorityBadge({ priority }: { priority: Project['priority'] }) {
+  const map: Record<Project['priority'], string> = {
+    High:   'bg-error-50 text-error-700 border border-error-200',
+    Medium: 'bg-warning-50 text-warning-700 border border-warning-200',
+    Low:    'bg-gray-50 text-gray-700 border border-gray-200',
+  };
   return (
-    <tr className="border-b border-gray-100 hover:bg-gray-25 transition-colors">
+    <span className={`inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-md ${map[priority]}`}>
+      {priority}
+    </span>
+  );
+}
 
-      <td className="py-2.5 pr-4">
-        <div className="flex items-center gap-1.5" style={{ paddingLeft: depth > 0 ? `${depth * 20 + 8}px` : 0 }}>
-          {task.isParent ? (
-            <button onClick={onToggle} className="shrink-0 p-0.5 text-gray-400" aria-label={expanded ? 'Collapse' : 'Expand'}>
+function StatusBadge({ status }: { status: Project['status'] }) {
+  const map: Record<Project['status'], string> = {
+    Inprogress: 'bg-[#F4F3FF] text-[#5925DC] border border-[#D9D6FE]',
+    Todo:       'bg-gray-50 text-gray-700 border border-gray-200',
+    Completed:  'bg-[#ECFDF3] text-[#027A48] border border-[#ABEFC6]',
+    Blocked:    'bg-error-50 text-error-700 border border-error-200',
+    'In Review':'bg-[#FFFAEB] text-[#B54708] border border-[#FEDF89]',
+  };
+  return (
+    <span className={`inline-flex items-center text-[11px] font-medium px-2.5 py-0.5 rounded-full ${map[status]}`}>
+      {status}
+    </span>
+  );
+}
+
+// ── Project dot (concentric rings) ───────────────────────────────────────────
+
+function ProjectDot({ color }: { color: string }) {
+  return (
+    <span className="relative inline-flex items-center justify-center w-4 h-4 shrink-0">
+      <span className="absolute w-4 h-4 rounded-full opacity-20" style={{ backgroundColor: color }} />
+      <span className="absolute w-2.5 h-2.5 rounded-full opacity-40" style={{ backgroundColor: color }} />
+      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
+    </span>
+  );
+}
+
+// ── Row component ─────────────────────────────────────────────────────────────
+
+interface RowProps {
+  project:    Project | Omit<Project, 'children'>;
+  depth?:     number;
+  expanded?:  boolean;
+  onToggle?:  () => void;
+}
+
+function ProjectRow({ project, depth = 0, expanded, onToggle }: RowProps) {
+  const hasChildren = 'children' in project && !!project.children?.length;
+
+  return (
+    <tr className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+
+      {/* Project name */}
+      <td className="py-2.5 pr-3">
+        <div
+          className="flex items-center gap-2"
+          style={{ paddingLeft: depth > 0 ? `${depth * 20}px` : 0 }}
+        >
+          {hasChildren ? (
+            <button onClick={onToggle} className="shrink-0 text-gray-400 hover:text-gray-600 p-0.5" aria-label={expanded ? 'Collapse' : 'Expand'}>
               {expanded
                 ? <ChevronDown width={14} height={14} />
                 : <ChevronRight width={14} height={14} />
               }
             </button>
           ) : (
-            <span className="w-4 shrink-0" />
+            <span className="w-5 shrink-0" />
           )}
-          <TaskDot />
-          <span className={`text-[13px] font-semibold ${depth === 0 ? 'text-gray-900' : 'text-gray-700'}`}>
-            {task.title}
+
+          <ProjectDot color={project.dot} />
+
+          <span className={`text-[13px] font-semibold leading-tight ${depth > 0 ? 'text-gray-600' : 'text-gray-900'}`}>
+            {project.name}
           </span>
+
+          {project.tag && (
+            <span
+              className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md border border-blue-200 text-blue-700 shrink-0"
+              style={{ backgroundColor: project.tagColor ?? '#EFF8FF' }}
+            >
+              {project.tag}
+            </span>
+          )}
         </div>
       </td>
 
-      <td className="py-2.5 pr-4">
-        <AvatarStack avatars={DEMO_AVATARS} max={3} showAddButton />
+      {/* Client */}
+      <td className="py-2.5 pr-3">
+        <span className="text-[12px] text-gray-700">{project.client}</span>
       </td>
 
-      <td className="py-2.5 pr-4">
-        <span className="text-[11px] font-medium text-gray-700">Tomorrow</span>
+      {/* Assignee */}
+      <td className="py-2.5 pr-3">
+        <AvatarStack avatars={project.assignees} max={3} showAddButton={false} />
       </td>
 
-      {/* Priority — Untitled UI error palette */}
-      <td className="py-2.5 pr-4">
-        <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-error-50 text-error-700 border border-error-200">
-          High
-        </span>
+      {/* Due date */}
+      <td className="py-2.5 pr-3">
+        <span className="text-[12px] text-gray-700">{project.dueDate}</span>
       </td>
 
-      {/* Status — Untitled UI gray palette */}
+      {/* Priority */}
+      <td className="py-2.5 pr-3">
+        <PriorityBadge priority={project.priority} />
+      </td>
+
+      {/* Status */}
       <td className="py-2.5">
-        <span className="text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-gray-50 text-gray-700 border border-gray-200">
-          todo
-        </span>
+        <StatusBadge status={project.status} />
       </td>
     </tr>
   );
 }
 
+// ── Main component ────────────────────────────────────────────────────────────
+
+const FIRMS     = ['All Firms', 'Ashwati Capital', 'IGA Health'];
+const ASSIGNEES = ['All Assignees', 'Alice', 'Bob', 'Carol'];
+
 export default function TasksTable() {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set(['1']));
+  const [firmFilter,  setFirmFilter]  = useState('All Firms');
+  const [firmOpen,    setFirmOpen]    = useState(false);
+  const [assigneeFilter, setAssigneeFilter] = useState('All Assignees');
+  const [assigneeOpen,   setAssigneeOpen]   = useState(false);
 
   const toggle = (id: string) => {
     setExpandedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) { next.delete(id); } else { next.add(id); }
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   };
 
+  const filtered = PROJECTS.filter((p) => {
+    if (firmFilter !== 'All Firms' && p.client !== firmFilter) return false;
+    if (assigneeFilter !== 'All Assignees' && !p.assignees.some((a) => a.name === assigneeFilter)) return false;
+    return true;
+  });
+
+  function FilterDropdown({
+    label, value, options, open, onToggle, onSelect,
+  }: {
+    label: string; value: string; options: string[];
+    open: boolean; onToggle: () => void; onSelect: (v: string) => void;
+  }) {
+    return (
+      <div className="relative">
+        <button
+          onClick={onToggle}
+          className="flex items-center gap-1.5 text-[12px] font-medium text-gray-600 border border-gray-200 rounded-md px-2.5 py-1.5 bg-white hover:bg-gray-50 transition-colors"
+        >
+          <FilterLines width={13} height={13} className="text-gray-400" />
+          {value === options[0] ? label : value}
+          <ChevronDown width={12} height={12} className="text-gray-400" />
+        </button>
+        {open && (
+          <div className="absolute right-0 top-full mt-1 z-10 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[160px]">
+            {options.map((opt) => (
+              <button
+                key={opt}
+                onClick={() => { onSelect(opt); onToggle(); }}
+                className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-gray-50 transition-colors ${
+                  opt === value ? 'font-semibold text-brand-700' : 'text-gray-700'
+                }`}
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div>
-      <h2 className="text-[17px] font-semibold text-gray-900 mb-2">Your Tasks</h2>
-      <p className="text-[15px] font-semibold text-gray-900 mb-2">ToDo</p>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-[17px] font-semibold text-gray-900">Project Summary</h2>
 
-      <table className="w-full">
-        <thead>
-          <tr className="border-b border-gray-200">
-            <th className="pb-2 pr-4 text-left text-[11px] font-semibold text-gray-700">Tasks</th>
-            <th className="pb-2 pr-4 text-left text-[11px] font-semibold text-gray-700">Assignee</th>
-            <th className="pb-2 pr-4 text-left text-[11px] font-semibold text-gray-700">Due date</th>
-            <th className="pb-2 pr-4 text-left text-[11px] font-semibold text-gray-700">Priority</th>
-            <th className="pb-2 text-left text-[11px] font-semibold text-gray-700">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {TASKS.flatMap((task) => {
-            const isExpanded = expandedIds.has(task.id);
-            const rows = [
-              <TaskRow key={task.id} task={task} expanded={isExpanded} onToggle={() => toggle(task.id)} />,
-            ];
-            if (isExpanded && task.children) {
-              task.children.forEach((child) => rows.push(<TaskRow key={child.id} task={child} depth={1} />));
-            }
-            return rows;
-          })}
-        </tbody>
-      </table>
+        <div className="flex items-center gap-2">
+          <FilterDropdown
+            label="Filter by firm" value={firmFilter} options={FIRMS}
+            open={firmOpen} onToggle={() => { setFirmOpen((v) => !v); setAssigneeOpen(false); }}
+            onSelect={setFirmFilter}
+          />
+          <FilterDropdown
+            label="Filter by Assignee" value={assigneeFilter} options={ASSIGNEES}
+            open={assigneeOpen} onToggle={() => { setAssigneeOpen((v) => !v); setFirmOpen(false); }}
+            onSelect={setAssigneeFilter}
+          />
+        </div>
+      </div>
 
-      {/* Add Task */}
-      <div className="flex items-center gap-2 pt-3">
-        <button
-          className="w-8 h-8 rounded-full border border-dashed border-gray-300 bg-white flex items-center justify-center shrink-0 text-gray-400 hover:border-gray-400 transition-colors"
-          aria-label="Add task"
-        >
-          <Plus width={13} height={13} />
-        </button>
-        <button className="text-[13px] font-semibold text-brand-700 hover:text-brand-800 transition-colors">
-          Add Task
-        </button>
+      {/* Table */}
+      <div className="border border-gray-200 rounded-xl overflow-hidden">
+        <table className="w-full">
+          <thead className="bg-gray-50 border-b border-gray-200">
+            <tr>
+              <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider w-[35%]">Projects</th>
+              <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Client</th>
+              <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Assignee</th>
+              <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Due date</th>
+              <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Priority</th>
+              <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Status</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white">
+            {filtered.flatMap((project) => {
+              const isExpanded = expandedIds.has(project.id);
+              const rows = [
+                <ProjectRow
+                  key={project.id}
+                  project={project}
+                  expanded={isExpanded}
+                  onToggle={() => toggle(project.id)}
+                />,
+              ];
+              if (isExpanded && project.children) {
+                project.children.forEach((child) =>
+                  rows.push(<ProjectRow key={child.id} project={child} depth={1} />)
+                );
+              }
+              return rows;
+            })}
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={6} className="py-8 text-center text-sm text-gray-400">
+                  No projects match the selected filters.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );

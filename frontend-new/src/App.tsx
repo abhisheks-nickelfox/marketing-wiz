@@ -10,6 +10,11 @@ import ForgotPassword from './pages/auth/ForgotPassword';
 import ResetLinkSent from './pages/auth/ResetLinkSent';
 import EmailPreview from './pages/auth/EmailPreview';
 import OnboardingPage from './pages/onboarding/OnboardingPage';
+import SettingsPage from './pages/SettingsPage';
+import InboxPage from './pages/InboxPage';
+import TranscriptsFlowPage from './pages/TranscriptsFlowPage';
+import TranscriptTasksPage from './pages/TranscriptTasksPage';
+import FirmDetailPage from './pages/FirmDetailPage';
 
 // ── Redirects to /login when no token is present ─────────────────────────────
 
@@ -79,9 +84,14 @@ export default function App() {
           {/* Protected app shell */}
           <Route element={<ProtectedRoute />}>
             <Route element={<AppShell />}>
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/users"     element={<UsersPageWrapper />} />
-              <Route path="/users/new" element={<AddUserPage />} />
+              <Route path="/inbox"                        element={<InboxPage />} />
+              <Route path="/dashboard"                   element={<Dashboard />} />
+              <Route path="/users"                       element={<UsersPageWrapper />} />
+              <Route path="/users/new"                   element={<AddUserPage />} />
+              <Route path="/settings"                    element={<SettingsPage />} />
+              <Route path="/transcripts"                 element={<TranscriptsFlowPage />} />
+              <Route path="/transcripts/:id/tasks"       element={<TranscriptTasksPage />} />
+              <Route path="/firms/:id"                   element={<FirmDetailPage />} />
             </Route>
           </Route>
 

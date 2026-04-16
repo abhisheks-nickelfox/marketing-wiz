@@ -18,6 +18,9 @@ router.get('/:id', authenticate, requireAdmin, usersController.getUser);
 // PATCH /api/users/:id   — admin only: update user fields and/or skill set
 router.patch('/:id', authenticate, requireAdmin, updateUserValidation, usersController.updateUser);
 
+// POST /api/users/:id/resend-invite — admin only: resend invite to invited user
+router.post('/:id/resend-invite', authenticate, requireAdmin, usersController.resendInvite);
+
 // DELETE /api/users/:id  — admin only: delete user (profile + auth)
 router.delete('/:id', authenticate, requireAdmin, usersController.deleteUser);
 

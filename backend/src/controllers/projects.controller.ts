@@ -1,3 +1,4 @@
+import logger from '../config/logger';
 import { Response } from 'express';
 import supabase from '../config/supabase';
 import { AuthenticatedRequest } from '../types';
@@ -69,7 +70,7 @@ export async function listProjects(req: AuthenticatedRequest, res: Response): Pr
 
     res.json({ data: enriched });
   } catch (err) {
-    console.error('[projects.controller] listProjects error:', err);
+    logger.error('[projects.controller] listProjects error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -120,7 +121,7 @@ export async function getProject(req: AuthenticatedRequest, res: Response): Prom
       },
     });
   } catch (err) {
-    console.error('[projects.controller] getProject error:', err);
+    logger.error('[projects.controller] getProject error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -173,14 +174,14 @@ export async function createProject(req: AuthenticatedRequest, res: Response): P
       .single();
 
     if (error) {
-      console.error('[projects.controller] createProject insert error:', error);
+      logger.error('[projects.controller] createProject insert error:', error);
       res.status(500).json({ error: error.message });
       return;
     }
 
     res.status(201).json({ data: project });
   } catch (err) {
-    console.error('[projects.controller] createProject error:', err);
+    logger.error('[projects.controller] createProject error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -258,7 +259,7 @@ export async function updateProject(req: AuthenticatedRequest, res: Response): P
 
     res.json({ data: updated });
   } catch (err) {
-    console.error('[projects.controller] updateProject error:', err);
+    logger.error('[projects.controller] updateProject error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -303,7 +304,7 @@ export async function archiveProject(req: AuthenticatedRequest, res: Response): 
 
     res.json({ data: updated });
   } catch (err) {
-    console.error('[projects.controller] archiveProject error:', err);
+    logger.error('[projects.controller] archiveProject error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -358,7 +359,7 @@ export async function deleteProject(req: AuthenticatedRequest, res: Response): P
 
     res.status(204).send();
   } catch (err) {
-    console.error('[projects.controller] deleteProject error:', err);
+    logger.error('[projects.controller] deleteProject error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

@@ -66,6 +66,10 @@ export interface Skill {
 export interface User {
   id: string;
   name: string;
+  first_name: string | null;
+  last_name: string | null;
+  phone_number: string | null;
+  avatar_url: string | null;
   email: string;
   role: 'admin' | 'member' | 'super_admin';
   member_role: string | null;
@@ -114,6 +118,9 @@ export const usersApi = {
 
   delete: (id: string) =>
     request<{ message: string }>('DELETE', `/users/${id}`),
+
+  resendInvite: (id: string) =>
+    request<{ message: string }>('POST', `/users/${id}/resend-invite`),
 };
 
 // ── Member Roles API ──────────────────────────────────────────────────────────
@@ -168,6 +175,30 @@ export const onboardingApi = {
     ).then((r) => r.data),
 };
 
+// ── Profile API (current user self-update) ────────────────────────────────────
+
+export interface UpdateProfilePayload {
+  name?: string;
+  first_name?: string;
+  last_name?: string;
+  phone_number?: string;
+  avatar_url?: string;
+  member_role?: string;
+  skill_ids?: string[];
+}
+
+export const profileApi = {
+  /** Update the current user's own profile fields via the admin users endpoint. */
+  update: (id: string, payload: UpdateProfilePayload) =>
+    request<{ data: User }>('PATCH', `/users/${id}`, payload).then((r) => r.data),
+
+  /** Upload a base64 image to Supabase Storage and return the public URL. */
+  uploadAvatar: (userId: string, image: string) =>
+    request<{ data: { avatar_url: string } }>('POST', `/users/${userId}/avatar`, {
+      image,
+    }).then((r) => r.data),
+};
+
 // ── Skills API ────────────────────────────────────────────────────────────────
 
 export const skillsApi = {
@@ -179,4 +210,98 @@ export const skillsApi = {
 
   delete: (id: string) =>
     request<{ message: string }>('DELETE', `/skills/${id}`),
+};
+
+// ── Transcripts API ───────────────────────────────────────────────────────────
+
+export interface Transcript {
+  id: string;
+  title: string;
+  call_date: string;
+  duration_sec: number;
+  participants: string[];
+  firm_id: string | null;
+  archived: boolean;
+  source?: string;
+  raw_transcript?: string;
+  created_at: string;
+}
+
+export interface Firm {
+  id: string;
+  name: string;
+  description: string | null;
+}
+
+export interface Prompt {
+  id: string;
+  name: string;
+  type: string | null;
+  content?: string;
+}
+
+export interface Task {
+  id: string;
+  session_id: string | null;
+  firm_id: string;
+  assignee_id: string | null;
+  title: string;
+  description: string | null;
+  type: string;
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  status: string;
+  deadline: string | null;
+  estimated_hours: number | null;
+  ai_generated: boolean;
+  edited: boolean;
+  archived: boolean;
+  created_at: string;
+  firms?: { name: string };
+  assignee?: { name: string; email: string } | null;
+}
+
+export const transcriptsApi = {
+  list: (archived?: boolean | 'all') => {
+    const q = archived === 'all' ? '?archived=all' : archived === true ? '?archived=true' : '';
+    return request<{ data: Transcript[] }>('GET', `/transcripts${q}`).then((r) => r.data);
+  },
+  create: (payload: {
+    title: string; call_date: string; duration_sec?: number;
+    participants?: string[]; raw_transcript: string; firm_id?: string;
+  }) => request<{ data: Transcript }>('POST', '/transcripts', payload).then((r) => r.data),
+  toggleArchive: (id: string) =>
+    request<{ data: Transcript }>('PATCH', `/transcripts/${id}/archive`).then((r) => r.data),
+  sync: () => request<{ data: unknown }>('POST', '/transcripts/sync').then((r) => r.data),
+  process: (id: string, payload: { firm_id: string; prompt_id: string; text_notes?: string }) =>
+    request<{ data: { session_id: string; firm_id: string; tickets: Task[] } }>(
+      'POST', `/transcripts/${id}/process`, payload,
+    ).then((r) => r.data),
+};
+
+export const firmsApi = {
+  list: () => request<{ data: Firm[] }>('GET', '/firms').then((r) => r.data),
+  get: (id: string) => request<{ data: Firm }>('GET', `/firms/${id}`).then((r) => r.data),
+};
+
+export const promptsApi = {
+  list: () => request<{ data: Prompt[] }>('GET', '/prompts').then((r) => r.data),
+};
+
+export const tasksApi = {
+  list: (params?: { firm_id?: string; session_id?: string; status?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.firm_id) q.set('firm_id', params.firm_id);
+    if (params?.session_id) q.set('session_id', params.session_id);
+    if (params?.status) q.set('status', params.status);
+    const qs = q.toString() ? `?${q.toString()}` : '';
+    return request<{ data: Task[] }>('GET', `/tasks${qs}`).then((r) => r.data);
+  },
+  update: (id: string, payload: Partial<Pick<Task, 'title' | 'description' | 'priority' | 'deadline'>>) =>
+    request<{ data: Task }>('PATCH', `/tasks/${id}`, payload).then((r) => r.data),
+  assignApprove: (id: string, payload: { assignee_id: string; priority?: string; deadline?: string }) =>
+    request<{ data: Task }>('PATCH', `/tasks/${id}/assign-approve`, payload).then((r) => r.data),
+  discard: (id: string) =>
+    request<{ data: Task }>('PATCH', `/tasks/${id}/discard`).then((r) => r.data),
+  archive: (id: string, archived: boolean) =>
+    request<{ data: Task }>('PATCH', `/tasks/${id}/archive`, { archived }).then((r) => r.data),
 };

@@ -1,3 +1,4 @@
+import logger from '../config/logger';
 import { Response } from 'express';
 import { body, param, validationResult } from 'express-validator';
 import supabase from '../config/supabase';
@@ -55,7 +56,7 @@ export async function listTimeLogs(req: AuthenticatedRequest, res: Response): Pr
 
     res.json({ data });
   } catch (err) {
-    console.error('[timeLogs.controller] listTimeLogs error:', err);
+    logger.error('[timeLogs.controller] listTimeLogs error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -121,7 +122,7 @@ export async function updateTimeLog(req: AuthenticatedRequest, res: Response): P
 
     res.json({ data });
   } catch (err) {
-    console.error('[timeLogs.controller] updateTimeLog error:', err);
+    logger.error('[timeLogs.controller] updateTimeLog error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -184,7 +185,7 @@ export async function deleteTimeLog(req: AuthenticatedRequest, res: Response): P
 
     res.status(204).send();
   } catch (err) {
-    console.error('[timeLogs.controller] deleteTimeLog error:', err);
+    logger.error('[timeLogs.controller] deleteTimeLog error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -258,7 +259,7 @@ export async function createTimeLog(req: AuthenticatedRequest, res: Response): P
 
     res.status(201).json({ data });
   } catch (err) {
-    console.error('[timeLogs.controller] createTimeLog error:', err);
+    logger.error('[timeLogs.controller] createTimeLog error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
