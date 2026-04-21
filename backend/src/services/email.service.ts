@@ -236,6 +236,47 @@ export async function sendProfileUpdateEmail(
   });
 }
 
+/** Password reset email sent when a user requests a password reset. */
+export async function sendPasswordResetEmail(
+  userEmail: string,
+  userName: string,
+  resetLink: string,
+): Promise<void> {
+  const firstName = userName?.trim().split(/\s+/)[0] ?? 'there';
+
+  const content = `
+    <h2 style="font-size:22px;font-weight:700;color:#181D27;margin:0 0 8px;">
+      Reset your password
+    </h2>
+    <p style="font-size:15px;color:#535862;margin:0 0 24px;line-height:1.6;">
+      Hi <strong>${firstName}</strong>, we received a request to reset your password.
+      Click the button below to create a new password.
+    </p>
+
+    <a href="${resetLink}"
+      style="display:inline-block;background:#7F56D9;color:#ffffff;text-decoration:none;
+             font-weight:600;font-size:14px;padding:13px 28px;border-radius:8px;
+             letter-spacing:0.1px;">
+      Reset password
+    </a>
+
+    <p style="font-size:13px;color:#535862;margin:28px 0 8px;line-height:1.6;">
+      This link will expire in <strong>1 hour</strong> for security reasons.
+    </p>
+
+    <p style="font-size:13px;color:#A4A7AE;margin:0;line-height:1.6;">
+      If you didn't request a password reset, you can safely ignore this email.
+      Your password will not be changed.
+    </p>
+  `;
+
+  await sendEmail({
+    to:      userEmail,
+    subject: 'Reset your password',
+    html:    baseTemplate(content),
+  });
+}
+
 /** Welcome email sent when a user completes onboarding and activates their account. */
 export async function sendWelcomeEmail(
   userEmail: string,

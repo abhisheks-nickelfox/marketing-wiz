@@ -2,7 +2,7 @@ import { Request } from 'express';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export type UserRole = 'admin' | 'member' | 'super_admin';
+export type UserRole = 'admin' | 'member' | 'super_admin' | 'project_manager';
 export type PromptType = 'pm' | 'campaigns' | 'content';
 export type TaskType = 'task' | 'design' | 'development' | 'account_management';
 export type TaskPriority = 'low' | 'normal' | 'high' | 'urgent';

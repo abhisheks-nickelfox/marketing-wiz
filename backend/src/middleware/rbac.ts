@@ -15,7 +15,7 @@ export function requireAdmin(
     return;
   }
 
-  if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+  if (req.user.role !== 'admin' && req.user.role !== 'super_admin' && req.user.role !== 'project_manager') {
     res.status(403).json({ error: 'Admin access required' });
     return;
   }
@@ -37,7 +37,7 @@ export function requirePermission(permission: PermissionKey) {
       res.status(401).json({ error: 'Not authenticated' });
       return;
     }
-    if (req.user.role === 'admin' || req.user.role === 'super_admin') {
+    if (req.user.role === 'admin' || req.user.role === 'super_admin' || req.user.role === 'project_manager') {
       next();
       return;
     }
@@ -64,7 +64,7 @@ export function requireMember(
     return;
   }
 
-  if (req.user.role !== 'admin' && req.user.role !== 'member' && req.user.role !== 'super_admin') {
+  if (req.user.role !== 'admin' && req.user.role !== 'member' && req.user.role !== 'super_admin' && req.user.role !== 'project_manager') {
     res.status(403).json({ error: 'Member access required' });
     return;
   }

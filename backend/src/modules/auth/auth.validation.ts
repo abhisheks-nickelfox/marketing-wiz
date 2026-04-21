@@ -24,6 +24,17 @@ export const completeOnboardingValidation = [
     .withMessage('password must be at least 8 characters'),
 ];
 
+export const forgotPasswordValidation = [
+  body('email').isEmail().withMessage('Valid email is required'),
+];
+
+export const resetPasswordValidation = [
+  body('token').notEmpty().withMessage('token is required'),
+  body('password')
+    .isLength({ min: 8 })
+    .withMessage('password must be at least 8 characters'),
+];
+
 export const uploadAvatarValidation = [
   body('token').notEmpty().withMessage('token is required'),
   body('image')

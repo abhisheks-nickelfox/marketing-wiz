@@ -16,8 +16,10 @@ const PORT = parseInt(process.env.PORT ?? '3000', 10);
 
 const allowedOrigins = [
   'http://localhost:5173',
-  process.env.FRONTEND_URL ?? 'http://localhost:5173',
-].filter((v, i, a) => a.indexOf(v) === i);
+  'http://3.27.124.90:5173',
+  'http://3.27.124.90',
+  process.env.FRONTEND_URL,
+].filter(Boolean) as string[];
 
 app.use(
   cors({

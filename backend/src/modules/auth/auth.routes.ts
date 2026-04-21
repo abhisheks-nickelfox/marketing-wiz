@@ -6,6 +6,8 @@ import {
   validateTokenValidation,
   completeOnboardingValidation,
   uploadAvatarValidation,
+  forgotPasswordValidation,
+  resetPasswordValidation,
 } from './auth.validation';
 import * as authController from './auth.controller';
 import * as onboardingController from './onboarding.controller';
@@ -23,6 +25,12 @@ router.get('/me', authenticate, authController.me);
 
 // PATCH /api/auth/profile — requires authentication
 router.patch('/profile', authenticate, updateProfileValidation, authController.updateProfile);
+
+// POST /api/auth/forgot-password — public
+router.post('/forgot-password', forgotPasswordValidation, authController.forgotPassword);
+
+// POST /api/auth/reset-password — public
+router.post('/reset-password', resetPasswordValidation, authController.resetPassword);
 
 // ── Onboarding (public — no auth required) ───────────────────────────────────
 

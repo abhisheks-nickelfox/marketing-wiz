@@ -4,6 +4,11 @@ import { validationResult } from 'express-validator';
 import { AuthenticatedRequest } from '../../types';
 import * as authService from './auth.service';
 import { findUserById } from '../users/users.service';
+import supabase from '../../config/supabase';
+import { generateResetToken, verifyResetToken } from '../../services/password-reset.service';
+import { sendPasswordResetEmail } from '../../services/email.service';
+
+const APP_URL = process.env.FRONTEND_URL?.trim() ?? 'http://localhost:5174';
 
 // ─── POST /api/auth/login ─────────────────────────────────────────────────────
 
@@ -48,6 +53,88 @@ export async function me(req: AuthenticatedRequest, res: Response): Promise<void
   } catch (err) {
     logger.error('[auth.controller] me error:', err);
     res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+// ─── POST /api/auth/forgot-password ──────────────────────────────────────────
+
+export async function forgotPassword(req: Request, res: Response): Promise<void> {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    res.status(400).json({ error: 'Validation failed', details: errors.array() });
+    return;
+  }
+
+  const { email } = req.body as { email: string };
+
+  try {
+    // Look up user by email
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('id, name, email')
+      .eq('email', email.toLowerCase().trim())
+      .single();
+
+    if (error || !user) {
+      res.status(404).json({ error: 'No account found with that email address.' });
+      return;
+    }
+
+    const token     = generateResetToken(email.toLowerCase().trim());
+    const resetLink = `${APP_URL}/reset-password?token=${token}`;
+
+    await sendPasswordResetEmail(user.email, user.name ?? '', resetLink);
+
+    logger.info(`[auth] Password reset link for ${email}: ${resetLink}`);
+    res.json({ message: 'If that email exists, a reset link has been sent.' });
+  } catch (err) {
+    logger.error('[auth.controller] forgotPassword error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+// ─── POST /api/auth/reset-password ───────────────────────────────────────────
+
+export async function resetPassword(req: Request, res: Response): Promise<void> {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    res.status(400).json({ error: 'Validation failed', details: errors.array() });
+    return;
+  }
+
+  const { token, password } = req.body as { token: string; password: string };
+
+  try {
+    const { email } = verifyResetToken(token);
+
+    // Look up user id by email
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', email)
+      .single();
+
+    if (userError || !user) {
+      res.status(400).json({ error: 'User not found' });
+      return;
+    }
+
+    // Update password via Supabase Admin API
+    const { error: updateError } = await supabase.auth.admin.updateUserById(
+      user.id,
+      { password },
+    );
+
+    if (updateError) {
+      res.status(400).json({ error: updateError.message });
+      return;
+    }
+
+    res.json({ message: 'Password updated successfully' });
+  } catch (err) {
+    const e = err as Error;
+    logger.error('[auth.controller] resetPassword error:', e);
+    res.status(400).json({ error: e.message });
   }
 }
 

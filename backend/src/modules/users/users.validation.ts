@@ -4,12 +4,13 @@ export const createUserValidation = [
   body('name').trim().notEmpty().withMessage('Name is required'),
   body('email').isEmail().withMessage('Valid email is required'),
   body('password')
+    .optional()
     .isLength({ min: 8 })
     .withMessage('Password must be at least 8 characters'),
   body('role')
     .optional()
-    .isIn(['admin', 'member'])
-    .withMessage('Role must be admin or member'),
+    .isIn(['admin', 'member', 'project_manager'])
+    .withMessage('Role must be admin, member, or project_manager'),
   body('member_role')
     .optional()
     .isString()
@@ -40,8 +41,8 @@ export const updateUserValidation = [
     .withMessage('Password must be at least 8 characters'),
   body('role')
     .optional()
-    .isIn(['admin', 'member'])
-    .withMessage('Role must be admin or member'),
+    .isIn(['admin', 'member', 'project_manager'])
+    .withMessage('Role must be admin, member, or project_manager'),
   body('member_role')
     .optional()
     .isString()
