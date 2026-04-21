@@ -1,8 +1,9 @@
 // ── Shared UI constants used across AddUserPage and EditUserDrawer ─────────────
 
 export const ROLE_OPTIONS = [
-  { value: 'member', label: 'Member' },
-  { value: 'admin',  label: 'Admin' },
+  { value: 'member',          label: 'Member' },
+  { value: 'admin',           label: 'Admin' },
+  { value: 'project_manager', label: 'Project Manager' },
 ];
 
 export const STATUS_OPTIONS = [

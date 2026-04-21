@@ -1,4 +1,6 @@
 import Logo from '../Logo';
+import AccountCard from '../AccountCard';
+import { useAuth } from '../../context/AuthContext';
 
 interface OnboardingLayoutProps {
   stepper: React.ReactNode;
@@ -6,37 +8,55 @@ interface OnboardingLayoutProps {
 }
 
 export default function OnboardingLayout({ stepper, children }: OnboardingLayoutProps) {
-  return (
-    <div className="h-screen bg-white overflow-hidden flex flex-col">
+  const { user } = useAuth();
 
-      {/* ── Header row: logo left, empty right (same height on both sides) ── */}
-      <div className="flex shrink-0">
-        <div className="hidden lg:flex w-[280px] shrink-0 border-r border-gray-200 px-6 py-6 items-center">
-          <Logo size="sm" />
+  return (
+    <div className="h-screen bg-white overflow-hidden flex flex-row">
+
+      {/* ── Left sidebar ────────────────────────────────────────────────── */}
+      <div className="w-[300px] shrink-0 flex flex-col border-r border-gray-200">
+        {/* Logo at top */}
+        <div className="px-6 py-5">
+          <Logo size="md" />
         </div>
-        {/* Right side header spacer */}
-        <div className="hidden lg:block flex-1" />
-        {/* Mobile logo */}
-        <div className="lg:hidden px-6 py-5">
-          <Logo size="sm" />
-        </div>
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Account card at bottom */}
+        {user && (
+          <div className="px-4 py-4">
+            <AccountCard
+              user={{
+                name: user.name,
+                email: user.email,
+                avatar: user.avatar_url ?? undefined,
+              }}
+              showSelectorChevron
+              showOnlineDot
+            />
+          </div>
+        )}
       </div>
 
-      {/* ── Content row: stepper left, form right — tops always aligned ── */}
-      <div className="flex flex-1 overflow-hidden">
+      {/* ── Right content ────────────────────────────────────────────────── */}
+      <div className="flex-1 flex items-start justify-center overflow-y-auto px-8 pt-[10rem] pb-10" style={{ paddingRight: '18rem' }}>
+        <div className="flex gap-16 w-full max-w-4xl">
 
-        {/* Left: stepper */}
-        <div className="hidden lg:block w-[280px] shrink-0 border-r border-gray-200 px-6 pt-8 overflow-y-auto">
-          {stepper}
-        </div>
+          {/* Left: stepper */}
+          <div className="w-[380px] shrink-0 pt-1">
+            {stepper}
+          </div>
 
-        {/* Right: form */}
-        <div className="flex-1 flex justify-center px-8 pt-8 overflow-y-auto">
-          <div className="w-full max-w-sm">
+          {/* Divider */}
+          <div className="w-px bg-gray-200 shrink-0" />
+
+          {/* Right: form */}
+          <div className="flex-1 min-w-[360px]">
             {children}
           </div>
-        </div>
 
+        </div>
       </div>
 
     </div>

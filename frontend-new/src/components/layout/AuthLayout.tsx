@@ -2,14 +2,15 @@ import Logo from '../Logo';
 
 interface AuthLayoutProps {
   children: React.ReactNode;
+  hidePanel?: boolean;
 }
 
-export default function AuthLayout({ children }: AuthLayoutProps) {
+export default function AuthLayout({ children, hidePanel = false }: AuthLayoutProps) {
   return (
     <div className="flex min-h-screen w-full overflow-hidden">
 
       {/* ── Left: dark photo panel ───────────────────────────────────── */}
-      <div className="hidden md:block w-[45%] shrink-0 relative">
+      <div className={`${hidePanel ? 'hidden' : 'hidden md:block'} w-[45%] shrink-0 relative`}>
         <img
           src="https://images.unsplash.com/photo-1497366216548-37526070297c?w=900&q=80"
           alt=""
@@ -27,14 +28,22 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
       </div>
 
       {/* ── Right: form panel ────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col items-center justify-center bg-white px-8 py-12 overflow-y-auto">
-        <div className="w-full max-w-sm">
+      <div className="flex-1 relative flex items-center justify-center bg-white px-8 py-12 overflow-y-auto">
 
-          {/* Logo — always shown in form panel */}
-          <div className="mb-8">
-            <Logo size="sm" />
+        {/* Logo — centered absolute for hidePanel pages; inline with content for login */}
+        {hidePanel && (
+          <div className="absolute top-52 left-0 right-0 flex justify-center">
+            <Logo size="lg" />
           </div>
+        )}
 
+        {/* Content */}
+        <div className={`w-full ${hidePanel ? 'max-w-lg' : 'max-w-sm'}`}>
+          {!hidePanel && (
+            <div className="mb-8">
+              <Logo size="lg" />
+            </div>
+          )}
           {children}
         </div>
       </div>

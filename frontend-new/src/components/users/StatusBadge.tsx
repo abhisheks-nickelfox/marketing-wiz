@@ -1,4 +1,5 @@
 import type { UserStatus } from '../../types';
+import arrowRight from '../../assets/arrow-right.png';
 
 interface StatusBadgeProps {
   status: UserStatus;
@@ -9,7 +10,7 @@ export default function StatusBadge({ status }: StatusBadgeProps) {
     return (
       <span className="inline-flex items-center gap-1 bg-[#ECFDF3] border border-[#ABEFC6] text-[#067647] text-xs font-medium px-2 py-0.5 rounded-full">
         Active
-        <span className="text-[#067647] text-sm font-black flex items-center leading-none">→</span>
+        <img src={arrowRight} alt="arrow" className="w-3 h-3 object-contain" />
       </span>
     );
   }

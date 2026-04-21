@@ -18,7 +18,7 @@ export function DonutChart({ segments, total, size = 180, centerLabel = 'Tasks' 
   const strokeWidth = 26;
   const circumference = 2 * Math.PI * r;
   // 2° gap between segments — consistent visual separation independent of ring size
-  const GAP_DEG = 2;
+  const GAP_DEG = 0.9;
   const GAP_LEN = (GAP_DEG / 360) * circumference;
   let startOffset = 0;
 

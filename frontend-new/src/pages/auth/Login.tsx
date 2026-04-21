@@ -8,6 +8,7 @@ export default function Login() {
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
   const [showPw,   setShowPw]   = useState(false);
+  const [remember, setRemember] = useState(false);
   const [error,    setError]    = useState('');
   const [loading,  setLoading]  = useState(false);
 
@@ -19,7 +20,7 @@ export default function Login() {
     setError('');
     setLoading(true);
     try {
-      await login(email, password);
+      await login(email, password, remember);
       navigate('/dashboard', { replace: true });
     } catch (err) {
       setError((err as Error).message ?? 'Invalid email or password');
@@ -86,8 +87,17 @@ export default function Login() {
           )}
         </div>
 
-        {/* Forgot */}
-        <div className="flex justify-end -mt-2">
+        {/* Remember + Forgot */}
+        <div className="flex items-center justify-between -mt-2">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(e) => setRemember(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-brand-600 accent-brand-600 cursor-pointer"
+            />
+            <span className="text-sm text-gray-600">Remember for 30 days</span>
+          </label>
           <Link
             to="/forgot-password"
             className="text-sm font-semibold text-brand-700 hover:text-brand-800 transition-colors"

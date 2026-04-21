@@ -1,21 +1,25 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import {
-  Inbox01,
-  LayoutGrid01,
-  Building02,
-  Folder,
-  Clock,
-  Zap,
-  Users01,
-  Settings01,
-  SearchLg,
-} from '@untitled-ui/icons-react';
+import { SearchLg } from '@untitled-ui/icons-react';
 
 import NavSection from './sidebar/NavSection';
 import NavItem from './sidebar/NavItem';
 import ExpandableNavItem from './sidebar/ExpandableNavItem';
-import { firmsApi } from '../lib/api';
+import { useFirms } from '../hooks/useFirms';
+
+import vectorLogo    from '../assets/logo/Logomark.svg';
+import iconInbox     from '../assets/navbar-icon/Icon.png';
+import iconDashboard from '../assets/navbar-icon/Icon (2).png';
+import iconFirms     from '../assets/navbar-icon/building-07.png';
+import iconTasks     from '../assets/navbar-icon/check-done-02.png';
+import iconTimesheet from '../assets/navbar-icon/Icon (1).png';
+import iconSettings  from '../assets/navbar-icon/settings-01.png';
+import iconUsers     from '../assets/navbar-icon/users-01.png';
+import iconTranscripts from '../assets/navbar-icon/cpu-chip-02.png';
+
+const NavIcon = ({ src }: { src: string }) => (
+  <img src={src} alt="" width={20} height={20} className="shrink-0" />
+);
 
 // ── My Tasks sub-items (from Figma / screenshot) ──────────────────────────────
 const MY_TASKS = [
@@ -58,40 +62,23 @@ export default function Sidebar() {
   const location   = useLocation();
   const activeNav  = getActiveNav(location.pathname);
 
-  const [firmItems, setFirmItems] = useState<{ id: string; label: string }[]>([]);
-  const [firmsLoading, setFirmsLoading] = useState(true);
   const [activeTask, setActiveTask] = useState('');
+
+  const { data: firms = [], isLoading: firmsLoading } = useFirms();
+  const firmItems = firms.map((f) => ({ id: f.id, label: f.name }));
 
   // Derive active firm from URL
   const activeFirm = getActiveFirmId(location.pathname);
-
-  // Fetch firms from API on mount
-  useEffect(() => {
-    firmsApi.list()
-      .then((firms) => {
-        setFirmItems(firms.map((f) => ({ id: f.id, label: f.name })));
-      })
-      .catch(() => {
-        // Silently fall back to empty list — firms section will show nothing
-      })
-      .finally(() => {
-        setFirmsLoading(false);
-      });
-  }, []);
 
   return (
     <aside className="w-64 shrink-0 bg-white border-r border-gray-200 flex flex-col h-screen sticky top-0 overflow-y-auto">
 
       {/* ── Logo ─────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-2.5 px-5 pt-4 pb-2 shrink-0">
-        <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center shrink-0">
-          <svg width="20" height="22" viewBox="0 0 22 26" fill="none">
-            <path d="M14 2L4 16h8l-2 10 12-16h-8l2-8z" fill="white" stroke="white" strokeWidth="0.5" strokeLinejoin="round"/>
-          </svg>
-        </div>
+        <img src={vectorLogo} alt="AI Wealth Connections" className="h-10 w-auto object-contain shrink-0" />
         <div>
           <p className="text-[15px] font-bold text-gray-900 leading-tight">AI Wealth</p>
-          <p className="text-[11px] text-gray-500 leading-tight">Connections</p>
+          <p className="text-[11px] text-black-500 leading-tight">Connections</p>
         </div>
       </div>
 
@@ -113,14 +100,14 @@ export default function Sidebar() {
         <NavSection heading="GENERAL">
           <NavItem
             label="Inbox"
-            icon={<Inbox01 width={20} height={20} />}
+            icon={<NavIcon src={iconInbox} />}
             active={activeNav === 'inbox'}
             onClick={() => navigate('/inbox')}
           />
           <div data-tour="tour-dashboard">
             <NavItem
               label="Dashboard"
-              icon={<LayoutGrid01 width={20} height={20} />}
+              icon={<NavIcon src={iconDashboard} />}
               active={activeNav === 'dashboard'}
               onClick={() => navigate('/dashboard')}
             />
@@ -135,7 +122,7 @@ export default function Sidebar() {
             <div data-tour="tour-firms">
               <ExpandableNavItem
                 label="Firms"
-                icon={<Building02 width={20} height={20} />}
+                icon={<NavIcon src={iconFirms} />}
                 items={firmItems}
                 activeItemId={activeFirm}
                 onItemClick={(id) => navigate(`/firms/${id}`)}
@@ -148,14 +135,14 @@ export default function Sidebar() {
         <NavSection heading="YOU">
           <ExpandableNavItem
             label="My Tasks"
-            icon={<Folder width={20} height={20} />}
+            icon={<NavIcon src={iconTasks} />}
             items={MY_TASKS}
             activeItemId={activeTask}
             onItemClick={setActiveTask}
           />
           <NavItem
             label="Timesheet"
-            icon={<Clock width={20} height={20} />}
+            icon={<NavIcon src={iconTimesheet} />}
             active={activeNav === 'timesheet'}
             onClick={() => navigate('/timesheet')}
           />
@@ -166,7 +153,7 @@ export default function Sidebar() {
           <div data-tour="tour-transcripts">
             <NavItem
               label="Transcripts Flow"
-              icon={<Zap width={20} height={20} />}
+              icon={<NavIcon src={iconTranscripts} />}
               active={activeNav === 'transcripts'}
               onClick={() => navigate('/transcripts')}
             />
@@ -178,14 +165,14 @@ export default function Sidebar() {
           <div data-tour="tour-users">
             <NavItem
               label="Users"
-              icon={<Users01 width={20} height={20} />}
+              icon={<NavIcon src={iconUsers} />}
               active={activeNav === 'users'}
               onClick={() => navigate('/users')}
             />
           </div>
           <NavItem
             label="Settings"
-            icon={<Settings01 width={20} height={20} />}
+            icon={<NavIcon src={iconSettings} />}
             active={activeNav === 'settings'}
             onClick={() => navigate('/settings')}
           />

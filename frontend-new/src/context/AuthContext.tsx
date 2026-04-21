@@ -5,6 +5,25 @@ import type { User } from '../lib/api';
 
 const TOKEN_KEY = 'mw_token';
 
+function saveToken(token: string, remember: boolean) {
+  if (remember) {
+    localStorage.setItem(TOKEN_KEY, token);
+    sessionStorage.removeItem(TOKEN_KEY);
+  } else {
+    sessionStorage.setItem(TOKEN_KEY, token);
+    localStorage.removeItem(TOKEN_KEY);
+  }
+}
+
+function getStoredToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY) ?? sessionStorage.getItem(TOKEN_KEY);
+}
+
+function clearToken() {
+  localStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(TOKEN_KEY);
+}
+
 interface AuthState {
   user: User | null;
   /** true while the initial token→me check is running */
@@ -12,7 +31,7 @@ interface AuthState {
 }
 
 interface AuthContextValue extends AuthState {
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, remember?: boolean) => Promise<void>;
   logout: () => void;
   /** Refresh the current user profile (call after updating profile fields) */
   refreshUser: () => Promise<void>;
@@ -25,7 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // On mount: if a token exists, verify it and load the full user profile
   useEffect(() => {
-    const token = localStorage.getItem(TOKEN_KEY);
+    const token = getStoredToken();
     if (!token) {
       setState({ user: null, initialising: false });
       return;
@@ -35,21 +54,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then((user) => setState({ user, initialising: false }))
       .catch(() => {
         // Token invalid / expired — clear it
-        localStorage.removeItem(TOKEN_KEY);
+        clearToken();
         setState({ user: null, initialising: false });
       });
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string, remember = false) => {
     const { token } = await authApi.login(email, password);
-    localStorage.setItem(TOKEN_KEY, token);
+    saveToken(token, remember);
     // Fetch full profile (including first_name, last_name, avatar_url, skills)
     const user = await authApi.me();
     setState({ user, initialising: false });
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY);
+    clearToken();
     setState({ user: null, initialising: false });
   }, []);
 

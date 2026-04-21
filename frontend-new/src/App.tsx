@@ -1,14 +1,15 @@
-import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import ErrorBoundary from './components/ErrorBoundary';
-import Sidebar from './components/Sidebar';
-import TopBar from './components/TopBar';
+import AppLayout from './components/layout/AppLayout';
 import Dashboard from './pages/Dashboard';
 import UsersPage from './pages/UsersPage';
 import AddUserPage from './pages/AddUserPage';
 import Login from './pages/auth/Login';
 import ForgotPassword from './pages/auth/ForgotPassword';
 import ResetLinkSent from './pages/auth/ResetLinkSent';
+import ResetPasswordPage from './pages/auth/ResetPasswordPage';
 import EmailPreview from './pages/auth/EmailPreview';
 import OnboardingPage from './pages/onboarding/OnboardingPage';
 import SettingsPage from './pages/SettingsPage';
@@ -42,37 +43,26 @@ function GuestRoute() {
   return user ? <Navigate to="/dashboard" replace /> : <Outlet />;
 }
 
-// ── App shell (sidebar + topbar) ─────────────────────────────────────────────
+// ── QueryClient — shared singleton, created once outside the component tree ────
 
-function AppShell() {
-  return (
-    <div className="flex h-screen overflow-hidden bg-white font-sans">
-      <Sidebar />
-      <div className="flex flex-col flex-1 min-w-0">
-        <TopBar />
-        <ErrorBoundary>
-          <Outlet />
-        </ErrorBoundary>
-      </div>
-    </div>
-  );
-}
-
-// ── Wrapper that reads location state for toast ───────────────────────────────
-
-function UsersPageWrapper() {
-  const location = useLocation();
-  const showToast = (location.state as { showToast?: boolean } | null)?.showToast ?? false;
-  return <UsersPage showToast={showToast} />;
-}
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60_000,       // 1 min before data is considered stale
+      retry:     1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 // ── Root ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <Routes>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <AuthProvider>
+          <Routes>
           {/* Guest-only auth pages */}
           <Route element={<GuestRoute />}>
             <Route path="/login"           element={<Login />} />
@@ -82,14 +72,15 @@ export default function App() {
           </Route>
 
           {/* Public onboarding — accessible without auth (invite link) */}
-          <Route path="/onboarding" element={<OnboardingPage />} />
+          <Route path="/onboarding"       element={<OnboardingPage />} />
+          <Route path="/reset-password"   element={<ResetPasswordPage />} />
 
           {/* Protected app shell */}
           <Route element={<ProtectedRoute />}>
-            <Route element={<AppShell />}>
+            <Route element={<AppLayout />}>
               <Route path="/inbox"                        element={<InboxPage />} />
               <Route path="/dashboard"                   element={<Dashboard />} />
-              <Route path="/users"                       element={<UsersPageWrapper />} />
+              <Route path="/users"                       element={<UsersPage />} />
               <Route path="/users/new"                   element={<AddUserPage />} />
               <Route path="/settings"                    element={<SettingsPage />} />
               <Route path="/transcripts"                 element={<TranscriptsFlowPage />} />
@@ -101,7 +92,9 @@ export default function App() {
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
-      </AuthProvider>
-    </BrowserRouter>
+        </AuthProvider>
+      </BrowserRouter>
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
   );
 }

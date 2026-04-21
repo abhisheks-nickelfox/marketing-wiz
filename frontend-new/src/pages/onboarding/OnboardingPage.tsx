@@ -9,6 +9,7 @@ import PhoneInput from '../../components/ui/PhoneInput';
 import FileUpload from '../../components/ui/FileUpload';
 import ImageCropModal from '../../components/ui/ImageCropModal';
 import { onboardingApi } from '../../lib/api';
+import { useAuth } from '../../context/AuthContext';
 
 // ── Steps config ──────────────────────────────────────────────────────────────
 
@@ -23,6 +24,7 @@ const STEPS = [
 export default function OnboardingPage() {
   const [searchParams] = useSearchParams();
   const navigate       = useNavigate();
+  const { refreshUser } = useAuth();
 
   const token = searchParams.get('token') ?? '';
 
@@ -148,6 +150,7 @@ export default function OnboardingPage() {
       });
       if (result?.token) {
         localStorage.setItem('mw_token', result.token);
+        await refreshUser();
         setDone(true);
       } else {
         // Auto-login failed — account activated but no session returned
@@ -212,14 +215,14 @@ export default function OnboardingPage() {
     const displayName = firstName || initialName;
     return (
       <OnboardingLayout stepper={<OnboardingStepper steps={STEPS} currentStep={STEPS.length} />}>
-        <h1 className="text-3xl font-bold text-gray-900">
+        <h1 className="text-3xl font-bold text-gray-900 whitespace-nowrap">
           Hi {displayName}, You're all set!
         </h1>
-        <p className="text-base text-gray-500 mt-3">
+        <p className="text-base text-gray-500 mt-3" style={{ width: '466px' }}>
           Your account setup is complete. You can now start managing projects and collaborating with your team.
         </p>
         <div className="mt-8">
-          <Button onClick={() => navigate('/dashboard', { replace: true })} className="w-full justify-center">
+          <Button onClick={() => navigate('/dashboard', { replace: true })}>
             Get Started
           </Button>
         </div>

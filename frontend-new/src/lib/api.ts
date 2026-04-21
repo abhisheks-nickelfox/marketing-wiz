@@ -4,7 +4,7 @@
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:3000/api';
 
 function getToken(): string | null {
-  return localStorage.getItem('mw_token');
+  return localStorage.getItem('mw_token') ?? sessionStorage.getItem('mw_token');
 }
 
 async function request<T>(
@@ -70,6 +70,12 @@ export const authApi = {
   /** Returns full profile including first_name, last_name, avatar_url, skills, etc. */
   me: () =>
     request<{ data: User }>('GET', '/auth/me').then((r) => r.data),
+
+  forgotPassword: (email: string) =>
+    request<{ message: string }>('POST', '/auth/forgot-password', { email }),
+
+  resetPassword: (token: string, password: string) =>
+    request<{ message: string }>('POST', '/auth/reset-password', { token, password }),
 };
 
 // ── Shared types ─────────────────────────────────────────────────────────────
@@ -101,8 +107,8 @@ export interface User {
 export interface CreateUserPayload {
   name: string;
   email: string;
-  password: string;
-  role?: 'admin' | 'member';
+  password?: string;
+  role?: 'admin' | 'member' | 'project_manager';
   member_role?: string;
   permissions?: string[];
   skill_ids?: string[];
@@ -112,7 +118,7 @@ export interface CreateUserPayload {
 export interface UpdateUserPayload {
   name?: string;
   password?: string;
-  role?: 'admin' | 'member';
+  role?: 'admin' | 'member' | 'project_manager';
   member_role?: string;
   permissions?: string[];
   skill_ids?: string[];

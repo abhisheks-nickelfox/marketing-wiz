@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react';
 import ReactCrop, { type Crop, centerCrop, makeAspectCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
-import { X } from '@untitled-ui/icons-react';
+import { X, Crop01 } from '@untitled-ui/icons-react';
 import Button from './Button';
 
 // ── Gradient palette (matches Figma colour swatches) ─────────────────────────
@@ -81,15 +81,20 @@ export default function ImageCropModal({ src, onSave, onCancel }: ImageCropModal
   return (
     /* Backdrop */
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
 
         {/* Header */}
         <div className="flex items-start justify-between px-6 pt-5 pb-1">
-          <div>
-            <h2 className="text-base font-semibold text-gray-900">Crop image</h2>
-            <p className="text-sm text-gray-500 mt-0.5">
-              Upload a 800 × 800px image for best results.
-            </p>
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg border border-gray-200 shadow-sm flex items-center justify-center shrink-0">
+              <Crop01 width={16} height={16} className="text-gray-600" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">Crop image</h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Upload a 800 × 800px image for best results.
+              </p>
+            </div>
           </div>
           <button
             onClick={onCancel}
@@ -107,14 +112,14 @@ export default function ImageCropModal({ src, onSave, onCancel }: ImageCropModal
             onComplete={(_, pct) => setCompletedCrop(pct)}
             aspect={1}
             circularCrop={false}
-            className="max-h-64 w-full"
+            className="max-h-96 w-full"
           >
             <img
               ref={imgRef}
               src={src}
               alt="Crop preview"
               onLoad={onImageLoad}
-              className="max-h-64 w-full object-contain"
+              className="max-h-96 w-full object-contain"
             />
           </ReactCrop>
         </div>

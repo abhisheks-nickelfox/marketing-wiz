@@ -2,6 +2,18 @@ import { useState, useMemo, useRef, useCallback } from 'react';
 import { ChevronDown, ChevronUp, SearchLg } from '@untitled-ui/icons-react';
 import { useClickOutside } from '../../hooks/useClickOutside';
 
+const BADGE_PALETTE = [
+  'bg-[#E9D7FE] border-[#E9D7FE] text-[#6941C6]',
+  'bg-[#EFF8FF] border-[#B2DDFF] text-[#175CD3]',
+  'bg-[#ECFDF3] border-[#ABEFC6] text-[#067647]',
+];
+
+function badgeClass(label: string): string {
+  let h = 0;
+  for (let i = 0; i < label.length; i++) h = (h * 31 + label.charCodeAt(i)) & 0xffffffff;
+  return BADGE_PALETTE[Math.abs(h) % BADGE_PALETTE.length];
+}
+
 interface MultiSelectOption {
   value: string;
   label: string;
@@ -16,6 +28,7 @@ interface MultiSelectProps {
   label?: string;
   searchable?: boolean;
   searchPlaceholder?: string;
+  showBadges?: boolean;
 }
 
 export default function MultiSelect({
@@ -27,6 +40,7 @@ export default function MultiSelect({
   label,
   searchable = false,
   searchPlaceholder = 'Search…',
+  showBadges = false,
 }: MultiSelectProps) {
   const [open,  setOpen]  = useState(false);
   const [query, setQuery] = useState('');
@@ -90,15 +104,28 @@ export default function MultiSelect({
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="w-full flex items-center gap-2 bg-white border border-[#D5D7DA] rounded-lg px-3 py-2.5 shadow-sm text-left"
+          className="w-full flex items-center gap-2 bg-white border border-[#D5D7DA] rounded-lg px-3 py-2.5 shadow-sm text-left min-h-[44px]"
         >
-          <span
-            className={`flex-1 text-base leading-6 truncate ${
-              value.length === 0 ? 'text-[#717680]' : 'text-[#181D27]'
-            }`}
-          >
-            {displayLabel}
-          </span>
+          {showBadges && selectedLabels.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5 flex-1">
+              {selectedLabels.map((lbl) => (
+                <span
+                  key={lbl}
+                  className={`inline-flex items-center border text-xs font-medium px-2 py-0.5 rounded-full ${badgeClass(lbl)}`}
+                >
+                  {lbl}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <span
+              className={`flex-1 text-base leading-6 truncate ${
+                value.length === 0 ? 'text-[#717680]' : 'text-[#181D27]'
+              }`}
+            >
+              {displayLabel}
+            </span>
+          )}
           {open
             ? <ChevronUp   width={16} height={16} className="text-[#717680] shrink-0" />
             : <ChevronDown width={16} height={16} className="text-[#717680] shrink-0" />
