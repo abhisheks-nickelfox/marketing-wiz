@@ -6,6 +6,7 @@ export interface Skill {
   name: string;
   category: string | null;
   created_at: string;
+  experience?: string | null;
 }
 
 // ─── List all skills ──────────────────────────────────────────────────────────
@@ -38,6 +39,30 @@ export async function createSkill(dto: CreateSkillDto): Promise<Skill> {
   }
 
   return data as Skill;
+}
+
+// ─── Find or create a skill by name (case-insensitive) ───────────────────────
+// Used during onboarding to allow new skill names without requiring admin auth.
+
+export async function findOrCreateSkillByName(name: string): Promise<string> {
+  const trimmed = name.trim();
+
+  const { data: existing } = await supabase
+    .from('skills')
+    .select('id')
+    .ilike('name', trimmed)
+    .maybeSingle();
+
+  if (existing) return (existing as { id: string }).id;
+
+  const { data: created, error } = await supabase
+    .from('skills')
+    .insert({ name: trimmed, category: null })
+    .select('id')
+    .single();
+
+  if (error) throw new Error(error.message);
+  return (created as { id: string }).id;
 }
 
 // ─── Delete a skill ───────────────────────────────────────────────────────────

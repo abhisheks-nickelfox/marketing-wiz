@@ -6,8 +6,8 @@ import * as skillsController from './skills.controller';
 
 const router = Router();
 
-// GET  /api/skills       — any authenticated user can browse the catalog
-router.get('/', authenticate, skillsController.listSkills);
+// GET  /api/skills       — public (needed for onboarding before user has a JWT)
+router.get('/', skillsController.listSkills);
 
 // POST /api/skills       — admin only: create a new skill
 router.post('/', authenticate, requireAdmin, createSkillValidation, skillsController.createSkill);

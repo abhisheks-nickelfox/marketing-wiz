@@ -27,26 +27,37 @@ export interface User {
 
 const USER_SELECT = 'id, name, first_name, last_name, phone_number, avatar_url, email, role, member_role, status, permissions, created_at, updated_at';
 
-/** Attaches skills[] to an array of raw user rows */
+/** Attaches skills[] (with experience when migration 027 is applied) to an array of raw user rows */
 async function attachSkills(users: Record<string, unknown>[]): Promise<User[]> {
   if (users.length === 0) return [];
 
   const ids = users.map((u) => u.id as string);
 
-  const { data: rows, error } = await supabase
+  // Try with experience column; fall back without it if migration 027 not yet applied
+  let rows: unknown[] = [];
+  const { data: withExp, error: expErr } = await supabase
     .from('user_skills')
-    .select('user_id, skills(id, name, category, created_at)')
+    .select('user_id, experience, skills(id, name, category, created_at)')
     .in('user_id', ids);
 
-  if (error) throw new Error(error.message);
+  if (expErr) {
+    const { data: withoutExp, error: noExpErr } = await supabase
+      .from('user_skills')
+      .select('user_id, skills(id, name, category, created_at)')
+      .in('user_id', ids);
+    if (noExpErr) throw new Error(noExpErr.message);
+    rows = withoutExp ?? [];
+  } else {
+    rows = withExp ?? [];
+  }
 
   // Build a map: user_id → Skill[]
   const skillMap: Record<string, Skill[]> = {};
-  for (const row of rows ?? []) {
-    const r = row as unknown as { user_id: string; skills: Skill | null };
+  for (const row of rows) {
+    const r = row as unknown as { user_id: string; skills: Skill | null; experience?: string | null };
     if (!r.skills) continue;
     if (!skillMap[r.user_id]) skillMap[r.user_id] = [];
-    skillMap[r.user_id].push(r.skills);
+    skillMap[r.user_id].push({ ...r.skills, experience: r.experience ?? null });
   }
 
   return users.map((u) => ({
@@ -206,6 +217,40 @@ export async function updateUser(id: string, dto: UpdateUserDto): Promise<User |
 
   const [user] = await attachSkills([updatedProfile]);
   return user ?? null;
+}
+
+/** Replaces a user's skill set with the given skills (each may include experience) */
+export async function replaceSkillsWithExperience(
+  userId: string,
+  skills: { skill_id: string; experience?: string }[],
+): Promise<void> {
+  const { error: delError } = await supabase
+    .from('user_skills')
+    .delete()
+    .eq('user_id', userId);
+  if (delError) throw new Error(delError.message);
+
+  if (skills.length === 0) return;
+
+  // Try inserting with experience column (requires migration 027)
+  const rows = skills.map(({ skill_id, experience }) => ({
+    user_id: userId,
+    skill_id,
+    experience: experience ?? null,
+  }));
+  const { error: insError } = await supabase.from('user_skills').insert(rows);
+
+  if (insError) {
+    // If migration 027 hasn't been applied yet, fall back to inserting without experience
+    if (insError.message.toLowerCase().includes('experience')) {
+      logger.warn('[users.service] experience column missing — inserting skills without it. Apply migration 027 to persist experience data.');
+      const fallbackRows = skills.map(({ skill_id }) => ({ user_id: userId, skill_id }));
+      const { error: fallbackError } = await supabase.from('user_skills').insert(fallbackRows);
+      if (fallbackError) throw new Error(fallbackError.message);
+    } else {
+      throw new Error(insError.message);
+    }
+  }
 }
 
 // ── Invite nonce helpers ─────────────────────────────────────────────────────

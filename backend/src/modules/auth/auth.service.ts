@@ -35,7 +35,9 @@ export async function loginUser(email: string, password: string): Promise<LoginR
     .single();
 
   if (profileError || !profile) {
-    throw new Error('Could not load user profile');
+    const detail = profileError?.message ?? 'no profile row found';
+    logger.error('[auth.service] loginUser: profile fetch failed:', detail);
+    throw new Error(`Could not load user profile: ${detail}`);
   }
 
   return { user: profile, token: authData.session.access_token };

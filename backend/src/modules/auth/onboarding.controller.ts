@@ -2,7 +2,8 @@ import logger from '../../config/logger';
 import { Request, Response } from 'express';
 import { validationResult } from 'express-validator';
 import { verifyInviteToken } from '../../services/invite.service';
-import { findUserById, fetchInviteNonce, storeInviteNonce, updateUser } from '../users/users.service';
+import { findUserById, fetchInviteNonce, storeInviteNonce, updateUser, replaceSkillsWithExperience } from '../users/users.service';
+import { findOrCreateSkillByName } from '../skills/skills.service';
 import supabase from '../../config/supabase';
 import { sendWelcomeEmail } from '../../services/email.service';
 
@@ -58,13 +59,14 @@ export async function completeOnboarding(
     return;
   }
 
-  const { token, first_name, last_name, phone_number, avatar_url, password } = req.body as {
+  const { token, first_name, last_name, phone_number, avatar_url, password, skills } = req.body as {
     token: string;
     first_name: string;
     last_name: string;
     phone_number?: string;
     avatar_url?: string;
     password: string;
+    skills?: { skill_name: string; experience?: string }[];
   };
 
   try {
@@ -102,6 +104,25 @@ export async function completeOnboarding(
       avatar_url: avatar_url || undefined,
       status: 'Active',
     });
+
+    // Assign skills if provided — resolve each skill_name to an id (find or create)
+    if (skills && skills.length > 0) {
+      try {
+        const resolved = await Promise.all(
+          skills.map(async ({ skill_name, experience }) => ({
+            skill_id: await findOrCreateSkillByName(skill_name),
+            experience,
+          })),
+        );
+        // Deduplicate by skill_id — if the same skill was entered twice, keep the last experience
+        const uniqueMap = new Map<string, { skill_id: string; experience?: string }>();
+        for (const r of resolved) uniqueMap.set(r.skill_id, r);
+        await replaceSkillsWithExperience(payload.userId, Array.from(uniqueMap.values()));
+      } catch (e) {
+        logger.error('[onboarding] Skill assignment failed:', e);
+        // Don't block onboarding completion — skills can be added later via profile edit
+      }
+    }
 
     // Fire-and-forget welcome email — don't block the response
     sendWelcomeEmail(payload.email, fullName).catch((e) =>
