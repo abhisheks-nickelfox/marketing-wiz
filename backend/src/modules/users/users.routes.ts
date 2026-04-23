@@ -1,7 +1,11 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/auth';
 import { requireAdmin } from '../../middleware/rbac';
-import { createUserValidation, updateUserValidation } from './users.validation';
+import {
+  createUserValidation,
+  updateUserValidation,
+  uploadAvatarValidation,
+} from './users.validation';
 import * as usersController from './users.controller';
 
 const router = Router();
@@ -17,6 +21,9 @@ router.get('/:id', authenticate, requireAdmin, usersController.getUser);
 
 // PATCH /api/users/:id   — admin only: update user fields and/or skill set
 router.patch('/:id', authenticate, requireAdmin, updateUserValidation, usersController.updateUser);
+
+// POST /api/users/:id/avatar — admin only: upload/replace avatar for a user
+router.post('/:id/avatar', authenticate, requireAdmin, uploadAvatarValidation, usersController.uploadUserAvatar);
 
 // POST /api/users/:id/resend-invite — admin only: resend invite to invited user
 router.post('/:id/resend-invite', authenticate, requireAdmin, usersController.resendInvite);

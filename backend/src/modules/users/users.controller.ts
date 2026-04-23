@@ -6,8 +6,10 @@ import { AuthenticatedRequest } from '../../types';
 import * as usersService from './users.service';
 import type { CreateUserDto } from './dto/create-user.dto';
 import type { UpdateUserDto } from './dto/update-user.dto';
-import { sendProfileUpdateEmail, sendInviteEmail } from '../../services/email.service';
+import { sendAccountDisabledEmail, sendProfileUpdateEmail, sendInviteEmail } from '../../services/email.service';
 import { generateInviteToken } from '../../services/invite.service';
+import { FRONTEND_URL } from '../../config/constants';
+import supabase from '../../config/supabase';
 
 // ─── GET /api/users ───────────────────────────────────────────────────────────
 
@@ -53,13 +55,11 @@ export async function createUser(req: AuthenticatedRequest, res: Response): Prom
 
     // Send invite email for invited users (non-blocking)
     if (user.status === 'invited') {
-      const frontendUrl =
-        process.env.FRONTEND_URL?.trim() ?? 'http://localhost:5173';
       // Rotate nonce first — this invalidates any previously issued token
       const nonce = crypto.randomBytes(16).toString('hex');
       await usersService.storeInviteNonce(user.id, nonce);
       const token = generateInviteToken(user.id, user.email, nonce);
-      const inviteLink = `${frontendUrl}/onboarding?token=${encodeURIComponent(token)}`;
+      const inviteLink = `${FRONTEND_URL}/onboarding?token=${encodeURIComponent(token)}`;
 
       logger.info(`[invite] Onboarding link for ${user.email}:\n  ${inviteLink}`);
 
@@ -103,7 +103,9 @@ export async function updateUser(req: AuthenticatedRequest, res: Response): Prom
     dto.member_role !== undefined ||
     dto.permissions !== undefined ||
     dto.skill_ids !== undefined ||
-    dto.status !== undefined;
+    dto.status !== undefined ||
+    dto.rate_amount !== undefined ||
+    dto.rate_frequency !== undefined;
 
   if (!hasFields) {
     res.status(400).json({ error: 'No updatable fields provided' });
@@ -142,6 +144,12 @@ export async function updateUser(req: AuthenticatedRequest, res: Response): Prom
       });
     }
 
+    if (dto.status === 'Disabled' && before.status !== 'Disabled') {
+      sendAccountDisabledEmail(user.email, user.name).catch((err) => {
+        logger.error('[users.controller] disable email failed:', err);
+      });
+    }
+
     res.json({ data: user });
   } catch (err) {
     const e = err as Error & { statusCode?: number };
@@ -171,12 +179,11 @@ export async function resendInvite(req: AuthenticatedRequest, res: Response): Pr
       return;
     }
 
-    const frontendUrl = process.env.FRONTEND_URL?.trim() ?? 'http://localhost:5173';
     // Rotate nonce — immediately invalidates the previous invite link
     const nonce = crypto.randomBytes(16).toString('hex');
     await usersService.storeInviteNonce(user.id, nonce);
     const token = generateInviteToken(user.id, user.email, nonce);
-    const inviteLink = `${frontendUrl}/onboarding?token=${encodeURIComponent(token)}`;
+    const inviteLink = `${FRONTEND_URL}/onboarding?token=${encodeURIComponent(token)}`;
 
     logger.info(`[invite] Resending onboarding link for ${user.email}:\n  ${inviteLink}`);
 
@@ -185,6 +192,61 @@ export async function resendInvite(req: AuthenticatedRequest, res: Response): Pr
     res.json({ message: 'Invite resent successfully' });
   } catch (err) {
     logger.error('[users.controller] resendInvite error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+// ─── POST /api/users/:id/avatar ───────────────────────────────────────────────
+
+export async function uploadUserAvatar(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    res.status(400).json({ error: errors.array()[0]?.msg ?? 'Validation failed' });
+    return;
+  }
+
+  const { id } = req.params;
+  const { image } = req.body as { image: string };
+
+  try {
+    const user = await usersService.findUserById(id);
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
+    const buffer     = Buffer.from(base64Data, 'base64');
+
+    const mimeMatch = image.match(/^data:(image\/\w+);base64,/);
+    const mimeType  = (mimeMatch?.[1] ?? 'image/jpeg') as
+      'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+
+    const ext      = mimeType.split('/')[1];
+    const filePath = `${id}.${ext}`;
+
+    let avatarUrl: string;
+
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(filePath, buffer, { contentType: mimeType, upsert: true });
+
+    if (uploadError) {
+      // Storage bucket not set up — store base64 data URL directly (local dev fallback)
+      logger.warn('[users.controller] Storage upload failed, using data URL fallback:', uploadError.message);
+      avatarUrl = image;
+    } else {
+      const { data: urlData } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+      avatarUrl = urlData.publicUrl;
+    }
+
+    await usersService.updateUser(id, { avatar_url: avatarUrl });
+
+    res.json({ data: { avatar_url: avatarUrl } });
+  } catch (err) {
+    logger.error('[users.controller] uploadUserAvatar error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

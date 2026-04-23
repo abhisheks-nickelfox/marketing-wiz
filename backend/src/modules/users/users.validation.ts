@@ -1,7 +1,8 @@
-import { body } from 'express-validator';
+import { body, param } from 'express-validator';
+import { VALID_ROLES, VALID_USER_STATUSES } from '../../config/constants';
 
 export const createUserValidation = [
-  body('name').trim().notEmpty().withMessage('Name is required'),
+  body('name').optional().trim().notEmpty().withMessage('Name cannot be blank'),
   body('email').isEmail().withMessage('Valid email is required'),
   body('password')
     .optional()
@@ -9,8 +10,8 @@ export const createUserValidation = [
     .withMessage('Password must be at least 8 characters'),
   body('role')
     .optional()
-    .isIn(['admin', 'member', 'project_manager'])
-    .withMessage('Role must be admin, member, or project_manager'),
+    .isIn(VALID_ROLES)
+    .withMessage(`Role must be one of: ${VALID_ROLES.join(', ')}`),
   body('member_role')
     .optional()
     .isString()
@@ -29,20 +30,35 @@ export const createUserValidation = [
     .withMessage('Each skill_id must be a valid UUID'),
   body('status')
     .optional()
-    .isIn(['Active', 'invited', 'Disabled'])
-    .withMessage('Status must be Active, invited, or Disabled'),
+    .isIn(VALID_USER_STATUSES)
+    .withMessage(`Status must be one of: ${VALID_USER_STATUSES.join(', ')}`),
+  body('rate_amount')
+    .optional({ nullable: true })
+    .isFloat({ min: 0 })
+    .withMessage('rate_amount must be a non-negative number'),
+  body('rate_frequency')
+    .optional({ nullable: true })
+    .isIn(['Hourly', 'Daily', 'Weekly', 'Monthly'])
+    .withMessage('rate_frequency must be one of: Hourly, Daily, Weekly, Monthly'),
 ];
 
 export const updateUserValidation = [
   body('name').optional().trim().notEmpty().withMessage('Name cannot be blank'),
+  body('first_name').optional().trim().isString().withMessage('first_name must be a string'),
+  body('last_name').optional().trim().isString().withMessage('last_name must be a string'),
+  body('phone_number')
+    .optional({ nullable: true, checkFalsy: true })
+    .trim()
+    .matches(/^\+[1-9]\d{6,14}$/)
+    .withMessage('phone_number must be in E.164 format (e.g. +12025551234)'),
   body('password')
     .optional()
     .isLength({ min: 8 })
     .withMessage('Password must be at least 8 characters'),
   body('role')
     .optional()
-    .isIn(['admin', 'member', 'project_manager'])
-    .withMessage('Role must be admin, member, or project_manager'),
+    .isIn(VALID_ROLES)
+    .withMessage(`Role must be one of: ${VALID_ROLES.join(', ')}`),
   body('member_role')
     .optional()
     .isString()
@@ -61,6 +77,13 @@ export const updateUserValidation = [
     .withMessage('Each skill_id must be a valid UUID'),
   body('status')
     .optional()
-    .isIn(['Active', 'invited', 'Disabled'])
-    .withMessage('Status must be Active, invited, or Disabled'),
+    .isIn(VALID_USER_STATUSES)
+    .withMessage(`Status must be one of: ${VALID_USER_STATUSES.join(', ')}`),
+];
+
+export const uploadAvatarValidation = [
+  param('id').isUUID('loose').withMessage('Invalid user ID'),
+  body('image')
+    .notEmpty().withMessage('image is required')
+    .isString().withMessage('image must be a base64 data URL string'),
 ];

@@ -1,5 +1,6 @@
 import logger from '../config/logger';
 import nodemailer from 'nodemailer';
+import { FRONTEND_URL } from '../config/constants';
 
 // ── Transporter ───────────────────────────────────────────────────────────────
 
@@ -19,11 +20,11 @@ function createTransporter() {
   });
 }
 
-const FROM_EMAIL    = (process.env.FROM_EMAIL ?? process.env.SMTP_FROM)?.trim() ?? 'noreply@aiwealth.com';
+const FROM_EMAIL    = (process.env.FROM_EMAIL ?? process.env.SMTP_FROM)?.trim() ?? 'noreply@marketingwiz.app';
 const FROM_NAME     = (process.env.FROM_NAME ?? 'MarketingWiz').trim();
 const FROM          = `${FROM_NAME} <${FROM_EMAIL}>`;
 const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL?.trim() ?? FROM_EMAIL;
-const APP_URL       = process.env.FRONTEND_URL?.trim() ?? 'http://localhost:5173';
+const APP_URL       = FRONTEND_URL;
 
 // ── Base layout ───────────────────────────────────────────────────────────────
 // Wraps any content with a consistent header (logo + brand bar) and footer
@@ -236,6 +237,32 @@ export async function sendProfileUpdateEmail(
   });
 }
 
+export async function sendAccountDisabledEmail(
+  userEmail: string,
+  userName: string,
+): Promise<void> {
+  const firstName = userName?.trim().split(/\s+/)[0] ?? 'there';
+
+  const content = `
+    <h2 style="font-size:22px;font-weight:700;color:#181D27;margin:0 0 8px;">
+      Your account has been disabled
+    </h2>
+    <p style="font-size:15px;color:#535862;margin:0 0 24px;line-height:1.6;">
+      Hi <strong>${firstName}</strong>, your ${FROM_NAME} account has been disabled by an administrator.
+    </p>
+
+    <p style="font-size:14px;color:#535862;margin:0;line-height:1.7;">
+      If you believe this was done in error or need access restored, please contact your administrator or reply to this email.
+    </p>
+  `;
+
+  await sendEmail({
+    to:      userEmail,
+    subject: 'Your account has been disabled',
+    html:    baseTemplate(content),
+  });
+}
+
 /** Password reset email sent when a user requests a password reset. */
 export async function sendPasswordResetEmail(
   userEmail: string,
@@ -338,6 +365,47 @@ export async function sendWelcomeEmail(
   await sendEmail({
     to:      userEmail,
     subject: `Welcome to the team, ${firstName}! 🎉`,
+    html:    baseTemplate(content),
+  });
+}
+
+export async function sendSkillRequestEmail(
+  adminEmail: string,
+  memberName: string,
+  pendingSkills: string[],
+): Promise<void> {
+  const skillList = pendingSkills
+    .map((s) => `<li style="margin:4px 0;font-size:14px;color:#535862;">${s}</li>`)
+    .join('');
+
+  const content = `
+    <h2 style="font-size:22px;font-weight:700;color:#181D27;margin:0 0 8px;">
+      New skill request
+    </h2>
+    <p style="font-size:15px;color:#535862;margin:0 0 20px;line-height:1.6;">
+      <strong>${memberName}</strong> completed their onboarding and requested the following
+      skills to be added to the catalog:
+    </p>
+    <ul style="margin:0 0 24px;padding-left:20px;">
+      ${skillList}
+    </ul>
+    <p style="font-size:14px;color:#535862;margin:0 0 24px;line-height:1.6;">
+      Please review these and add the relevant skills via the admin panel so the member can
+      select them from their profile.
+    </p>
+    <a href="${APP_URL}/settings"
+      style="display:inline-block;background:#7F56D9;color:#ffffff;text-decoration:none;
+             font-weight:600;font-size:14px;padding:13px 28px;border-radius:8px;">
+      Go to Settings
+    </a>
+    <p style="font-size:12px;color:#A4A7AE;margin:24px 0 0;line-height:1.6;">
+      This is an automated message sent because a team member requested new skills during onboarding.
+    </p>
+  `;
+
+  await sendEmail({
+    to:      adminEmail,
+    subject: `Skill request from ${memberName}`,
     html:    baseTemplate(content),
   });
 }

@@ -62,7 +62,7 @@ const mockDeleteAuthUser = jest.fn();
 const mockUpdateAuthUser = jest.fn();
 
 // ─── Mock supabase module ─────────────────────────────────────────────────────
-jest.mock('../../../config/supabase', () => ({
+jest.mock('../../config/supabase', () => ({
   __esModule: true,
   default: {
     from: jest.fn(),   // implementation set in beforeEach
@@ -78,14 +78,14 @@ jest.mock('../../../config/supabase', () => ({
 }));
 
 // Silence winston output.
-jest.mock('../../../config/logger', () => ({
+jest.mock('../../config/logger', () => ({
   __esModule: true,
   default: { info: jest.fn(), error: jest.fn(), warn: jest.fn() },
 }));
 
 // ─── Imports (after mocks) ────────────────────────────────────────────────────
-import supabase from '../../../config/supabase';
-import * as usersService from '../users.service';
+import supabase from '../../config/supabase';
+import * as usersService from '../../modules/users/users.service';
 
 // ─── Global beforeEach: wire from() to pop from chainQueue ───────────────────
 

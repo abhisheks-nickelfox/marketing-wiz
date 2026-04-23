@@ -1,6 +1,11 @@
 import logger from '../../config/logger';
 import supabase from '../../config/supabase';
-import { STATUS_PRIORITY } from '../../config/constants';
+import {
+  STATUS_PRIORITY,
+  VALID_TRANSITIONS,
+  PAST_DEADLINE_STATUSES,
+  STALE_APPROVED_DAYS,
+} from '../../config/constants';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -69,12 +74,14 @@ export async function findAllTasks(options: {
 
     if (overdue === 'true') {
       const today = new Date().toISOString().split('T')[0];
-      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-      const activeStatuses = 'draft,in_progress,revisions,internal_review,client_review,compliance_review';
+      const staleThreshold = new Date(
+        Date.now() - STALE_APPROVED_DAYS * 24 * 60 * 60 * 1000
+      ).toISOString();
+      const activeStatuses = PAST_DEADLINE_STATUSES.join(',');
 
       query = query.or(
         `and(deadline.lt.${today},status.in.(${activeStatuses})),` +
-        `and(status.eq.approved,deadline.is.null,updated_at.lt.${sevenDaysAgo})`
+        `and(status.eq.approved,deadline.is.null,updated_at.lt.${staleThreshold})`
       );
       query = query.eq('archived', false);
     } else {
@@ -319,20 +326,7 @@ export async function archiveTask(id: string, archived: boolean): Promise<unknow
   return data;
 }
 
-// State machine: maps each status to the set of statuses it may transition to.
-// Enforced server-side — the client cannot bypass this by sending an arbitrary status.
-export const VALID_TRANSITIONS: Record<string, string[]> = {
-  draft:              ['in_progress', 'discarded'],
-  in_progress:        ['resolved', 'discarded'],
-  resolved:           ['internal_review'],
-  internal_review:    ['client_review', 'revisions'],
-  client_review:      ['compliance_review', 'revisions'],
-  compliance_review:  ['approved', 'revisions'],
-  approved:           ['closed'],
-  revisions:          ['internal_review'],
-  closed:             [],
-  discarded:          [],
-};
+// VALID_TRANSITIONS is imported from config/constants — do not redefine here.
 
 export async function transitionTask(options: {
   ticketId: string;

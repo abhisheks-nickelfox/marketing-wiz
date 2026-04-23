@@ -4,7 +4,6 @@ import { Router } from 'express';
 import authRouter from '../modules/auth/auth.routes';
 import usersRouter from '../modules/users/users.routes';
 import skillsRouter from '../modules/skills/skills.routes';
-import memberRolesRouter from '../modules/member-roles/member-roles.routes';
 import notificationsRouter from '../modules/notifications/notifications.routes';
 import promptsRouter from '../modules/prompts/prompts.routes';
 import firmsRouter from '../modules/firms/firms.routes';
@@ -25,7 +24,6 @@ router.get('/health', (_req, res) => {
 router.use('/auth', authRouter);
 router.use('/users', usersRouter);
 router.use('/skills', skillsRouter);
-router.use('/member-roles', memberRolesRouter);
 router.use('/notifications', notificationsRouter);
 router.use('/prompts', promptsRouter);
 router.use('/firms', firmsRouter);

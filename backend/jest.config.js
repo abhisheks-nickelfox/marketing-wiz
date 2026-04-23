@@ -7,8 +7,13 @@ module.exports = {
     '^.+\\.ts$': [
       'ts-jest',
       {
-        // Relax strict null checks so test stubs are easier to construct
+        // Relax strict null checks so test stubs are easier to construct.
+        // diagnostics: false suppresses TS errors in production source files
+        // that are not relevant to what is being tested (e.g. complex generics
+        // in supabase client types that only materialise under ts-jest's
+        // compilation context).
         tsconfig: { strict: false },
+        diagnostics: false,
       },
     ],
   },

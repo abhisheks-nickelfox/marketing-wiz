@@ -1,12 +1,11 @@
 import crypto from 'crypto';
+import { RESET_TOKEN_EXPIRY_MS } from '../config/constants';
 
 // ── Password reset token — HMAC-SHA256, 1-hour expiry ─────────────────────────
 // Self-validating: no DB storage needed. Format same as invite tokens.
 
 const SECRET =
   process.env.SUPABASE_SERVICE_ROLE_KEY ?? 'dev-reset-secret-changeme';
-
-const EXPIRY_MS = 60 * 60 * 1000; // 1 hour
 
 function b64url(s: string): string {
   return Buffer.from(s, 'utf-8').toString('base64url');
@@ -25,10 +24,10 @@ export interface ResetTokenPayload {
   exp:   number;
 }
 
-/** Generates a signed password reset token valid for 1 hour. */
+/** Generates a signed password reset token valid for RESET_TOKEN_EXPIRY_MS milliseconds. */
 export function generateResetToken(email: string): string {
   const payload = b64url(
-    JSON.stringify({ email, exp: Date.now() + EXPIRY_MS }),
+    JSON.stringify({ email, exp: Date.now() + RESET_TOKEN_EXPIRY_MS }),
   );
   return `${payload}.${sign(payload)}`;
 }

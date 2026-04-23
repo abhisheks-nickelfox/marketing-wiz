@@ -6,6 +6,8 @@ import * as tasksService from './tasks.service';
 import type { CreateTaskDto, AssignApproveDto } from './tasks.service';
 import { regenerateTicket } from '../../services/ai.service';
 import { Task } from '../../types';
+import supabase from '../../config/supabase';
+import { ADMIN_ROLES } from '../../config/constants';
 
 // ─── POST /api/tasks ──────────────────────────────────────────────────────────
 
@@ -62,8 +64,7 @@ export async function getTask(req: AuthenticatedRequest, res: Response): Promise
 
     // Members can only see their own tasks unless they have view_all_tickets permission
     const canViewAll =
-      req.user!.role === 'admin' ||
-      req.user!.role === 'super_admin' ||
+      ADMIN_ROLES.includes(req.user!.role as 'admin' | 'super_admin') ||
       (req.user!.permissions ?? []).includes('view_all_tickets');
 
     if (!canViewAll && (ticket as Record<string, unknown>).assignee_id !== req.user!.id) {
@@ -100,7 +101,7 @@ export async function updateTask(req: AuthenticatedRequest, res: Response): Prom
     // Members can only update their own tasks and only estimated_hours
     const updates: Record<string, unknown> = {};
 
-    if (req.user!.role === 'admin' || req.user!.role === 'super_admin') {
+    if (ADMIN_ROLES.includes(req.user!.role as 'admin' | 'super_admin')) {
       if (
         existing.status === 'resolved' ||
         existing.status === 'discarded' ||
@@ -211,9 +212,7 @@ export async function regenerateTaskContent(
 
   try {
     // Fetch ticket with its session to get the transcript
-    const { data: ticket, error: ticketErr } = await (
-      await import('../../config/supabase')
-    ).default
+    const { data: ticket, error: ticketErr } = await supabase
       .from('tickets')
       .select('*, processing_sessions(transcript_id)')
       .eq('id', id)
@@ -234,7 +233,6 @@ export async function regenerateTaskContent(
     const sessionData = (ticket as Record<string, unknown>).processing_sessions as { transcript_id: string } | null;
 
     if (sessionData?.transcript_id) {
-      const supabase = (await import('../../config/supabase')).default;
       const { data: transcript } = await supabase
         .from('transcripts')
         .select('raw_transcript')
@@ -245,7 +243,6 @@ export async function regenerateTaskContent(
 
     const newDraft = await regenerateTicket(rawTranscript, ticket as Task, additional_instruction);
 
-    const supabase = (await import('../../config/supabase')).default;
     const { data: updated, error: updateErr } = await supabase
       .from('tickets')
       .update({
@@ -298,7 +295,7 @@ export async function resolveTask(req: AuthenticatedRequest, res: Response): Pro
       return;
     }
 
-    const isPrivileged = req.user!.role === 'admin' || req.user!.role === 'super_admin';
+    const isPrivileged = ADMIN_ROLES.includes(req.user!.role as 'admin' | 'super_admin');
     if (!isPrivileged && ticket.assignee_id !== req.user!.id) {
       res.status(403).json({ error: 'Only the assignee can resolve this task' });
       return;

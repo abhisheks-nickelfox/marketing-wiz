@@ -3,12 +3,14 @@ import { authenticate } from '../../middleware/auth';
 import {
   loginValidation,
   updateProfileValidation,
-  validateTokenValidation,
-  completeOnboardingValidation,
-  uploadAvatarValidation,
   forgotPasswordValidation,
   resetPasswordValidation,
 } from './auth.validation';
+import {
+  validateTokenValidation,
+  completeOnboardingValidation,
+  uploadAvatarValidation,
+} from './onboarding.validation';
 import * as authController from './auth.controller';
 import * as onboardingController from './onboarding.controller';
 

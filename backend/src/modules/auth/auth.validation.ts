@@ -1,43 +1,25 @@
-import { body, query } from 'express-validator';
+import { body } from 'express-validator';
 
+// Validation for POST /api/auth/login
 export const loginValidation = [
   body('email').isEmail().withMessage('Valid email is required'),
   body('password').notEmpty().withMessage('Password is required'),
 ];
 
+// Validation for PATCH /api/auth/profile
 export const updateProfileValidation = [
   body('name').notEmpty().withMessage('Name is required').isString(),
 ];
 
-export const validateTokenValidation = [
-  query('token').notEmpty().withMessage('token is required'),
-];
-
-export const completeOnboardingValidation = [
-  body('token').notEmpty().withMessage('token is required'),
-  body('first_name').notEmpty().trim().withMessage('first_name is required'),
-  body('last_name').notEmpty().trim().withMessage('last_name is required'),
-  body('phone_number').optional().trim(),
-  body('avatar_url').optional(),
-  body('password')
-    .isLength({ min: 8 })
-    .withMessage('password must be at least 8 characters'),
-];
-
+// Validation for POST /api/auth/forgot-password
 export const forgotPasswordValidation = [
   body('email').isEmail().withMessage('Valid email is required'),
 ];
 
+// Validation for POST /api/auth/reset-password
 export const resetPasswordValidation = [
   body('token').notEmpty().withMessage('token is required'),
   body('password')
     .isLength({ min: 8 })
     .withMessage('password must be at least 8 characters'),
-];
-
-export const uploadAvatarValidation = [
-  body('token').notEmpty().withMessage('token is required'),
-  body('image')
-    .notEmpty().withMessage('image is required')
-    .isString().withMessage('image must be a base64 string'),
 ];

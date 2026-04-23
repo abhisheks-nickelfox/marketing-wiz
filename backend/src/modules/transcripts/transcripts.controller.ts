@@ -6,8 +6,7 @@ import * as transcriptsService from './transcripts.service';
 import type { CreateTranscriptDto } from './transcripts.service';
 import { syncTranscripts } from '../../services/fireflies.service';
 import { generateTickets } from '../../services/ai.service';
-
-const MIN_TRANSCRIPT_WORDS = 50;
+import { MIN_TRANSCRIPT_WORDS } from '../../config/constants';
 
 // UUID format guard
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

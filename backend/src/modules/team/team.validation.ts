@@ -1,10 +1,11 @@
 import { body, query } from 'express-validator';
+import { VALID_ROLES } from '../../config/constants';
 
 export const listTeamValidation = [
   query('role')
     .optional()
-    .isIn(['member', 'admin', 'super_admin'])
-    .withMessage('Invalid role value'),
+    .isIn(VALID_ROLES)
+    .withMessage(`role must be one of: ${VALID_ROLES.join(', ')}`),
 ];
 
 export const createTeamMemberValidation = [
@@ -15,8 +16,8 @@ export const createTeamMemberValidation = [
     .withMessage('Password must be at least 8 characters'),
   body('role')
     .optional()
-    .isIn(['admin', 'member'])
-    .withMessage('Role must be admin or member'),
+    .isIn(VALID_ROLES)
+    .withMessage(`Role must be one of: ${VALID_ROLES.join(', ')}`),
   body('permissions')
     .optional()
     .isArray()
@@ -31,8 +32,8 @@ export const updateTeamMemberValidation = [
     .withMessage('Password must be at least 8 characters'),
   body('role')
     .optional()
-    .isIn(['admin', 'member'])
-    .withMessage('Role must be admin or member'),
+    .isIn(VALID_ROLES)
+    .withMessage(`Role must be one of: ${VALID_ROLES.join(', ')}`),
   body('permissions')
     .optional()
     .isArray()

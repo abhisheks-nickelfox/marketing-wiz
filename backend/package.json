@@ -7,7 +7,7 @@
     "dev": "NODE_OPTIONS=--dns-result-order=ipv4first ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "jest --forceExit"
+    "test": "NODE_ENV=test jest --forceExit"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",

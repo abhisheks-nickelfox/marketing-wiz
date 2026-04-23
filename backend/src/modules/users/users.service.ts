@@ -14,18 +14,20 @@ export interface User {
   phone_number: string | null;
   avatar_url: string | null;
   email: string;
-  role: 'admin' | 'member' | 'super_admin';
+  role: 'admin' | 'member' | 'project_manager' | 'super_admin';
   member_role: string | null;
   status: 'Active' | 'invited' | 'Disabled';
   permissions: string[];
   skills: Skill[];
+  rate_amount: number | null;
+  rate_frequency: 'Hourly' | 'Daily' | 'Weekly' | 'Monthly' | null;
   created_at: string;
   updated_at: string | null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-const USER_SELECT = 'id, name, first_name, last_name, phone_number, avatar_url, email, role, member_role, status, permissions, created_at, updated_at';
+const USER_SELECT = 'id, name, first_name, last_name, phone_number, avatar_url, email, role, member_role, status, permissions, rate_amount, rate_frequency, created_at, updated_at';
 
 /** Attaches skills[] (with experience when migration 027 is applied) to an array of raw user rows */
 async function attachSkills(users: Record<string, unknown>[]): Promise<User[]> {
@@ -110,7 +112,19 @@ export async function findUserById(id: string): Promise<User | null> {
 }
 
 export async function createUser(dto: CreateUserDto): Promise<User> {
-  const { name, email, password, role = 'member', member_role, permissions = [], skill_ids = [], status = 'Active' } = dto;
+  const {
+    email,
+    password,
+    role = 'member',
+    member_role,
+    permissions = [],
+    skill_ids = [],
+    status = 'Active',
+    rate_amount,
+    rate_frequency,
+  } = dto;
+  // Fall back to email as the display name until the user completes onboarding.
+  const name = dto.name?.trim() || email;
 
   // 1. Create Supabase Auth user
   const { data: authData, error: authError } = await supabase.auth.admin.createUser({
@@ -134,11 +148,13 @@ export async function createUser(dto: CreateUserDto): Promise<User> {
     .insert({
       id: userId,
       email,
-      name: name.trim(),
+      name,
       role,
       member_role: member_role?.trim() ?? null,
       permissions,
       status,
+      rate_amount: rate_amount ?? null,
+      rate_frequency: rate_frequency ?? null,
     })
     .select(USER_SELECT)
     .single();
@@ -164,7 +180,7 @@ export async function createUser(dto: CreateUserDto): Promise<User> {
 }
 
 export async function updateUser(id: string, dto: UpdateUserDto): Promise<User | null> {
-  const { name, first_name, last_name, phone_number, avatar_url, password, role, member_role, permissions, skill_ids, status } = dto;
+  const { name, first_name, last_name, phone_number, avatar_url, password, role, member_role, permissions, skill_ids, status, rate_amount, rate_frequency } = dto;
 
   // 1. Update password in Auth if provided
   if (password) {
@@ -174,15 +190,17 @@ export async function updateUser(id: string, dto: UpdateUserDto): Promise<User |
 
   // 2. Build profile update payload
   const patch: Record<string, unknown> = {};
-  if (name !== undefined)         patch.name         = name.trim();
-  if (first_name !== undefined)   patch.first_name   = first_name.trim() || null;
-  if (last_name !== undefined)    patch.last_name    = last_name.trim() || null;
-  if (phone_number !== undefined) patch.phone_number = phone_number.trim() || null;
-  if (avatar_url !== undefined)   patch.avatar_url   = avatar_url || null;
-  if (role !== undefined)         patch.role         = role;
-  if (member_role !== undefined)  patch.member_role  = member_role.trim() || null;
-  if (permissions !== undefined)  patch.permissions  = permissions;
-  if (status !== undefined)       patch.status       = status;
+  if (name !== undefined)           patch.name           = name.trim();
+  if (first_name !== undefined)     patch.first_name     = first_name.trim() || null;
+  if (last_name !== undefined)      patch.last_name      = last_name.trim() || null;
+  if (phone_number !== undefined)   patch.phone_number   = phone_number?.trim() || null;
+  if (avatar_url !== undefined)     patch.avatar_url     = avatar_url || null;
+  if (role !== undefined)           patch.role           = role;
+  if (member_role !== undefined)    patch.member_role    = member_role.trim() || null;
+  if (permissions !== undefined)    patch.permissions    = permissions;
+  if (status !== undefined)         patch.status         = status;
+  if (rate_amount !== undefined)    patch.rate_amount    = rate_amount ?? null;
+  if (rate_frequency !== undefined) patch.rate_frequency = rate_frequency ?? null;
 
   let updatedProfile: Record<string, unknown> | null = null;
 

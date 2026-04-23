@@ -1,6 +1,5 @@
 import { body, param } from 'express-validator';
-
-const MIN_TRANSCRIPT_WORDS = 50;
+import { MIN_TRANSCRIPT_WORDS } from '../../config/constants';
 
 export const createTranscriptValidation = [
   body('title').trim().notEmpty().withMessage('title is required'),

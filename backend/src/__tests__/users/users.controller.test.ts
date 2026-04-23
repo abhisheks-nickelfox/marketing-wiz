@@ -26,14 +26,14 @@ const FAKE_ADMIN_USER = {
   created_at:  '2024-01-01T00:00:00Z',
 };
 
-jest.mock('../../../middleware/auth', () => ({
+jest.mock('../../middleware/auth', () => ({
   authenticate: (req: any, _res: any, next: any) => {
     req.user = FAKE_ADMIN_USER;
     next();
   },
 }));
 
-jest.mock('../../../middleware/rbac', () => ({
+jest.mock('../../middleware/rbac', () => ({
   requireAdmin:      (_req: any, _res: any, next: any) => next(),
   requireMember:     (_req: any, _res: any, next: any) => next(),
   requireSuperAdmin: (_req: any, _res: any, next: any) => next(),
@@ -41,21 +41,21 @@ jest.mock('../../../middleware/rbac', () => ({
 }));
 
 // ─── Mock usersService ───────────────────────────────────────────────────────
-jest.mock('../users.service');
+jest.mock('../../modules/users/users.service');
 
 // ─── Mock email and invite services (fire-and-forget in the controller) ───────
-jest.mock('../../../services/email.service', () => ({
+jest.mock('../../services/email.service', () => ({
   sendInviteEmail:        jest.fn().mockResolvedValue(undefined),
   sendProfileUpdateEmail: jest.fn().mockResolvedValue(undefined),
 }));
 
-jest.mock('../../../services/invite.service', () => ({
+jest.mock('../../services/invite.service', () => ({
   generateInviteToken: jest.fn().mockReturnValue('mock-invite-token'),
   verifyInviteToken:   jest.fn(),
 }));
 
 // Silence logger output.
-jest.mock('../../../config/logger', () => ({
+jest.mock('../../config/logger', () => ({
   __esModule: true,
   default: { info: jest.fn(), error: jest.fn(), warn: jest.fn() },
 }));
@@ -63,8 +63,8 @@ jest.mock('../../../config/logger', () => ({
 // ─── Imports (after all mocks are registered) ────────────────────────────────
 import express from 'express';
 import request from 'supertest';
-import usersRouter from '../users.routes';
-import * as usersService from '../users.service';
+import usersRouter from '../../modules/users/users.routes';
+import * as usersService from '../../modules/users/users.service';
 
 // ─── Shared fixtures ─────────────────────────────────────────────────────────
 

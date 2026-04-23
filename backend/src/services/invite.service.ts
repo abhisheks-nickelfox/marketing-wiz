@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { INVITE_TOKEN_EXPIRY_MS } from '../config/constants';
 
 // ── Invite token — signed with HMAC-SHA256, 24-hour expiry ────────────────────
 // Format: base64url(payload) + '.' + base64url(hmac-sha256-signature)
@@ -6,8 +7,6 @@ import crypto from 'crypto';
 
 const SECRET =
   process.env.SUPABASE_SERVICE_ROLE_KEY ?? 'dev-invite-secret-changeme';
-
-const EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 function b64url(s: string): string {
   return Buffer.from(s, 'utf-8').toString('base64url');
@@ -32,11 +31,11 @@ export interface InviteTokenPayload {
   nonce: string;
 }
 
-/** Generates a signed invite token valid for 24 hours.
+/** Generates a signed invite token valid for INVITE_TOKEN_EXPIRY_MS milliseconds.
  *  `nonce` must have been stored in users.invite_nonce before calling this. */
 export function generateInviteToken(userId: string, email: string, nonce: string): string {
   const payload = b64url(
-    JSON.stringify({ userId, email, exp: Date.now() + EXPIRY_MS, nonce }),
+    JSON.stringify({ userId, email, exp: Date.now() + INVITE_TOKEN_EXPIRY_MS, nonce }),
   );
   return `${payload}.${sign(payload)}`;
 }

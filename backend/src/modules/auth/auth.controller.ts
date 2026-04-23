@@ -7,8 +7,7 @@ import { findUserById } from '../users/users.service';
 import supabase from '../../config/supabase';
 import { generateResetToken, verifyResetToken } from '../../services/password-reset.service';
 import { sendPasswordResetEmail } from '../../services/email.service';
-
-const APP_URL = process.env.FRONTEND_URL?.trim() ?? 'http://localhost:5174';
+import { FRONTEND_URL } from '../../config/constants';
 
 // ─── POST /api/auth/login ─────────────────────────────────────────────────────
 
@@ -81,7 +80,7 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
     }
 
     const token     = generateResetToken(email.toLowerCase().trim());
-    const resetLink = `${APP_URL}/reset-password?token=${token}`;
+    const resetLink = `${FRONTEND_URL}/reset-password?token=${token}`;
 
     await sendPasswordResetEmail(user.email, user.name ?? '', resetLink);
 

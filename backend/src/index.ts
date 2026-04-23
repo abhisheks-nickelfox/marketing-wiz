@@ -144,12 +144,15 @@ cron.schedule('*/15 * * * *', () => {
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
+// Skip listen() when running under Jest so supertest can bind its own port
+// and multiple test files don't clash with EADDRINUSE.
 
-app.listen(PORT, '0.0.0.0', () => {
-  logger.info(`MarketingWiz API running on http://localhost:${PORT}`);
-  logger.info(`Network access: http://172.16.31.158:${PORT}`);
-  void seedSuperAdmin();
-  void runFirefliesSync();
-});
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, '0.0.0.0', () => {
+    logger.info(`MarketingWiz API running on port ${PORT}`);
+    void seedSuperAdmin();
+    void runFirefliesSync();
+  });
+}
 
 export default app;

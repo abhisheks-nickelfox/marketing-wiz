@@ -1,4 +1,12 @@
 import { Task, TaskDraft, TaskType, TaskPriority } from '../types';
+import {
+  AI_MODEL,
+  AI_GENERATE_MAX_TOKENS,
+  AI_REGENERATE_MAX_TOKENS,
+  AI_TEMPERATURE,
+  VALID_TASK_TYPES,
+  VALID_TASK_PRIORITIES,
+} from '../config/constants';
 
 // Lazy-initialise Groq client (OpenAI-compatible) so the import doesn't throw when no key is set
 let openaiClient: import('openai').OpenAI | null = null;
@@ -18,8 +26,9 @@ function getOpenAI(): import('openai').OpenAI | null {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const VALID_TYPES: TaskType[] = ['task', 'design', 'development', 'account_management'];
-const VALID_PRIORITIES: TaskPriority[] = ['low', 'normal', 'high', 'urgent'];
+// Cast to mutable arrays — VALID_TASK_TYPES/VALID_TASK_PRIORITIES are readonly tuples
+const VALID_TYPES: TaskType[] = VALID_TASK_TYPES as unknown as TaskType[];
+const VALID_PRIORITIES: TaskPriority[] = VALID_TASK_PRIORITIES as unknown as TaskPriority[];
 
 function sanitizeTaskDraft(raw: Record<string, unknown>): TaskDraft {
   return {
@@ -100,13 +109,13 @@ export async function generateTickets(
   let text: string;
   try {
     const response = await client.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
+      model: AI_MODEL,
       messages: [
         { role: 'system', content: `${systemPrompt}\n\n${GENERATE_SYSTEM_SUFFIX}` },
         { role: 'user', content: userMessage },
       ],
-      temperature: 0.3,
-      max_tokens: 2000,
+      temperature: AI_TEMPERATURE,
+      max_tokens: AI_GENERATE_MAX_TOKENS,
     });
     text = response.choices[0]?.message?.content ?? '';
   } catch (err) {
@@ -151,13 +160,13 @@ export async function regenerateTicket(
   let text: string;
   try {
     const response = await client.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
+      model: AI_MODEL,
       messages: [
         { role: 'system', content: REGENERATE_SYSTEM_PROMPT },
         { role: 'user', content: userMessage },
       ],
-      temperature: 0.3,
-      max_tokens: 500,
+      temperature: AI_TEMPERATURE,
+      max_tokens: AI_REGENERATE_MAX_TOKENS,
     });
     text = response.choices[0]?.message?.content ?? '';
   } catch (err) {

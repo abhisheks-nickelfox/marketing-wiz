@@ -1,5 +1,10 @@
 import logger from '../../config/logger';
 import supabase from '../../config/supabase';
+import {
+  PAST_DEADLINE_STATUSES,
+  STALE_APPROVED_DAYS,
+  DASHBOARD_RECENT_LIMIT,
+} from '../../config/constants';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -42,16 +47,7 @@ export interface MemberDashboardData {
   recent_tickets: unknown[];
 }
 
-// Active statuses eligible for past-deadline overdue checking.
-// Terminal statuses and 'approved' (handled separately as stale_approved) are excluded.
-const PAST_DEADLINE_STATUSES = [
-  'draft',
-  'in_progress',
-  'revisions',
-  'internal_review',
-  'client_review',
-  'compliance_review',
-] as const;
+// PAST_DEADLINE_STATUSES and STALE_APPROVED_DAYS are imported from config/constants.
 
 // ── Service methods ──────────────────────────────────────────────────────────
 
@@ -74,7 +70,7 @@ export async function getAdminDashboard(): Promise<AdminDashboardData> {
       .select('id, title, call_date, duration_sec, firm_id, participants')
       .eq('archived', false)
       .order('call_date', { ascending: false })
-      .limit(5),
+      .limit(DASHBOARD_RECENT_LIMIT),
   ]);
 
   // Team workload: count of approved tickets per assignee
@@ -142,7 +138,9 @@ export async function getTeamWorkload(): Promise<TeamWorkloadRow[]> {
 
 export async function getOverdueTickets(): Promise<OverdueTicket[]> {
   const today = new Date().toISOString().split('T')[0];
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const staleThreshold = new Date(
+    Date.now() - STALE_APPROVED_DAYS * 24 * 60 * 60 * 1000
+  ).toISOString();
 
   const selectClause =
     'id, title, priority, status, firm_id, project_id, assignee_id, created_at, updated_at, deadline, ' +
@@ -162,13 +160,13 @@ export async function getOverdueTickets(): Promise<OverdueTicket[]> {
     throw new Error(err1.message);
   }
 
-  // Query 2: approved tickets with no deadline untouched for 7+ days
+  // Query 2: approved tickets with no deadline untouched for STALE_APPROVED_DAYS+ days
   const { data: staleApprovedData, error: err2 } = await supabase
     .from('tickets')
     .select(selectClause)
     .eq('status', 'approved')
     .is('deadline', null)
-    .lt('updated_at', sevenDaysAgo)
+    .lt('updated_at', staleThreshold)
     .eq('archived', false)
     .order('updated_at', { ascending: true });
 
@@ -211,7 +209,7 @@ export async function getMemberDashboard(userId: string): Promise<MemberDashboar
     .select('id, title, status, priority, type, updated_at, firm_id, project_id, firms(name), project:projects(name)')
     .eq('assignee_id', userId)
     .order('updated_at', { ascending: false })
-    .limit(5);
+    .limit(DASHBOARD_RECENT_LIMIT);
 
   return {
     total_assigned: assignedResult.count ?? 0,

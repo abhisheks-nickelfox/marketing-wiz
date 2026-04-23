@@ -1,10 +1,10 @@
 import { body, param } from 'express-validator';
-
-// All statuses an admin may set via the transition endpoint
-const ADMIN_TRANSITION_TARGETS = [
-  'draft', 'in_progress', 'resolved', 'internal_review', 'client_review',
-  'compliance_review', 'approved', 'closed', 'revisions',
-];
+import {
+  VALID_STATUSES,
+  VALID_TASK_TYPES,
+  VALID_TASK_PRIORITIES,
+  MAX_TIME_LOG_HOURS,
+} from '../../config/constants';
 
 export const createTaskValidation = [
   body('firm_id')
@@ -14,12 +14,12 @@ export const createTaskValidation = [
     .withMessage('firm_id must be a valid UUID'),
   body('title').trim().notEmpty().withMessage('Title is required'),
   body('type')
-    .isIn(['task', 'design', 'development', 'account_management'])
-    .withMessage('type must be one of: task, design, development, account_management'),
+    .isIn(VALID_TASK_TYPES)
+    .withMessage(`type must be one of: ${VALID_TASK_TYPES.join(', ')}`),
   body('priority')
     .optional()
-    .isIn(['low', 'normal', 'high', 'urgent'])
-    .withMessage('priority must be one of: low, normal, high, urgent'),
+    .isIn(VALID_TASK_PRIORITIES)
+    .withMessage(`priority must be one of: ${VALID_TASK_PRIORITIES.join(', ')}`),
   body('description').optional().isString(),
 ];
 
@@ -29,14 +29,17 @@ export const updateTaskValidation = [
   body('description').optional().isString(),
   body('type')
     .optional()
-    .isIn(['task', 'design', 'development', 'account_management'])
-    .withMessage('Invalid type'),
+    .isIn(VALID_TASK_TYPES)
+    .withMessage(`type must be one of: ${VALID_TASK_TYPES.join(', ')}`),
   body('priority')
     .optional()
-    .isIn(['low', 'normal', 'high', 'urgent'])
-    .withMessage('Invalid priority'),
+    .isIn(VALID_TASK_PRIORITIES)
+    .withMessage(`priority must be one of: ${VALID_TASK_PRIORITIES.join(', ')}`),
   body('change_note').optional().isString(),
-  body('estimated_hours').optional().isFloat({ min: 0, max: 999.99 }).withMessage('Hours must be >= 0'),
+  body('estimated_hours')
+    .optional()
+    .isFloat({ min: 0, max: MAX_TIME_LOG_HOURS })
+    .withMessage(`Hours must be between 0 and ${MAX_TIME_LOG_HOURS}`),
 ];
 
 export const assignApproveValidation = [
@@ -44,8 +47,8 @@ export const assignApproveValidation = [
   body('assignee_id').isUUID('loose').withMessage('assignee_id must be a valid UUID'),
   body('priority')
     .optional()
-    .isIn(['low', 'normal', 'high', 'urgent'])
-    .withMessage('Invalid priority'),
+    .isIn(VALID_TASK_PRIORITIES)
+    .withMessage(`priority must be one of: ${VALID_TASK_PRIORITIES.join(', ')}`),
   body('deadline')
     .optional({ nullable: true })
     .isISO8601()
@@ -64,7 +67,10 @@ export const regenerateValidation = [
 export const resolveValidation = [
   param('id').isUUID('loose').withMessage('Invalid task ID'),
   body('final_comment').optional().isString(),
-  body('estimated_hours').optional().isFloat({ min: 0, max: 999.99 }).withMessage('Hours must be >= 0'),
+  body('estimated_hours')
+    .optional()
+    .isFloat({ min: 0, max: MAX_TIME_LOG_HOURS })
+    .withMessage(`Hours must be between 0 and ${MAX_TIME_LOG_HOURS}`),
 ];
 
 export const deleteTaskValidation = [
@@ -81,7 +87,7 @@ export const archiveTaskValidation = [
 export const transitionTaskValidation = [
   param('id').isUUID('loose').withMessage('Invalid task ID'),
   body('status')
-    .isIn(ADMIN_TRANSITION_TARGETS)
-    .withMessage('Invalid target status'),
+    .isIn(VALID_STATUSES)
+    .withMessage(`status must be one of: ${VALID_STATUSES.join(', ')}`),
   body('change_note').optional().isString(),
 ];
