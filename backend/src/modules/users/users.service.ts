@@ -3,6 +3,7 @@ import supabase from '../../config/supabase';
 import type { CreateUserDto } from './dto/create-user.dto';
 import type { UpdateUserDto } from './dto/update-user.dto';
 import type { Skill } from '../skills/skills.service';
+import { notifyUser } from '../notifications/notifications.service';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -180,7 +181,7 @@ export async function createUser(dto: CreateUserDto): Promise<User> {
 }
 
 export async function updateUser(id: string, dto: UpdateUserDto): Promise<User | null> {
-  const { name, first_name, last_name, phone_number, avatar_url, password, role, member_role, permissions, skill_ids, status, rate_amount, rate_frequency } = dto;
+  const { name, first_name, last_name, phone_number, avatar_url, password, role, member_role, permissions, skill_ids, skills_with_experience, status, rate_amount, rate_frequency } = dto;
 
   // 1. Update password in Auth if provided
   if (password) {
@@ -228,9 +229,19 @@ export async function updateUser(id: string, dto: UpdateUserDto): Promise<User |
 
   if (!updatedProfile) return null;
 
-  // 3. Replace skills if provided
-  if (skill_ids !== undefined) {
+  // 3. Replace skills if provided — skills_with_experience takes priority over skill_ids
+  if (skills_with_experience !== undefined) {
+    await replaceSkillsWithExperience(id, skills_with_experience);
+  } else if (skill_ids !== undefined) {
     await replaceSkills(id, skill_ids);
+  }
+
+  // Notify user of admin-initiated profile or skill changes (fire-and-forget).
+  if (Object.keys(patch).length > 0) {
+    notifyUser(id, 'Profile updated', 'An admin has updated your profile information.').catch(() => {});
+  }
+  if (skills_with_experience !== undefined || skill_ids !== undefined) {
+    notifyUser(id, 'Skills updated', 'Your skill set has been updated by an admin.').catch(() => {});
   }
 
   const [user] = await attachSkills([updatedProfile]);
@@ -240,7 +251,7 @@ export async function updateUser(id: string, dto: UpdateUserDto): Promise<User |
 /** Replaces a user's skill set with the given skills (each may include experience) */
 export async function replaceSkillsWithExperience(
   userId: string,
-  skills: { skill_id: string; experience?: string }[],
+  skills: { skill_id: string; experience?: string | null }[],
 ): Promise<void> {
   const { error: delError } = await supabase
     .from('user_skills')

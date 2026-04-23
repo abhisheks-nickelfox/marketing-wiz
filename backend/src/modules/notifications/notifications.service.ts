@@ -90,9 +90,9 @@ export async function notifyAdmins(message: string, type: string): Promise<void>
   if (!admins || admins.length === 0) return;
 
   const title =
-    type === 'skill_request'
-      ? 'New skill request'
-      : 'Admin notification';
+    type === 'skill_request' ? 'New skill request' :
+    type === 'invite_sent'   ? 'Invite sent' :
+    'Admin notification';
 
   const rows = (admins as { id: string }[]).map((a) => ({
     user_id: a.id,
@@ -104,5 +104,21 @@ export async function notifyAdmins(message: string, type: string): Promise<void>
   const { error: insertErr } = await supabase.from('notifications').insert(rows);
   if (insertErr) {
     logger.error('[notifications.service] notifyAdmins — insert error:', insertErr);
+  }
+}
+
+/**
+ * Creates an inbox notification for a single user.
+ * Fire-and-forget safe — errors are logged but not re-thrown.
+ */
+export async function notifyUser(userId: string, title: string, message: string): Promise<void> {
+  const { error } = await supabase.from('notifications').insert({
+    user_id: userId,
+    title,
+    message,
+    read: false,
+  });
+  if (error) {
+    logger.error('[notifications.service] notifyUser error:', error);
   }
 }

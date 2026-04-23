@@ -34,8 +34,8 @@ export const createUserValidation = [
     .withMessage(`Status must be one of: ${VALID_USER_STATUSES.join(', ')}`),
   body('rate_amount')
     .optional({ nullable: true })
-    .isFloat({ min: 0 })
-    .withMessage('rate_amount must be a non-negative number'),
+    .isFloat({ min: 0, max: 99999999.99 })
+    .withMessage('rate_amount must be a number between 0 and 99,999,999.99'),
   body('rate_frequency')
     .optional({ nullable: true })
     .isIn(['Hourly', 'Daily', 'Weekly', 'Monthly'])
@@ -79,6 +79,26 @@ export const updateUserValidation = [
     .optional()
     .isIn(VALID_USER_STATUSES)
     .withMessage(`Status must be one of: ${VALID_USER_STATUSES.join(', ')}`),
+  body('rate_amount')
+    .optional({ nullable: true })
+    .isFloat({ min: 0, max: 99999999.99 })
+    .withMessage('rate_amount must be a number between 0 and 99,999,999.99'),
+  body('rate_frequency')
+    .optional({ nullable: true })
+    .isIn(['Hourly', 'Daily', 'Weekly', 'Monthly'])
+    .withMessage('rate_frequency must be one of: Hourly, Daily, Weekly, Monthly'),
+  body('skills_with_experience')
+    .optional()
+    .isArray()
+    .withMessage('skills_with_experience must be an array'),
+  body('skills_with_experience.*.skill_id')
+    .optional()
+    .isUUID()
+    .withMessage('Each skill_id must be a valid UUID'),
+  body('skills_with_experience.*.experience')
+    .optional({ nullable: true })
+    .isString()
+    .withMessage('experience must be a string or null'),
 ];
 
 export const uploadAvatarValidation = [

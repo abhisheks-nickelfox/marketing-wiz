@@ -10,7 +10,7 @@ import {
 } from '../users/users.service';
 import { findOrCreateSkillByName } from '../skills/skills.service';
 import { sendWelcomeEmail, sendSkillRequestEmail } from '../../services/email.service';
-import { notifyAdmins } from '../notifications/notifications.service';
+import { notifyAdmins, notifyUser } from '../notifications/notifications.service';
 import type { CompleteOnboardingDto } from './dto/complete-onboarding.dto';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -111,6 +111,11 @@ export async function completeOnboarding(
     avatar_url:   avatar_url || undefined,
     status:       'Active',
   });
+
+  // Fire-and-forget welcome notification — does not block account activation.
+  notifyUser(payload.userId, 'Welcome to the team!', 'Your account has been activated. You can now log in and get started.').catch((e) =>
+    logger.warn('[onboarding.service] notifyUser (welcome) failed:', e),
+  );
 
   // Assign skills if provided — resolve each skill_name to an id (find or create).
   if (skills && skills.length > 0) {

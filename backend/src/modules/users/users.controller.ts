@@ -10,6 +10,7 @@ import { sendAccountDisabledEmail, sendProfileUpdateEmail, sendInviteEmail } fro
 import { generateInviteToken } from '../../services/invite.service';
 import { FRONTEND_URL } from '../../config/constants';
 import supabase from '../../config/supabase';
+import { notifyAdmins } from '../notifications/notifications.service';
 
 // ─── GET /api/users ───────────────────────────────────────────────────────────
 
@@ -66,6 +67,8 @@ export async function createUser(req: AuthenticatedRequest, res: Response): Prom
       sendInviteEmail(user.email, user.name, inviteLink).catch((err) => {
         logger.error('[users.controller] invite email failed:', err);
       });
+
+      notifyAdmins(`Invite sent to ${user.name} (${user.email})`, 'invite_sent').catch(() => {});
     }
 
     res.status(201).json({ data: user });
@@ -188,6 +191,8 @@ export async function resendInvite(req: AuthenticatedRequest, res: Response): Pr
     logger.info(`[invite] Resending onboarding link for ${user.email}:\n  ${inviteLink}`);
 
     await sendInviteEmail(user.email, user.name, inviteLink);
+
+    notifyAdmins(`Invite resent to ${user.name} (${user.email})`, 'invite_sent').catch(() => {});
 
     res.json({ message: 'Invite resent successfully' });
   } catch (err) {
