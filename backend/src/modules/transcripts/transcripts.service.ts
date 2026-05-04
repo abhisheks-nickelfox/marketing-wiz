@@ -1,10 +1,10 @@
 import logger from '../../config/logger';
 import crypto from 'crypto';
-import supabase from '../../config/supabase';
+import { Transcript, Prompt, ProcessingSession, Ticket } from '../../models';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-export interface Transcript {
+export interface TranscriptRow {
   id: string;
   fireflies_id: string;
   title: string;
@@ -33,30 +33,27 @@ export interface ProcessTranscriptDto {
 
 // ── Service methods ──────────────────────────────────────────────────────────
 
-export async function findAllTranscripts(archived?: string): Promise<Transcript[]> {
-  let query = supabase
-    .from('transcripts')
-    .select('id, fireflies_id, title, call_date, duration_sec, participants, firm_id, archived, created_at')
-    .order('call_date', { ascending: false });
+export async function findAllTranscripts(archived?: string): Promise<TranscriptRow[]> {
+  const where: Record<string, unknown> = {};
 
   if (archived === 'true') {
-    query = query.eq('archived', true);
+    where.archived = true;
   } else if (archived === 'false' || archived === undefined) {
-    query = query.eq('archived', false);
+    where.archived = false;
   }
-  // archived=all → no filter applied
+  // archived=all → no filter
 
-  const { data, error } = await query;
+  const rows = await Transcript.findAll({
+    where,
+    attributes: ['id', 'fireflies_id', 'title', 'call_date', 'duration_sec', 'participants', 'firm_id', 'archived', 'created_at'],
+    order: [['call_date', 'DESC']],
+    raw: true,
+  });
 
-  if (error) {
-    logger.error('[transcripts.service] findAllTranscripts error:', error);
-    throw new Error(error.message);
-  }
-
-  return (data ?? []) as Transcript[];
+  return rows as unknown as TranscriptRow[];
 }
 
-export async function createTranscript(dto: CreateTranscriptDto): Promise<Transcript> {
+export async function createTranscript(dto: CreateTranscriptDto): Promise<TranscriptRow> {
   const {
     title,
     call_date,
@@ -66,85 +63,56 @@ export async function createTranscript(dto: CreateTranscriptDto): Promise<Transc
     firm_id,
   } = dto;
 
-  // Coerce call_date to a full ISO timestamp so TIMESTAMPTZ accepts it
+  // Coerce call_date to a full ISO timestamp
   const callDateIso = call_date.includes('T') ? call_date : `${call_date}T00:00:00.000Z`;
   const fireflies_id = `manual_${crypto.randomUUID()}`;
 
-  const { data: transcript, error } = await supabase
-    .from('transcripts')
-    .insert({
-      fireflies_id,
-      title: title.trim(),
-      call_date: callDateIso,
-      duration_sec: Number(duration_sec) || 0,
-      participants: Array.isArray(participants) ? participants : [],
-      raw_transcript: raw_transcript.trim(),
-      ...(firm_id && firm_id.trim() ? { firm_id: firm_id.trim() } : {}),
-      archived: false,
-    })
-    .select()
-    .single();
+  const row = await Transcript.create({
+    fireflies_id,
+    title:          title.trim(),
+    call_date:      callDateIso,
+    duration_sec:   Number(duration_sec) || 0,
+    participants:   Array.isArray(participants) ? participants : [],
+    raw_transcript: raw_transcript.trim(),
+    firm_id:        firm_id?.trim() || null,
+    archived:       false,
+  });
 
-  if (error) {
-    logger.error('[transcripts.service] createTranscript error:', error);
-    throw new Error(error.message);
-  }
-
-  return transcript as Transcript;
+  return row.toJSON() as TranscriptRow;
 }
 
-export async function toggleTranscriptArchive(id: string): Promise<Transcript | null> {
-  const { data: transcript, error: fetchError } = await supabase
-    .from('transcripts')
-    .select('id, archived')
-    .eq('id', id)
-    .single();
+export async function toggleTranscriptArchive(id: string): Promise<TranscriptRow | null> {
+  const transcript = await Transcript.findByPk(id, {
+    attributes: ['id', 'archived'],
+    raw: true,
+  });
 
-  if (fetchError || !transcript) return null;
+  if (!transcript) return null;
 
-  const { data, error } = await supabase
-    .from('transcripts')
-    .update({ archived: !(transcript as { archived: boolean }).archived })
-    .eq('id', id)
-    .select()
-    .single();
+  const current = (transcript as unknown as { archived: boolean }).archived;
+  await Transcript.update({ archived: !current }, { where: { id } });
 
-  if (error) {
-    logger.error('[transcripts.service] toggleTranscriptArchive error:', error);
-    throw new Error(error.message);
-  }
-
-  return data as Transcript;
+  const updated = await Transcript.findByPk(id, { raw: true });
+  return updated ? (updated as unknown as TranscriptRow) : null;
 }
 
 export async function findTranscriptForProcessing(id: string): Promise<{
   transcript: { id: string; raw_transcript: string } | null;
   wordCount: number;
 }> {
-  const { data: transcript, error } = await supabase
-    .from('transcripts')
-    .select('*')
-    .eq('id', id)
-    .single();
+  const transcript = await Transcript.findByPk(id, { raw: true });
 
-  if (error || !transcript) return { transcript: null, wordCount: 0 };
+  if (!transcript) return { transcript: null, wordCount: 0 };
 
-  const rawText = (transcript.raw_transcript as string) ?? '';
+  const rawText = (transcript as unknown as { raw_transcript: string }).raw_transcript ?? '';
   const wordCount = rawText.trim().split(/\s+/).filter(Boolean).length;
 
-  return { transcript: transcript as { id: string; raw_transcript: string }, wordCount };
+  return { transcript: transcript as unknown as { id: string; raw_transcript: string }, wordCount };
 }
 
 export async function findPromptById(promptId: string): Promise<{ system_prompt: string } | null> {
-  const { data: prompt, error } = await supabase
-    .from('prompts')
-    .select('*')
-    .eq('id', promptId)
-    .single();
-
-  if (error || !prompt) return null;
-
-  return prompt as { system_prompt: string };
+  const prompt = await Prompt.findByPk(promptId, { raw: true });
+  return prompt ? (prompt as unknown as { system_prompt: string }) : null;
 }
 
 export async function createProcessingSession(
@@ -152,62 +120,54 @@ export async function createProcessingSession(
   firmId: string,
   promptId: string,
   textNotes: string,
-  ticketDrafts: unknown[],
-  createdBy: string
+  taskDrafts: unknown[],
+  createdBy: string,
 ): Promise<{ id: string } | null> {
-  const { data: session, error } = await supabase
-    .from('processing_sessions')
-    .insert({
-      transcript_id: transcriptId,
-      firm_id: firmId,
-      prompt_id: promptId,
-      text_notes: textNotes,
-      ai_raw_output: { tickets: ticketDrafts },
-      created_by: createdBy,
-    })
-    .select()
-    .single();
+  try {
+    const session = await ProcessingSession.create({
+      transcript_id:  transcriptId,
+      firm_id:        firmId,
+      prompt_id:      promptId,
+      text_notes:     textNotes,
+      ai_raw_output:  { tasks: taskDrafts },
+      created_by:     createdBy,
+    });
 
-  if (error) {
-    logger.error('[transcripts.service] createProcessingSession error:', error);
-    throw new Error(error.message);
+    return { id: session.id };
+  } catch (err) {
+    logger.error('[transcripts.service] createProcessingSession error:', err);
+    throw err;
   }
-
-  return session as { id: string };
 }
 
 export async function insertTicketsFromDrafts(
   sessionId: string,
   firmId: string,
-  ticketDrafts: Array<{
+  taskDrafts: Array<{
     title: string;
     description: string;
     type: string;
     priority: string;
-  }>
+  }>,
 ): Promise<unknown[]> {
-  const ticketRows = ticketDrafts.map((draft) => ({
-    session_id: sessionId,
-    firm_id: firmId,
-    title: draft.title,
-    description: draft.description,
-    type: draft.type,
-    priority: draft.priority,
-    status: 'draft',
-    ai_generated: true,
-    edited: false,
-    change_note: '',
+  const taskRows = taskDrafts.map((draft) => ({
+    session_id:    sessionId,
+    firm_id:       firmId,
+    title:         draft.title,
+    description:   draft.description,
+    type:          draft.type,
+    priority:      draft.priority,
+    status:        'to_do',
+    ai_generated:  true,
+    edited:        false,
+    change_note:   '',
   }));
 
-  const { data: tickets, error } = await supabase
-    .from('tickets')
-    .insert(ticketRows)
-    .select();
-
-  if (error) {
-    logger.error('[transcripts.service] insertTicketsFromDrafts error:', error);
-    throw new Error(error.message);
+  try {
+    const tickets = await Ticket.bulkCreate(taskRows, { returning: true });
+    return tickets.map((t) => t.toJSON());
+  } catch (err) {
+    logger.error('[transcripts.service] insertTicketsFromDrafts error:', err);
+    throw err;
   }
-
-  return tickets ?? [];
 }

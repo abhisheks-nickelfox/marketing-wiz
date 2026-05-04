@@ -5,7 +5,7 @@ import { RESET_TOKEN_EXPIRY_MS } from '../config/constants';
 // Self-validating: no DB storage needed. Format same as invite tokens.
 
 const SECRET =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ?? 'dev-reset-secret-changeme';
+  process.env.JWT_SECRET ?? 'dev-reset-secret-changeme';
 
 function b64url(s: string): string {
   return Buffer.from(s, 'utf-8').toString('base64url');

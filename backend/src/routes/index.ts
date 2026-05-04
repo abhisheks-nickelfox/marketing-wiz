@@ -12,6 +12,8 @@ import projectsRouter from '../modules/projects/projects.routes';
 import teamRouter from '../modules/team/team.routes';
 import transcriptsRouter from '../modules/transcripts/transcripts.routes';
 import tasksRouter from '../modules/tasks/tasks.routes';
+import orgSettingsRouter from '../modules/org-settings/org-settings.routes';
+import taskTypesRouter from '../modules/task-types/task-types.routes';
 
 const router = Router();
 
@@ -32,5 +34,7 @@ router.use('/projects', projectsRouter);
 router.use('/team', teamRouter);
 router.use('/transcripts', transcriptsRouter);
 router.use('/tasks', tasksRouter);
+router.use('/org-settings', orgSettingsRouter);
+router.use('/task-types',  taskTypesRouter);
 
 export default router;

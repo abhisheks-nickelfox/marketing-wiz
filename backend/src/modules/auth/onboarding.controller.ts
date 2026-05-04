@@ -43,7 +43,7 @@ export async function completeOnboarding(
     res.json({ data: result });
   } catch (err) {
     const e = err as Error & { statusCode?: number };
-    res.status(e.statusCode ?? 400).json({ error: e.message });
+    res.status(e.statusCode ?? 500).json({ error: e.message });
   }
 }
 

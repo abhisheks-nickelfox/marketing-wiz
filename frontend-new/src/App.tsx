@@ -17,6 +17,8 @@ import InboxPage from './pages/InboxPage';
 import TranscriptsFlowPage from './pages/TranscriptsFlowPage';
 import TranscriptTasksPage from './pages/TranscriptTasksPage';
 import FirmDetailPage from './pages/FirmDetailPage';
+import AddFirmPage from './pages/AddFirmPage';
+import EditFirmPage from './pages/EditFirmPage';
 import EditUserSettingsPage from './pages/EditUserSettingsPage';
 
 // ── Redirects to /login when no token is present ─────────────────────────────
@@ -87,6 +89,8 @@ export default function App() {
               <Route path="/settings"                    element={<SettingsPage />} />
               <Route path="/transcripts"                 element={<TranscriptsFlowPage />} />
               <Route path="/transcripts/:id/tasks"       element={<TranscriptTasksPage />} />
+              <Route path="/firms/new"                   element={<AddFirmPage />} />
+              <Route path="/firms/:id/edit"              element={<EditFirmPage />} />
               <Route path="/firms/:id"                   element={<FirmDetailPage />} />
             </Route>
           </Route>

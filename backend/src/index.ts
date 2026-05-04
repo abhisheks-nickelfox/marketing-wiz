@@ -1,11 +1,16 @@
+import 'reflect-metadata';           // must be the very first import
 import logger from './config/logger';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import cron from 'node-cron';
+import bcrypt from 'bcrypt';
 import routes from './routes/index';
 import { syncTranscripts } from './services/fireflies.service';
-import supabase from './config/supabase';
+import { connectDB } from './config/database';
+// Import models index to register all models and associations
+import './models/index';
+import { User } from './models';
 
 dotenv.config();
 
@@ -16,20 +21,24 @@ const PORT = parseInt(process.env.PORT ?? '3000', 10);
 
 const allowedOrigins = [
   'http://localhost:5173',
+  'http://172.16.30.233:5173',
   'http://3.27.124.90:5173',
   'http://3.27.124.90',
+  'http://app.aiwealthconnections.com',
+  'https://app.aiwealthconnections.com',
   process.env.FRONTEND_URL,
 ].filter(Boolean) as string[];
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) callback(null, true);
-      else callback(new Error('Not allowed by CORS'));
-    },
-    credentials: true,
-  })
-);
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) callback(null, true);
+    else callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+};
+
+app.options('*', cors(corsOptions));
+app.use(cors(corsOptions));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -51,78 +60,46 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   res.status(500).json({ error: 'Internal server error' });
 });
 
-// ─── Super-admin seed ────────────────────────────────────────────────────────
+// ─── Admin seed ───────────────────────────────────────────────────────────────
 //
-// On startup, if no super_admin exists and SUPER_ADMIN_* env vars are set,
-// create the bootstrap super-admin automatically. Safe to run on every restart
-// — the check short-circuits if a super_admin already exists in public.users.
+// On startup, if no user exists for the configured email, create the bootstrap
+// admin account with a bcrypt-hashed password.
+// Safe to run on every restart — short-circuits if the email already exists.
 
-async function seedSuperAdmin(): Promise<void> {
-  const email = process.env.SUPER_ADMIN_EMAIL?.trim();
+async function seedAdmin(): Promise<void> {
+  const email    = process.env.SUPER_ADMIN_EMAIL?.trim();
   const password = process.env.SUPER_ADMIN_PASSWORD?.trim();
-  const name = process.env.SUPER_ADMIN_NAME?.trim() ?? 'Super Admin';
+  const name     = process.env.SUPER_ADMIN_NAME?.trim() ?? 'Admin';
 
-  if (!email || !password) return; // env vars not configured — skip
+  if (!email || !password) return; // not configured — skip
 
   try {
-    // Check by email — avoids false negatives when auth user exists but profile doesn't
-    const { data: existing } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', email)
-      .maybeSingle();
-
-    if (existing) {
-      logger.info('[seed] Super admin already exists — skipping super-admin seed.');
-      return;
-    }
-
-    // Try to create the Supabase Auth account
-    let userId: string;
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
+    const existing = await User.findOne({
+      where: { email: email.toLowerCase() },
+      attributes: ['id'],
+      raw: true,
     });
 
-    if (authError) {
-      // Auth user may already exist (orphaned from a failed previous seed run).
-      // Find it by listing users so we can still create the missing profile row.
-      const { data: { users: authUsers } } = await supabase.auth.admin.listUsers();
-      const orphan = authUsers.find((u) => u.email === email);
-      if (!orphan) {
-        logger.error('[seed] Failed to create super admin auth user and no orphan found:', authError.message);
-        return;
-      }
-      userId = orphan.id;
-      logger.info('[seed] Found orphaned auth user for super admin — creating missing profile row.');
-    } else {
-      userId = authData.user.id;
-    }
-
-    // Insert the super_admin profile row
-    const { error: profileError } = await supabase
-      .from('users')
-      .insert({ id: userId, email, name, role: 'super_admin', permissions: [] });
-
-    if (profileError) {
-      logger.error('[seed] Failed to insert super admin profile:', profileError.message);
+    if (existing) {
+      logger.info('[seed] Admin already exists — skipping admin seed.');
       return;
     }
 
-    logger.info(`[seed] Super admin created — email: ${email}`);
+    await User.create({
+      email: email.toLowerCase(),
+      name,
+      role:         'admin',
+      permissions:  [],
+      status:       'Active',
+    });
+
+    logger.info(`[seed] Admin created — email: ${email}`);
   } catch (err) {
-    logger.error('[seed] seedSuperAdmin threw unexpectedly:', err);
+    logger.error('[seed] seedAdmin threw unexpectedly:', err);
   }
 }
 
 // ─── Fireflies sync cron (every 15 minutes) ──────────────────────────────────
-//
-// Runs immediately on startup so the DB is never stale after a cold start,
-// then repeats every 15 minutes while the process is alive.
-// If FIREFLIES_API_KEY is absent, syncTranscripts() returns early with a warning
-// (no-op) — this is intentional so the cron causes no noise in dev environments
-// that don't have the key configured.
 
 async function runFirefliesSync(): Promise<void> {
   logger.info('[cron] Starting Fireflies sync…');
@@ -130,29 +107,32 @@ async function runFirefliesSync(): Promise<void> {
     const result = await syncTranscripts();
     logger.info(
       `[cron] Fireflies sync complete — synced: ${result.synced}, created: ${result.created}, updated: ${result.updated}` +
-      (result.errors.length > 0 ? `, errors: ${result.errors.join('; ')}` : '')
+      (result.errors.length > 0 ? `, errors: ${result.errors.join('; ')}` : ''),
     );
   } catch (err) {
-    // Catch-all so an unexpected throw never kills the cron task itself
     logger.error('[cron] Fireflies sync threw unexpectedly:', err);
   }
 }
 
-// Schedule: every 15 minutes — "*/15 * * * *"
 cron.schedule('*/15 * * * *', () => {
   void runFirefliesSync();
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
-// Skip listen() when running under Jest so supertest can bind its own port
-// and multiple test files don't clash with EADDRINUSE.
 
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, '0.0.0.0', () => {
-    logger.info(`MarketingWiz API running on port ${PORT}`);
-    void seedSuperAdmin();
-    void runFirefliesSync();
-  });
+  connectDB()
+    .then(() => {
+      app.listen(PORT, '0.0.0.0', () => {
+        logger.info(`MarketingWiz API running on port ${PORT}`);
+        void seedAdmin();
+        void runFirefliesSync();
+      });
+    })
+    .catch((err) => {
+      logger.error('[startup] Failed to connect to database:', err);
+      process.exit(1);
+    });
 }
 
 export default app;

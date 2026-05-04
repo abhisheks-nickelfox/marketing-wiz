@@ -1,9 +1,9 @@
 import logger from '../../config/logger';
-import supabase from '../../config/supabase';
+import { Prompt } from '../../models';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-export interface Prompt {
+export interface PromptRow {
   id: string;
   name: string;
   type: 'pm' | 'campaigns' | 'content';
@@ -31,49 +31,25 @@ export interface UpdatePromptDto {
 
 // ── Service methods ──────────────────────────────────────────────────────────
 
-export async function findAllPrompts(): Promise<Prompt[]> {
-  const { data, error } = await supabase
-    .from('prompts')
-    .select('*')
-    .order('created_at', { ascending: false });
+export async function findAllPrompts(): Promise<PromptRow[]> {
+  const rows = await Prompt.findAll({
+    order: [['created_at', 'DESC']],
+    raw: true,
+  });
 
-  if (error) {
-    logger.error('[prompts.service] findAllPrompts error:', error);
-    throw new Error(error.message);
-  }
-
-  return (data ?? []) as Prompt[];
+  return rows as unknown as PromptRow[];
 }
 
-export async function createPrompt(dto: CreatePromptDto): Promise<Prompt> {
+export async function createPrompt(dto: CreatePromptDto): Promise<PromptRow> {
   const { name, type, system_prompt, firm_id = null, is_active = true } = dto;
 
-  const { data, error } = await supabase
-    .from('prompts')
-    .insert({ name, type, system_prompt, firm_id, is_active })
-    .select()
-    .single();
-
-  if (error) {
-    logger.error('[prompts.service] createPrompt error:', error);
-    throw new Error(error.message);
-  }
-
-  return data as Prompt;
+  const row = await Prompt.create({ name, type, system_prompt, firm_id, is_active });
+  return row.toJSON() as PromptRow;
 }
 
-export async function updatePrompt(id: string, updates: UpdatePromptDto): Promise<Prompt | null> {
-  const { data, error } = await supabase
-    .from('prompts')
-    .update(updates as Record<string, unknown>)
-    .eq('id', id)
-    .select()
-    .single();
+export async function updatePrompt(id: string, updates: UpdatePromptDto): Promise<PromptRow | null> {
+  await Prompt.update(updates as Record<string, unknown>, { where: { id } });
 
-  if (error) {
-    logger.error('[prompts.service] updatePrompt error:', error);
-    throw new Error(error.message);
-  }
-
-  return data as Prompt | null;
+  const row = await Prompt.findByPk(id, { raw: true });
+  return row ? (row as unknown as PromptRow) : null;
 }

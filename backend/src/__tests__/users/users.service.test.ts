@@ -1,111 +1,38 @@
 /**
  * Unit tests for users.service.ts
  *
- * All Supabase I/O is mocked via jest.mock so these tests run without any
- * network connections.  The strategy:
- *
- *   - supabase.from() returns a FRESH independent chain each time it is
- *     called (via mockImplementation). This avoids state-bleed when the
- *     service calls from() multiple times in one function (e.g. profile
- *     insert then user_skills insert in createUser).
- *   - Each test pops the pre-queued chain from `chainQueue` via
- *     `queueChain(chain)` before calling the service method.  The first
- *     call to from() gets chains[0], the second gets chains[1], etc.
- *   - Terminal methods (order, single, maybeSingle, eq when it is the
- *     terminal call, in, insert) are resolved per-chain via
- *     `mockResolvedValueOnce` inside each test.
+ * Sequelize models are mocked so these tests run without any DB connections.
  */
 
-// ─── Set env vars before any module under test imports them ──────────────────
-process.env.SUPABASE_URL = 'https://test.supabase.co';
-process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-key-test';
-process.env.SUPABASE_ANON_KEY = 'anon-key-test';
+process.env.JWT_SECRET = 'test-jwt-secret-for-unit-tests';
 
-// ─── Chain factory ────────────────────────────────────────────────────────────
+// ── Mocks ─────────────────────────────────────────────────────────────────────
 
-type MockChain = {
-  select:      jest.Mock;
-  insert:      jest.Mock;
-  update:      jest.Mock;
-  delete:      jest.Mock;
-  eq:          jest.Mock;
-  in:          jest.Mock;
-  order:       jest.Mock;
-  maybeSingle: jest.Mock;
-  single:      jest.Mock;
-};
-
-/** Returns a new chainable Supabase mock where every method returns `this`. */
-const buildChain = (): MockChain => {
-  const chain = {} as MockChain;
-  const methods: Array<keyof MockChain> = [
-    'select', 'insert', 'update', 'delete', 'eq', 'in', 'order', 'maybeSingle', 'single',
-  ];
-  methods.forEach((m) => {
-    chain[m] = jest.fn().mockReturnValue(chain);
-  });
-  return chain;
-};
-
-// ─── Queue that from() pops from, one chain per call ─────────────────────────
-
-let chainQueue: MockChain[] = [];
-
-/** Push chains to be returned by successive from() calls within one test. */
-function queueChain(...chains: MockChain[]) {
-  chainQueue.push(...chains);
-}
-
-// Mock the auth.admin helpers.
-const mockCreateAuthUser = jest.fn();
-const mockDeleteAuthUser = jest.fn();
-const mockUpdateAuthUser = jest.fn();
-
-// ─── Mock supabase module ─────────────────────────────────────────────────────
-jest.mock('../../config/supabase', () => ({
+jest.mock('../../models', () => require('../helpers/mockModels').mockModelsModule());
+jest.mock('../../models/index', () => require('../helpers/mockModels').mockModelsModule());
+jest.mock('../../config/database', () => ({
   __esModule: true,
-  default: {
-    from: jest.fn(),   // implementation set in beforeEach
-    auth: {
-      admin: {
-        createUser:     mockCreateAuthUser,
-        deleteUser:     mockDeleteAuthUser,
-        updateUserById: mockUpdateAuthUser,
-      },
-    },
-  },
-  anonClient: {},
+  default: { authenticate: jest.fn(), sync: jest.fn() },
+  connectDB: jest.fn().mockResolvedValue(undefined),
 }));
-
-// Silence winston output.
 jest.mock('../../config/logger', () => ({
   __esModule: true,
   default: { info: jest.fn(), error: jest.fn(), warn: jest.fn() },
 }));
+jest.mock('../../modules/notifications/notifications.service', () => ({
+  notifyUser: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock('../../services/email.service', () => ({
+  sendInviteEmail:         jest.fn().mockResolvedValue(undefined),
+  sendProfileUpdateEmail:  jest.fn().mockResolvedValue(undefined),
+}));
 
-// ─── Imports (after mocks) ────────────────────────────────────────────────────
-import supabase from '../../config/supabase';
+// ── Imports (after mocks) ─────────────────────────────────────────────────────
+
+import { MockUser, MockUserSkill, MockSkill, resetAllMocks } from '../helpers/mockModels';
 import * as usersService from '../../modules/users/users.service';
 
-// ─── Global beforeEach: wire from() to pop from chainQueue ───────────────────
-
-beforeEach(() => {
-  chainQueue = [];
-  mockCreateAuthUser.mockReset();
-  mockDeleteAuthUser.mockReset();
-  mockUpdateAuthUser.mockReset();
-
-  (supabase.from as jest.Mock).mockImplementation(() => {
-    if (chainQueue.length === 0) {
-      // Fallback — return a neutral chain so tests that don't pre-queue still
-      // get a valid object (avoids "undefined is not a function" crashes).
-      return buildChain();
-    }
-    return chainQueue.shift()!;
-  });
-});
-
-// ─── Shared fixtures ──────────────────────────────────────────────────────────
+// ── Fixtures ──────────────────────────────────────────────────────────────────
 
 const MOCK_USER_ROW = {
   id:           'user-uuid-1',
@@ -119,44 +46,42 @@ const MOCK_USER_ROW = {
   member_role:  null,
   status:       'Active' as const,
   permissions:  [],
+  invite_nonce: null,
   created_at:   '2024-01-01T00:00:00Z',
   updated_at:   null,
+  toJSON:       () => MOCK_USER_ROW,
 };
 
-const MOCK_SKILL = {
-  id:         'skill-uuid-1',
-  name:       'SEO',
-  category:   'Marketing',
-  created_at: '2024-01-01T00:00:00Z',
+const MOCK_SKILL_ROW = {
+  user_id:    'user-uuid-1',
+  skill_id:   'skill-uuid-1',
+  experience: '2 years',
+  skill: {
+    id:          'skill-uuid-1',
+    name:        'SEO',
+    category:    'Marketing',
+    description: null,
+    color:       null,
+    created_at:  '2024-01-01T00:00:00Z',
+  },
 };
 
-// ─── findAllUsers ──────────────────────────────────────────────────────────────
+beforeEach(() => resetAllMocks());
+
+// ── findAllUsers ──────────────────────────────────────────────────────────────
 
 describe('findAllUsers', () => {
-  it('returns an empty array when the users table is empty', async () => {
-    // from('users') → order() resolves []
-    const usersChain = buildChain();
-    usersChain.order.mockResolvedValueOnce({ data: [], error: null });
-    queueChain(usersChain);
+  it('returns empty array when no users exist', async () => {
+    MockUser.findAll.mockResolvedValueOnce([]);
 
     const result = await usersService.findAllUsers();
 
     expect(result).toEqual([]);
   });
 
-  it('returns users with their skills attached', async () => {
-    // Call 1: from('users') → .select().order()
-    const usersChain = buildChain();
-    usersChain.order.mockResolvedValueOnce({ data: [MOCK_USER_ROW], error: null });
-
-    // Call 2: from('user_skills') → .select().in()
-    const skillsChain = buildChain();
-    skillsChain.in.mockResolvedValueOnce({
-      data: [{ user_id: 'user-uuid-1', skills: MOCK_SKILL }],
-      error: null,
-    });
-
-    queueChain(usersChain, skillsChain);
+  it('returns users with skills attached', async () => {
+    MockUser.findAll.mockResolvedValueOnce([MOCK_USER_ROW]);
+    MockUserSkill.findAll.mockResolvedValueOnce([MOCK_SKILL_ROW]);
 
     const result = await usersService.findAllUsers();
 
@@ -165,28 +90,19 @@ describe('findAllUsers', () => {
     expect(result[0].skills[0].name).toBe('SEO');
   });
 
-  it('throws when the Supabase query returns an error', async () => {
-    const usersChain = buildChain();
-    usersChain.order.mockResolvedValueOnce({ data: null, error: { message: 'DB error' } });
-    queueChain(usersChain);
+  it('throws when DB query fails', async () => {
+    MockUser.findAll.mockRejectedValueOnce(new Error('DB error'));
 
     await expect(usersService.findAllUsers()).rejects.toThrow('DB error');
   });
 });
 
-// ─── findUserById ─────────────────────────────────────────────────────────────
+// ── findUserById ──────────────────────────────────────────────────────────────
 
 describe('findUserById', () => {
   it('returns the user when found', async () => {
-    // from('users') → .select().eq().maybeSingle()
-    const usersChain = buildChain();
-    usersChain.maybeSingle.mockResolvedValueOnce({ data: MOCK_USER_ROW, error: null });
-
-    // from('user_skills') → .select().in()
-    const skillsChain = buildChain();
-    skillsChain.in.mockResolvedValueOnce({ data: [], error: null });
-
-    queueChain(usersChain, skillsChain);
+    MockUser.findByPk.mockResolvedValueOnce(MOCK_USER_ROW);
+    MockUserSkill.findAll.mockResolvedValueOnce([]);
 
     const user = await usersService.findUserById('user-uuid-1');
 
@@ -195,29 +111,27 @@ describe('findUserById', () => {
     expect(user!.email).toBe('alice@example.com');
   });
 
-  it('returns null when the user does not exist', async () => {
-    const usersChain = buildChain();
-    usersChain.maybeSingle.mockResolvedValueOnce({ data: null, error: null });
-    queueChain(usersChain);
+  it('returns null when user does not exist', async () => {
+    MockUser.findByPk.mockResolvedValueOnce(null);
 
     const user = await usersService.findUserById('nonexistent-id');
 
     expect(user).toBeNull();
   });
 
-  it('throws when Supabase returns an error', async () => {
-    const usersChain = buildChain();
-    usersChain.maybeSingle.mockResolvedValueOnce({
-      data: null,
-      error: { message: 'Connection timeout' },
-    });
-    queueChain(usersChain);
+  it('attaches skills when user has skills', async () => {
+    MockUser.findByPk.mockResolvedValueOnce(MOCK_USER_ROW);
+    MockUserSkill.findAll.mockResolvedValueOnce([MOCK_SKILL_ROW]);
 
-    await expect(usersService.findUserById('user-uuid-1')).rejects.toThrow('Connection timeout');
+    const user = await usersService.findUserById('user-uuid-1');
+
+    expect(user!.skills).toHaveLength(1);
+    expect(user!.skills[0].name).toBe('SEO');
+    expect(user!.skills[0].experience).toBe('2 years');
   });
 });
 
-// ─── createUser ───────────────────────────────────────────────────────────────
+// ── createUser ────────────────────────────────────────────────────────────────
 
 describe('createUser', () => {
   const CREATE_DTO = {
@@ -227,119 +141,59 @@ describe('createUser', () => {
     role:     'member' as const,
   };
 
-  it('creates auth user + profile and returns a user with empty skills', async () => {
-    mockCreateAuthUser.mockResolvedValueOnce({
-      data: { user: { id: 'new-user-uuid' } },
-      error: null,
+  it('creates a user and returns with empty skills', async () => {
+    MockUser.findOne.mockResolvedValueOnce(null); // no duplicate
+    MockUser.create.mockResolvedValueOnce({
+      ...MOCK_USER_ROW,
+      id: 'new-user-uuid',
+      email: 'bob@example.com',
+      name: 'Bob Member',
+      toJSON: () => ({ ...MOCK_USER_ROW, id: 'new-user-uuid', email: 'bob@example.com' }),
     });
-
-    // from('users').insert().select().single()
-    const insertChain = buildChain();
-    insertChain.single.mockResolvedValueOnce({
-      data: { ...MOCK_USER_ROW, id: 'new-user-uuid', email: 'bob@example.com', name: 'Bob Member' },
-      error: null,
-    });
-
-    // from('user_skills').select().in()  — attachSkills called with 1 user, no skills
-    const skillsChain = buildChain();
-    skillsChain.in.mockResolvedValueOnce({ data: [], error: null });
-
-    queueChain(insertChain, skillsChain);
+    MockUserSkill.findAll.mockResolvedValueOnce([]);
 
     const user = await usersService.createUser(CREATE_DTO);
 
-    expect(mockCreateAuthUser).toHaveBeenCalledWith({
-      email:         'bob@example.com',
-      password:      'secret123',
-      email_confirm: true,
-    });
+    expect(MockUser.create).toHaveBeenCalled();
     expect(user.email).toBe('bob@example.com');
     expect(user.skills).toEqual([]);
   });
 
+  it('throws 400 when email already exists', async () => {
+    MockUser.findOne.mockResolvedValueOnce(MOCK_USER_ROW); // duplicate found
+
+    await expect(usersService.createUser(CREATE_DTO)).rejects.toMatchObject({
+      message:    'A user with this email already exists',
+      statusCode: 400,
+    });
+    expect(MockUser.create).not.toHaveBeenCalled();
+  });
+
   it('assigns skills when skill_ids are provided', async () => {
-    mockCreateAuthUser.mockResolvedValueOnce({
-      data: { user: { id: 'new-user-uuid' } },
-      error: null,
+    MockUser.findOne.mockResolvedValueOnce(null);
+    MockUser.create.mockResolvedValueOnce({
+      ...MOCK_USER_ROW,
+      toJSON: () => MOCK_USER_ROW,
     });
-
-    // from('users').insert().select().single()
-    const insertChain = buildChain();
-    insertChain.single.mockResolvedValueOnce({
-      data: { ...MOCK_USER_ROW, id: 'new-user-uuid' },
-      error: null,
-    });
-
-    // replaceSkills: from('user_skills').delete().eq()
-    const deleteChain = buildChain();
-    deleteChain.eq.mockResolvedValueOnce({ error: null });
-
-    // replaceSkills: from('user_skills').insert()
-    const insertSkillsChain = buildChain();
-    insertSkillsChain.insert.mockResolvedValueOnce({ error: null });
-
-    // attachSkills: from('user_skills').select().in()
-    const attachChain = buildChain();
-    attachChain.in.mockResolvedValueOnce({
-      data: [{ user_id: 'new-user-uuid', skills: MOCK_SKILL }],
-      error: null,
-    });
-
-    queueChain(insertChain, deleteChain, insertSkillsChain, attachChain);
+    MockUserSkill.destroy.mockResolvedValueOnce(1);
+    MockUserSkill.bulkCreate.mockResolvedValueOnce([]);
+    MockUserSkill.findAll.mockResolvedValueOnce([MOCK_SKILL_ROW]);
 
     const user = await usersService.createUser({ ...CREATE_DTO, skill_ids: ['skill-uuid-1'] });
 
+    expect(MockUserSkill.bulkCreate).toHaveBeenCalled();
     expect(user.skills).toHaveLength(1);
     expect(user.skills[0].name).toBe('SEO');
   });
-
-  it('throws a 400 error when Supabase Auth rejects the new user', async () => {
-    mockCreateAuthUser.mockResolvedValueOnce({
-      data:  { user: null },
-      error: { message: 'Email already registered' },
-    });
-
-    await expect(usersService.createUser(CREATE_DTO)).rejects.toMatchObject({
-      message:    'Email already registered',
-      statusCode: 400,
-    });
-  });
-
-  it('rolls back the auth user when profile insert fails', async () => {
-    mockCreateAuthUser.mockResolvedValueOnce({
-      data: { user: { id: 'new-user-uuid' } },
-      error: null,
-    });
-
-    const insertChain = buildChain();
-    insertChain.single.mockResolvedValueOnce({
-      data:  null,
-      error: { message: 'FK violation' },
-    });
-    mockDeleteAuthUser.mockResolvedValueOnce({ error: null });
-
-    queueChain(insertChain);
-
-    await expect(usersService.createUser(CREATE_DTO)).rejects.toThrow('FK violation');
-    expect(mockDeleteAuthUser).toHaveBeenCalledWith('new-user-uuid');
-  });
 });
 
-// ─── updateUser ───────────────────────────────────────────────────────────────
+// ── updateUser ────────────────────────────────────────────────────────────────
 
 describe('updateUser', () => {
-  it('updates profile fields and returns the updated user', async () => {
-    const updatedRow = { ...MOCK_USER_ROW, name: 'Alice Updated' };
-
-    // from('users').update().eq().select().maybeSingle()
-    const updateChain = buildChain();
-    updateChain.maybeSingle.mockResolvedValueOnce({ data: updatedRow, error: null });
-
-    // attachSkills: from('user_skills').select().in()
-    const skillsChain = buildChain();
-    skillsChain.in.mockResolvedValueOnce({ data: [], error: null });
-
-    queueChain(updateChain, skillsChain);
+  it('updates profile fields and returns updated user', async () => {
+    MockUser.update.mockResolvedValueOnce([1]);
+    MockUser.findByPk.mockResolvedValueOnce({ ...MOCK_USER_ROW, name: 'Alice Updated' });
+    MockUserSkill.findAll.mockResolvedValueOnce([]);
 
     const user = await usersService.updateUser('user-uuid-1', { name: 'Alice Updated' });
 
@@ -347,190 +201,97 @@ describe('updateUser', () => {
     expect(user!.name).toBe('Alice Updated');
   });
 
-  it('replaces skills when skill_ids are provided', async () => {
-    // from('users').update().eq().select().maybeSingle()
-    const updateChain = buildChain();
-    updateChain.maybeSingle.mockResolvedValueOnce({ data: MOCK_USER_ROW, error: null });
-
-    // replaceSkills: from('user_skills').delete().eq()
-    const deleteChain = buildChain();
-    deleteChain.eq.mockResolvedValueOnce({ error: null });
-
-    // replaceSkills: from('user_skills').insert()
-    const insertSkillsChain = buildChain();
-    insertSkillsChain.insert.mockResolvedValueOnce({ error: null });
-
-    // attachSkills: from('user_skills').select().in()
-    const attachChain = buildChain();
-    attachChain.in.mockResolvedValueOnce({
-      data: [{ user_id: 'user-uuid-1', skills: MOCK_SKILL }],
-      error: null,
-    });
-
-    queueChain(updateChain, deleteChain, insertSkillsChain, attachChain);
-
-    const user = await usersService.updateUser('user-uuid-1', {
-      name:      'Alice Updated',
-      skill_ids: ['skill-uuid-1'],
-    });
-
-    expect(user!.skills).toHaveLength(1);
-    expect(user!.skills[0].name).toBe('SEO');
-  });
-
-  it('returns null when the target user does not exist', async () => {
-    const updateChain = buildChain();
-    updateChain.maybeSingle.mockResolvedValueOnce({ data: null, error: null });
-    queueChain(updateChain);
+  it('returns null when user does not exist', async () => {
+    MockUser.update.mockResolvedValueOnce([0]);
+    MockUser.findByPk.mockResolvedValueOnce(null);
 
     const result = await usersService.updateUser('nonexistent-id', { name: 'Ghost' });
 
     expect(result).toBeNull();
   });
 
-  it('throws a 400 error when Auth password update fails', async () => {
-    mockUpdateAuthUser.mockResolvedValueOnce({
-      error: { message: 'Weak password' },
+  it('replaces skills when skill_ids are provided', async () => {
+    MockUser.update.mockResolvedValueOnce([1]);
+    MockUserSkill.destroy.mockResolvedValueOnce(1);
+    MockUserSkill.bulkCreate.mockResolvedValueOnce([]);
+    MockUser.findByPk.mockResolvedValueOnce(MOCK_USER_ROW);
+    MockUserSkill.findAll.mockResolvedValueOnce([MOCK_SKILL_ROW]);
+
+    const user = await usersService.updateUser('user-uuid-1', {
+      name:      'Alice Updated',
+      skill_ids: ['skill-uuid-1'],
     });
 
-    await expect(
-      usersService.updateUser('user-uuid-1', { password: 'short' })
-    ).rejects.toMatchObject({
-      message:    'Weak password',
-      statusCode: 400,
-    });
-  });
-
-  it('falls back to SELECT when only password is provided (no profile fields)', async () => {
-    mockUpdateAuthUser.mockResolvedValueOnce({ error: null });
-
-    // No profile-field patch → SELECT branch: from('users').select().eq().maybeSingle()
-    const selectChain = buildChain();
-    selectChain.maybeSingle.mockResolvedValueOnce({ data: MOCK_USER_ROW, error: null });
-
-    // attachSkills
-    const skillsChain = buildChain();
-    skillsChain.in.mockResolvedValueOnce({ data: [], error: null });
-
-    queueChain(selectChain, skillsChain);
-
-    const user = await usersService.updateUser('user-uuid-1', { password: 'newPassword1' });
-
-    expect(user).not.toBeNull();
-    expect(user!.name).toBe('Alice Admin');
+    expect(MockUserSkill.destroy).toHaveBeenCalled();
+    expect(MockUserSkill.bulkCreate).toHaveBeenCalled();
+    expect(user!.skills).toHaveLength(1);
   });
 });
 
-// ─── deleteUser ───────────────────────────────────────────────────────────────
+// ── deleteUser ────────────────────────────────────────────────────────────────
 
 describe('deleteUser', () => {
-  it('throws a 400 error when the user tries to delete themselves', async () => {
+  it('throws 400 when user tries to delete themselves', async () => {
     await expect(usersService.deleteUser('same-id', 'same-id')).rejects.toMatchObject({
       message:    'Cannot delete your own account',
       statusCode: 400,
     });
   });
 
-  it('deletes profile then Auth account on success', async () => {
-    // from('users').delete().eq()
-    const deleteChain = buildChain();
-    deleteChain.eq.mockResolvedValueOnce({ error: null });
-    queueChain(deleteChain);
+  it('deletes user successfully', async () => {
+    MockUser.destroy.mockResolvedValueOnce(1);
 
-    mockDeleteAuthUser.mockResolvedValueOnce({ error: null });
-
-    await expect(
-      usersService.deleteUser('target-id', 'requester-id')
-    ).resolves.toBeUndefined();
-
-    expect(mockDeleteAuthUser).toHaveBeenCalledWith('target-id');
+    await expect(usersService.deleteUser('target-id', 'requester-id')).resolves.toBeUndefined();
+    expect(MockUser.destroy).toHaveBeenCalledWith({ where: { id: 'target-id' } });
   });
 
-  it('throws when profile delete fails', async () => {
-    const deleteChain = buildChain();
-    deleteChain.eq.mockResolvedValueOnce({ error: { message: 'FK constraint' } });
-    queueChain(deleteChain);
+  it('throws 404 when user not found', async () => {
+    MockUser.destroy.mockResolvedValueOnce(0);
 
-    await expect(usersService.deleteUser('target-id', 'requester-id')).rejects.toThrow(
-      'FK constraint'
-    );
-    expect(mockDeleteAuthUser).not.toHaveBeenCalled();
-  });
-
-  it('throws when Auth delete fails', async () => {
-    const deleteChain = buildChain();
-    deleteChain.eq.mockResolvedValueOnce({ error: null });
-    queueChain(deleteChain);
-
-    mockDeleteAuthUser.mockResolvedValueOnce({ error: { message: 'Auth deletion failed' } });
-
-    await expect(usersService.deleteUser('target-id', 'requester-id')).rejects.toThrow(
-      'Auth deletion failed'
-    );
+    await expect(usersService.deleteUser('nonexistent-id', 'requester-id')).rejects.toMatchObject({
+      statusCode: 404,
+    });
   });
 });
 
-// ─── storeInviteNonce ─────────────────────────────────────────────────────────
+// ── storeInviteNonce ──────────────────────────────────────────────────────────
 
 describe('storeInviteNonce', () => {
-  it('writes the nonce without throwing', async () => {
-    // from('users').update().eq()
-    const chain = buildChain();
-    chain.eq.mockResolvedValueOnce({ error: null });
-    queueChain(chain);
+  it('stores nonce without throwing', async () => {
+    MockUser.update.mockResolvedValueOnce([1]);
 
-    await expect(
-      usersService.storeInviteNonce('user-uuid-1', 'abc123nonce')
-    ).resolves.toBeUndefined();
-  });
-
-  it('throws when Supabase returns an error', async () => {
-    const chain = buildChain();
-    chain.eq.mockResolvedValueOnce({ error: { message: 'Update failed' } });
-    queueChain(chain);
-
-    await expect(usersService.storeInviteNonce('user-uuid-1', 'nonce')).rejects.toThrow(
-      'Update failed'
+    await expect(usersService.storeInviteNonce('user-uuid-1', 'abc123')).resolves.toBeUndefined();
+    expect(MockUser.update).toHaveBeenCalledWith(
+      { invite_nonce: 'abc123' },
+      { where: { id: 'user-uuid-1' } },
     );
   });
 });
 
-// ─── fetchInviteNonce ─────────────────────────────────────────────────────────
+// ── fetchInviteNonce ──────────────────────────────────────────────────────────
 
 describe('fetchInviteNonce', () => {
   it('returns the stored nonce', async () => {
-    const chain = buildChain();
-    chain.maybeSingle.mockResolvedValueOnce({
-      data:  { invite_nonce: 'stored-nonce-value' },
-      error: null,
-    });
-    queueChain(chain);
+    MockUser.findByPk.mockResolvedValueOnce({ invite_nonce: 'stored-nonce' });
 
     const nonce = await usersService.fetchInviteNonce('user-uuid-1');
 
-    expect(nonce).toBe('stored-nonce-value');
+    expect(nonce).toBe('stored-nonce');
   });
 
   it('returns null when no nonce is stored', async () => {
-    const chain = buildChain();
-    chain.maybeSingle.mockResolvedValueOnce({ data: null, error: null });
-    queueChain(chain);
+    MockUser.findByPk.mockResolvedValueOnce(null);
 
     const nonce = await usersService.fetchInviteNonce('user-uuid-1');
 
     expect(nonce).toBeNull();
   });
 
-  it('throws when Supabase returns an error', async () => {
-    const chain = buildChain();
-    chain.maybeSingle.mockResolvedValueOnce({
-      data:  null,
-      error: { message: 'Nonce lookup failed' },
-    });
-    queueChain(chain);
+  it('returns null when invite_nonce field is null', async () => {
+    MockUser.findByPk.mockResolvedValueOnce({ invite_nonce: null });
 
-    await expect(usersService.fetchInviteNonce('user-uuid-1')).rejects.toThrow(
-      'Nonce lookup failed'
-    );
+    const nonce = await usersService.fetchInviteNonce('user-uuid-1');
+
+    expect(nonce).toBeNull();
   });
 });

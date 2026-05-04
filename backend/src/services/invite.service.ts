@@ -6,7 +6,7 @@ import { INVITE_TOKEN_EXPIRY_MS } from '../config/constants';
 // '.' is not a valid base64url character, so splitting on it is unambiguous.
 
 const SECRET =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ?? 'dev-invite-secret-changeme';
+  process.env.JWT_SECRET ?? 'dev-invite-secret-changeme';
 
 function b64url(s: string): string {
   return Buffer.from(s, 'utf-8').toString('base64url');

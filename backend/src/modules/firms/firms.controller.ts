@@ -34,7 +34,9 @@ export async function createFirm(req: AuthenticatedRequest, res: Response): Prom
     res.status(201).json({ data: firm });
   } catch (err) {
     logger.error('[firms.controller] createFirm error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    const status = (err as { statusCode?: number }).statusCode ?? 500;
+    const message = status === 409 ? (err as Error).message : 'Internal server error';
+    res.status(status).json({ error: message });
   }
 }
 
@@ -68,7 +70,19 @@ export async function updateFirm(req: AuthenticatedRequest, res: Response): Prom
   }
 
   const { id } = req.params;
-  const allowed = ['name', 'contact_name', 'contact_email', 'default_prompt_id'] as const;
+  const allowed = [
+    'name',
+    'location',
+    'website',
+    'logo_url',
+    'description',
+    'contact_name',
+    'contact_email',
+    'contact_role',
+    'contact_phone',
+    'account_manager_id',
+    'default_prompt_id',
+  ] as const;
   const updates: Partial<UpdateFirmDto> = {};
 
   for (const key of allowed) {

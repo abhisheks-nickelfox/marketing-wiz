@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/auth';
-import { requireAdmin, requireMember, requireSuperAdmin } from '../../middleware/rbac';
+import { requireAdmin, requireMember } from '../../middleware/rbac';
 import {
   listProjectsValidation,
   createProjectValidation,
@@ -15,7 +15,7 @@ const router = Router();
 // GET /api/projects?firm_id=X  — all authenticated users can list projects
 router.get('/',     authenticate, requireMember, listProjectsValidation, ctrl.listProjects);
 
-// GET /api/projects/:id        — project detail with members + ticket count
+// GET /api/projects/:id        — project detail with members + task count
 router.get('/:id',  authenticate, requireMember, ctrl.getProject);
 
 // GET /api/projects/:id/overview  — full overview: tasks grouped by status + members
@@ -30,8 +30,8 @@ router.patch('/:id', authenticate, requireAdmin, updateProjectValidation, ctrl.u
 // PATCH /api/projects/:id/archive — toggle active/archived
 router.patch('/:id/archive', authenticate, requireAdmin, ctrl.archiveProject);
 
-// DELETE /api/projects/:id      — super_admin only, blocked if tickets exist
-router.delete('/:id', authenticate, requireSuperAdmin, ctrl.deleteProject);
+// DELETE /api/projects/:id      — admin only, blocked if tasks exist
+router.delete('/:id', authenticate, requireAdmin, ctrl.deleteProject);
 
 // ── Member management ─────────────────────────────────────────────────────────
 

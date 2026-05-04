@@ -1,9 +1,10 @@
 import logger from '../../config/logger';
-import supabase from '../../config/supabase';
+import { Notification, User } from '../../models';
+import { Op } from 'sequelize';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-export interface Notification {
+export interface NotificationRow {
   id: string;
   user_id: string;
   ticket_id: string | null;
@@ -15,95 +16,66 @@ export interface Notification {
 
 // ── Service methods ──────────────────────────────────────────────────────────
 
-export async function findNotificationsByUser(userId: string): Promise<Notification[]> {
-  const { data, error } = await supabase
-    .from('notifications')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(30);
+export async function findNotificationsByUser(userId: string): Promise<NotificationRow[]> {
+  const rows = await Notification.findAll({
+    where: { user_id: userId },
+    order: [['created_at', 'DESC']],
+    limit: 30,
+    raw: true,
+  });
 
-  if (error) {
-    logger.error('[notifications.service] findNotificationsByUser error:', error);
-    throw new Error(error.message);
-  }
-
-  return (data ?? []) as Notification[];
+  return rows as unknown as NotificationRow[];
 }
 
 export async function countUnreadByUser(userId: string): Promise<number> {
-  const { count, error } = await supabase
-    .from('notifications')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .eq('read', false);
-
-  if (error) {
-    logger.error('[notifications.service] countUnreadByUser error:', error);
-    throw new Error(error.message);
-  }
-
-  return count ?? 0;
+  return Notification.count({
+    where: { user_id: userId, read: false },
+  });
 }
 
 export async function markNotificationRead(notificationId: string, userId: string): Promise<void> {
-  const { error } = await supabase
-    .from('notifications')
-    .update({ read: true })
-    .eq('id', notificationId)
-    .eq('user_id', userId); // ownership guard — members can only mark their own
-
-  if (error) {
-    logger.error('[notifications.service] markNotificationRead error:', error);
-    throw new Error(error.message);
-  }
+  await Notification.update(
+    { read: true },
+    { where: { id: notificationId, user_id: userId } },
+  );
 }
 
 export async function markAllNotificationsRead(userId: string): Promise<void> {
-  const { error } = await supabase
-    .from('notifications')
-    .update({ read: true })
-    .eq('user_id', userId)
-    .eq('read', false);
-
-  if (error) {
-    logger.error('[notifications.service] markAllNotificationsRead error:', error);
-    throw new Error(error.message);
-  }
+  await Notification.update(
+    { read: true },
+    { where: { user_id: userId, read: false } },
+  );
 }
 
 /**
- * Creates an inbox notification for every admin / super_admin user.
+ * Creates an inbox notification for every admin user.
  * Used for events that require admin attention (e.g. pending skill requests).
  */
 export async function notifyAdmins(message: string, type: string): Promise<void> {
-  const { data: admins, error: adminErr } = await supabase
-    .from('users')
-    .select('id')
-    .in('role', ['admin', 'super_admin']);
+  const admins = await User.findAll({
+    where: { role: { [Op.in]: ['admin', 'super_admin'] } },
+    attributes: ['id'],
+    raw: true,
+  });
 
-  if (adminErr) {
-    logger.error('[notifications.service] notifyAdmins — fetch admins error:', adminErr);
-    return;
-  }
-
-  if (!admins || admins.length === 0) return;
+  if (admins.length === 0) return;
 
   const title =
     type === 'skill_request' ? 'New skill request' :
     type === 'invite_sent'   ? 'Invite sent' :
     'Admin notification';
 
-  const rows = (admins as { id: string }[]).map((a) => ({
+  const rows = (admins as unknown as { id: string }[]).map((a) => ({
     user_id: a.id,
     title,
     message,
     read: false,
   }));
 
-  const { error: insertErr } = await supabase.from('notifications').insert(rows);
-  if (insertErr) {
-    logger.error('[notifications.service] notifyAdmins — insert error:', insertErr);
+  try {
+    await Notification.bulkCreate(rows);
+  } catch (err) {
+    logger.error('[notifications.service] notifyAdmins — insert error:', err);
   }
 }
 
@@ -112,13 +84,9 @@ export async function notifyAdmins(message: string, type: string): Promise<void>
  * Fire-and-forget safe — errors are logged but not re-thrown.
  */
 export async function notifyUser(userId: string, title: string, message: string): Promise<void> {
-  const { error } = await supabase.from('notifications').insert({
-    user_id: userId,
-    title,
-    message,
-    read: false,
-  });
-  if (error) {
-    logger.error('[notifications.service] notifyUser error:', error);
+  try {
+    await Notification.create({ user_id: userId, title, message, read: false });
+  } catch (err) {
+    logger.error('[notifications.service] notifyUser error:', err);
   }
 }

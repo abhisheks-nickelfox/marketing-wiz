@@ -5,7 +5,7 @@ export interface UpdateUserDto {
   phone_number?: string;
   avatar_url?: string;
   password?: string;
-  role?: 'admin' | 'member' | 'project_manager' | 'super_admin';
+  role?: 'admin' | 'member' | 'project_manager';
   /** Free-text job title — only relevant when role = 'member' */
   member_role?: string;
   permissions?: string[];

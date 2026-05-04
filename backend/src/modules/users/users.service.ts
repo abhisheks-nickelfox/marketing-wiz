@@ -1,13 +1,26 @@
+import bcrypt from 'bcrypt';
 import logger from '../../config/logger';
-import supabase from '../../config/supabase';
+import { User, UserSkill, Skill } from '../../models';
+import { Op } from 'sequelize';
 import type { CreateUserDto } from './dto/create-user.dto';
 import type { UpdateUserDto } from './dto/update-user.dto';
-import type { Skill } from '../skills/skills.service';
 import { notifyUser } from '../notifications/notifications.service';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-export interface User {
+export interface SkillWithExperience {
+  id: string;
+  name: string;
+  category: string | null;
+  description: string | null;
+  color: string | null;
+  created_at: string;
+  experience: string | null;
+}
+
+export type { SkillWithExperience as Skill };
+
+export interface UserResult {
   id: string;
   name: string;
   first_name: string | null;
@@ -15,104 +28,94 @@ export interface User {
   phone_number: string | null;
   avatar_url: string | null;
   email: string;
-  role: 'admin' | 'member' | 'project_manager' | 'super_admin';
+  role: 'admin' | 'member' | 'project_manager';
   member_role: string | null;
   status: 'Active' | 'invited' | 'Disabled';
   permissions: string[];
-  skills: Skill[];
+  skills: SkillWithExperience[];
   rate_amount: number | null;
   rate_frequency: 'Hourly' | 'Daily' | 'Weekly' | 'Monthly' | null;
   created_at: string;
   updated_at: string | null;
 }
 
+const BCRYPT_ROUNDS = 12;
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-const USER_SELECT = 'id, name, first_name, last_name, phone_number, avatar_url, email, role, member_role, status, permissions, rate_amount, rate_frequency, created_at, updated_at';
-
-/** Attaches skills[] (with experience when migration 027 is applied) to an array of raw user rows */
-async function attachSkills(users: Record<string, unknown>[]): Promise<User[]> {
+/**
+ * Attaches skills[] (with experience) to an array of raw user rows.
+ * Issues a single batched query for all user IDs.
+ */
+async function attachSkills(users: Record<string, unknown>[]): Promise<UserResult[]> {
   if (users.length === 0) return [];
 
   const ids = users.map((u) => u.id as string);
 
-  // Try with experience column; fall back without it if migration 027 not yet applied
-  let rows: unknown[] = [];
-  const { data: withExp, error: expErr } = await supabase
-    .from('user_skills')
-    .select('user_id, experience, skills(id, name, category, created_at)')
-    .in('user_id', ids);
+  const userSkillRows = await UserSkill.findAll({
+    where: { user_id: { [Op.in]: ids } },
+    include: [
+      {
+        model: Skill,
+        as: 'skill',
+        attributes: ['id', 'name', 'category', 'description', 'color', 'created_at'],
+        required: true,
+      },
+    ],
+    raw: false,
+  });
 
-  if (expErr) {
-    const { data: withoutExp, error: noExpErr } = await supabase
-      .from('user_skills')
-      .select('user_id, skills(id, name, category, created_at)')
-      .in('user_id', ids);
-    if (noExpErr) throw new Error(noExpErr.message);
-    rows = withoutExp ?? [];
-  } else {
-    rows = withExp ?? [];
-  }
-
-  // Build a map: user_id → Skill[]
-  const skillMap: Record<string, Skill[]> = {};
-  for (const row of rows) {
-    const r = row as unknown as { user_id: string; skills: Skill | null; experience?: string | null };
-    if (!r.skills) continue;
-    if (!skillMap[r.user_id]) skillMap[r.user_id] = [];
-    skillMap[r.user_id].push({ ...r.skills, experience: r.experience ?? null });
+  // Build map: user_id → SkillWithExperience[]
+  const skillMap: Record<string, SkillWithExperience[]> = {};
+  for (const row of userSkillRows) {
+    const r = row as unknown as { user_id: string; experience: string | null; skill: Record<string, unknown> };
+    const uid = r.user_id;
+    if (!skillMap[uid]) skillMap[uid] = [];
+    skillMap[uid].push({
+      id:          r.skill.id as string,
+      name:        r.skill.name as string,
+      category:    r.skill.category as string | null,
+      description: r.skill.description as string | null,
+      color:       r.skill.color as string | null,
+      created_at:  r.skill.created_at as string,
+      experience:  r.experience ?? null,
+    });
   }
 
   return users.map((u) => ({
     ...(u as object),
     skills: skillMap[u.id as string] ?? [],
-  })) as User[];
+  })) as UserResult[];
 }
 
-/** Replaces a user's skill set with the given skill IDs */
-async function replaceSkills(userId: string, skillIds: string[]): Promise<void> {
-  // Delete all existing associations for this user
-  const { error: delError } = await supabase
-    .from('user_skills')
-    .delete()
-    .eq('user_id', userId);
-
-  if (delError) throw new Error(delError.message);
-
-  if (skillIds.length === 0) return;
-
-  const rows = skillIds.map((skill_id) => ({ user_id: userId, skill_id }));
-  const { error: insError } = await supabase.from('user_skills').insert(rows);
-  if (insError) throw new Error(insError.message);
+/** Strips password_hash from a raw user row before returning to callers. */
+function stripPassword(row: Record<string, unknown>): Record<string, unknown> {
+  const { password_hash: _pw, ...rest } = row;
+  return rest;
 }
 
 // ── Service methods ──────────────────────────────────────────────────────────
 
-export async function findAllUsers(): Promise<User[]> {
-  const { data, error } = await supabase
-    .from('users')
-    .select(USER_SELECT)
-    .order('created_at', { ascending: false });
+export async function findAllUsers(): Promise<UserResult[]> {
+  const rows = await User.findAll({
+    order: [['created_at', 'DESC']],
+    raw: true,
+  });
 
-  if (error) throw new Error(error.message);
-  return attachSkills((data ?? []) as Record<string, unknown>[]);
+  const safe = (rows as unknown as Record<string, unknown>[]).map(stripPassword);
+  return attachSkills(safe);
 }
 
-export async function findUserById(id: string): Promise<User | null> {
-  const { data, error } = await supabase
-    .from('users')
-    .select(USER_SELECT)
-    .eq('id', id)
-    .maybeSingle();
+export async function findUserById(id: string): Promise<UserResult | null> {
+  const row = await User.findByPk(id, { raw: true });
+  if (!row) return null;
 
-  if (error) throw new Error(error.message);
-  if (!data) return null;
-
-  const [user] = await attachSkills([data as Record<string, unknown>]);
+  const safe = stripPassword(row as unknown as Record<string, unknown>);
+  const [user] = await attachSkills([safe]);
   return user ?? null;
 }
 
-export async function createUser(dto: CreateUserDto): Promise<User> {
+export async function createUser(dto: CreateUserDto): Promise<UserResult> {
   const {
     email,
     password,
@@ -124,72 +127,46 @@ export async function createUser(dto: CreateUserDto): Promise<User> {
     rate_amount,
     rate_frequency,
   } = dto;
-  // Fall back to email as the display name until the user completes onboarding.
+
   const name = dto.name?.trim() || email;
 
-  // 1. Create Supabase Auth user
-  const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
+  // Check for duplicate email
+  const existing = await User.findOne({ where: { email: email.toLowerCase().trim() }, raw: true });
+  if (existing) {
+    throw Object.assign(new Error('A user with this email already exists'), { statusCode: 400 });
+  }
+
+  const userRow = await User.create({
+    email: email.toLowerCase().trim(),
+    name,
+    role,
+    member_role: member_role?.trim() ?? null,
+    permissions,
+    status,
+    rate_amount: rate_amount ?? null,
+    rate_frequency: rate_frequency ?? null,
   });
 
-  if (authError || !authData.user) {
-    throw Object.assign(
-      new Error(authError?.message ?? 'Failed to create auth user'),
-      { statusCode: 400 }
-    );
-  }
+  const userId = userRow.id;
 
-  const userId = authData.user.id;
-
-  // 2. Insert profile row
-  const { data: profile, error: profileError } = await supabase
-    .from('users')
-    .insert({
-      id: userId,
-      email,
-      name,
-      role,
-      member_role: member_role?.trim() ?? null,
-      permissions,
-      status,
-      rate_amount: rate_amount ?? null,
-      rate_frequency: rate_frequency ?? null,
-    })
-    .select(USER_SELECT)
-    .single();
-
-  if (profileError || !profile) {
-    // Rollback auth user
-    await supabase.auth.admin.deleteUser(userId);
-    throw new Error(profileError?.message ?? 'Failed to create user profile');
-  }
-
-  // 3. Assign skills
+  // Assign skills
   if (skill_ids.length > 0) {
     try {
       await replaceSkills(userId, skill_ids);
     } catch (err) {
-      // Non-fatal — user was created, skills failed
       logger.error('[users.service] skill assignment failed after user creation:', err);
     }
   }
 
-  const [user] = await attachSkills([profile as Record<string, unknown>]);
+  const created = stripPassword(userRow.toJSON() as unknown as Record<string, unknown>);
+  const [user] = await attachSkills([created]);
   return user;
 }
 
-export async function updateUser(id: string, dto: UpdateUserDto): Promise<User | null> {
+export async function updateUser(id: string, dto: UpdateUserDto): Promise<UserResult | null> {
   const { name, first_name, last_name, phone_number, avatar_url, password, role, member_role, permissions, skill_ids, skills_with_experience, status, rate_amount, rate_frequency } = dto;
 
-  // 1. Update password in Auth if provided
-  if (password) {
-    const { error } = await supabase.auth.admin.updateUserById(id, { password });
-    if (error) throw Object.assign(new Error(error.message), { statusCode: 400 });
-  }
-
-  // 2. Build profile update payload
+  // 1. Build profile patch
   const patch: Record<string, unknown> = {};
   if (name !== undefined)           patch.name           = name.trim();
   if (first_name !== undefined)     patch.first_name     = first_name.trim() || null;
@@ -203,40 +180,18 @@ export async function updateUser(id: string, dto: UpdateUserDto): Promise<User |
   if (rate_amount !== undefined)    patch.rate_amount    = rate_amount ?? null;
   if (rate_frequency !== undefined) patch.rate_frequency = rate_frequency ?? null;
 
-  let updatedProfile: Record<string, unknown> | null = null;
-
   if (Object.keys(patch).length > 0) {
-    const { data, error } = await supabase
-      .from('users')
-      .update(patch)
-      .eq('id', id)
-      .select(USER_SELECT)
-      .maybeSingle();
-
-    if (error) throw new Error(error.message);
-    updatedProfile = data as Record<string, unknown> | null;
-  } else {
-    // No profile fields — just fetch current row
-    const { data, error } = await supabase
-      .from('users')
-      .select(USER_SELECT)
-      .eq('id', id)
-      .maybeSingle();
-
-    if (error) throw new Error(error.message);
-    updatedProfile = data as Record<string, unknown> | null;
+    await User.update(patch, { where: { id } });
   }
 
-  if (!updatedProfile) return null;
-
-  // 3. Replace skills if provided — skills_with_experience takes priority over skill_ids
+  // 3. Replace skills if provided
   if (skills_with_experience !== undefined) {
     await replaceSkillsWithExperience(id, skills_with_experience);
   } else if (skill_ids !== undefined) {
     await replaceSkills(id, skill_ids);
   }
 
-  // Notify user of admin-initiated profile or skill changes (fire-and-forget).
+  // Notify user of admin-initiated changes (fire-and-forget)
   if (Object.keys(patch).length > 0) {
     notifyUser(id, 'Profile updated', 'An admin has updated your profile information.').catch(() => {});
   }
@@ -244,64 +199,56 @@ export async function updateUser(id: string, dto: UpdateUserDto): Promise<User |
     notifyUser(id, 'Skills updated', 'Your skill set has been updated by an admin.').catch(() => {});
   }
 
-  const [user] = await attachSkills([updatedProfile]);
-  return user ?? null;
+  return findUserById(id);
 }
 
-/** Replaces a user's skill set with the given skills (each may include experience) */
+/** Replaces a user's skill set with the given skill IDs (no experience). */
+async function replaceSkills(userId: string, skillIds: string[]): Promise<void> {
+  await UserSkill.destroy({ where: { user_id: userId } });
+
+  const unique = [...new Set(skillIds)];
+  if (unique.length === 0) return;
+
+  const rows = unique.map((skill_id) => ({ user_id: userId, skill_id, experience: null }));
+  await UserSkill.bulkCreate(rows, { ignoreDuplicates: true });
+}
+
+/** Replaces a user's skill set with skills that each carry an experience value. */
 export async function replaceSkillsWithExperience(
   userId: string,
   skills: { skill_id: string; experience?: string | null }[],
 ): Promise<void> {
-  const { error: delError } = await supabase
-    .from('user_skills')
-    .delete()
-    .eq('user_id', userId);
-  if (delError) throw new Error(delError.message);
+  await UserSkill.destroy({ where: { user_id: userId } });
 
   if (skills.length === 0) return;
 
-  // Try inserting with experience column (requires migration 027)
-  const rows = skills.map(({ skill_id, experience }) => ({
+  // Deduplicate by skill_id — keep the last entry
+  const seen = new Map<string, { skill_id: string; experience?: string | null }>();
+  for (const s of skills) seen.set(s.skill_id, s);
+
+  const rows = [...seen.values()].map(({ skill_id, experience }) => ({
     user_id: userId,
     skill_id,
     experience: experience ?? null,
   }));
-  const { error: insError } = await supabase.from('user_skills').insert(rows);
 
-  if (insError) {
-    // If migration 027 hasn't been applied yet, fall back to inserting without experience
-    if (insError.message.toLowerCase().includes('experience')) {
-      logger.warn('[users.service] experience column missing — inserting skills without it. Apply migration 027 to persist experience data.');
-      const fallbackRows = skills.map(({ skill_id }) => ({ user_id: userId, skill_id }));
-      const { error: fallbackError } = await supabase.from('user_skills').insert(fallbackRows);
-      if (fallbackError) throw new Error(fallbackError.message);
-    } else {
-      throw new Error(insError.message);
-    }
-  }
+  await UserSkill.bulkCreate(rows, { ignoreDuplicates: true });
 }
 
 // ── Invite nonce helpers ─────────────────────────────────────────────────────
 
 /** Writes a new nonce into users.invite_nonce, making any previous token stale. */
 export async function storeInviteNonce(userId: string, nonce: string | null): Promise<void> {
-  const { error } = await supabase
-    .from('users')
-    .update({ invite_nonce: nonce })
-    .eq('id', userId);
-  if (error) throw new Error(error.message);
+  await User.update({ invite_nonce: nonce }, { where: { id: userId } });
 }
 
 /** Returns the current invite_nonce for a user, or null if none is set. */
 export async function fetchInviteNonce(userId: string): Promise<string | null> {
-  const { data, error } = await supabase
-    .from('users')
-    .select('invite_nonce')
-    .eq('id', userId)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return (data as { invite_nonce: string | null } | null)?.invite_nonce ?? null;
+  const row = await User.findByPk(userId, {
+    attributes: ['invite_nonce'],
+    raw: true,
+  });
+  return (row as unknown as { invite_nonce: string | null } | null)?.invite_nonce ?? null;
 }
 
 export async function deleteUser(id: string, requesterId: string): Promise<void> {
@@ -309,11 +256,8 @@ export async function deleteUser(id: string, requesterId: string): Promise<void>
     throw Object.assign(new Error('Cannot delete your own account'), { statusCode: 400 });
   }
 
-  // Delete profile (cascades user_skills via FK)
-  const { error: profileError } = await supabase.from('users').delete().eq('id', id);
-  if (profileError) throw new Error(profileError.message);
-
-  // Delete Auth account
-  const { error: authError } = await supabase.auth.admin.deleteUser(id);
-  if (authError) throw new Error(authError.message);
+  const count = await User.destroy({ where: { id } });
+  if (count === 0) {
+    throw Object.assign(new Error('User not found'), { statusCode: 404 });
+  }
 }

@@ -1,15 +1,17 @@
 import { Response, NextFunction } from 'express';
-import supabase, { anonClient } from '../config/supabase';
-import { AuthenticatedRequest, User } from '../types';
+import { verifyToken } from '../config/auth';
+import { User } from '../models';
+import { AuthenticatedRequest } from '../types';
+import logger from '../config/logger';
 
 /**
- * Verifies the Bearer JWT from the Authorization header via Supabase Auth,
- * then attaches the full user profile (including role) to req.user.
+ * Verifies the Bearer JWT from the Authorization header using jsonwebtoken,
+ * then fetches the full user profile from the DB and attaches it to req.user.
  */
 export async function authenticate(
   req: AuthenticatedRequest,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> {
   const authHeader = req.headers.authorization;
 
@@ -20,37 +22,28 @@ export async function authenticate(
 
   const token = authHeader.split(' ')[1];
 
-  // Verify token using the anon-key client — keeps the service-role client clean
-  const {
-    data: { user: authUser },
-    error: authError,
-  } = await anonClient.auth.getUser(token);
-
-  if (authError || !authUser) {
+  let payload: { sub: string };
+  try {
+    payload = verifyToken(token);
+  } catch {
     res.status(401).json({ error: 'Invalid or expired token' });
     return;
   }
 
-  // Fetch profile row to get the role.
-  // maybeSingle() returns null (not an error) when no row is found, avoiding
-  // the PGRST116 "JSON object requested, multiple (or no) rows returned" error
-  // that .single() throws on missing profiles.
-  const { data: profile, error: profileError } = await supabase
-    .from('users')
-    .select('*')
-    .eq('id', authUser.id)
-    .maybeSingle();
+  try {
+    const profile = await User.findByPk(payload.sub, { raw: true });
 
-  if (profileError) {
+    if (!profile) {
+      res.status(401).json({ error: 'User profile not found' });
+      return;
+    }
+
+    // Cast to the domain User type that routes/services expect.
+    // We spread the Sequelize raw row — all fields are present.
+    req.user = profile as unknown as import('../types').User;
+    next();
+  } catch (err) {
+    logger.error('[auth] Profile fetch failed:', err);
     res.status(500).json({ error: 'Failed to load user profile' });
-    return;
   }
-
-  if (!profile) {
-    res.status(401).json({ error: 'User profile not found' });
-    return;
-  }
-
-  req.user = profile as User;
-  next();
 }

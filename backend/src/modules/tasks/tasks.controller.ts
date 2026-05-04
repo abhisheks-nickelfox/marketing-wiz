@@ -6,7 +6,7 @@ import * as tasksService from './tasks.service';
 import type { CreateTaskDto, AssignApproveDto } from './tasks.service';
 import { regenerateTicket } from '../../services/ai.service';
 import { Task } from '../../types';
-import supabase from '../../config/supabase';
+import { Ticket, Transcript, ProcessingSession } from '../../models';
 import { ADMIN_ROLES } from '../../config/constants';
 
 // ─── POST /api/tasks ──────────────────────────────────────────────────────────
@@ -19,8 +19,8 @@ export async function createTask(req: AuthenticatedRequest, res: Response): Prom
   }
 
   try {
-    const ticket = await tasksService.createTask(req.body as CreateTaskDto);
-    res.status(201).json({ data: ticket });
+    const task = await tasksService.createTask(req.body as CreateTaskDto);
+    res.status(201).json({ data: task });
   } catch (err) {
     const e = err as Error & { statusCode?: number };
     if (e.statusCode === 404) {
@@ -55,24 +55,24 @@ export async function getTask(req: AuthenticatedRequest, res: Response): Promise
   const { id } = req.params;
 
   try {
-    const ticket = await tasksService.findTaskById(id);
+    const task = await tasksService.findTaskById(id);
 
-    if (!ticket) {
+    if (!task) {
       res.status(404).json({ error: 'Task not found' });
       return;
     }
 
     // Members can only see their own tasks unless they have view_all_tickets permission
     const canViewAll =
-      ADMIN_ROLES.includes(req.user!.role as 'admin' | 'super_admin') ||
+      ADMIN_ROLES.includes(req.user!.role as 'admin') ||
       (req.user!.permissions ?? []).includes('view_all_tickets');
 
-    if (!canViewAll && (ticket as Record<string, unknown>).assignee_id !== req.user!.id) {
+    if (!canViewAll && (task as Record<string, unknown>).assignee_id !== req.user!.id) {
       res.status(403).json({ error: 'Access denied' });
       return;
     }
 
-    res.json({ data: ticket });
+    res.json({ data: task });
   } catch (err) {
     logger.error('[tasks.controller] getTask error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -101,13 +101,12 @@ export async function updateTask(req: AuthenticatedRequest, res: Response): Prom
     // Members can only update their own tasks and only estimated_hours
     const updates: Record<string, unknown> = {};
 
-    if (ADMIN_ROLES.includes(req.user!.role as 'admin' | 'super_admin')) {
+    if (ADMIN_ROLES.includes(req.user!.role as 'admin')) {
       if (
-        existing.status === 'resolved' ||
-        existing.status === 'discarded' ||
-        existing.status === 'closed'
+        existing.status === 'completed' ||
+        existing.status === 'blocked'
       ) {
-        res.status(400).json({ error: 'Cannot edit a resolved, discarded, or closed task' });
+        res.status(400).json({ error: 'Cannot edit a completed or blocked task' });
         return;
       }
       const adminFields = ['title', 'description', 'type', 'priority', 'change_note'];
@@ -120,8 +119,8 @@ export async function updateTask(req: AuthenticatedRequest, res: Response): Prom
         res.status(403).json({ error: 'Access denied' });
         return;
       }
-      if (existing.status === 'resolved' || existing.status === 'discarded') {
-        res.status(400).json({ error: 'Cannot edit a closed task' });
+      if (existing.status === 'completed' || existing.status === 'blocked') {
+        res.status(400).json({ error: 'Cannot edit a completed or blocked task' });
         return;
       }
       if ('estimated_hours' in req.body) {
@@ -159,7 +158,7 @@ export async function assignAndApprove(req: AuthenticatedRequest, res: Response)
     const data = await tasksService.assignAndApproveTask(id, req.body as AssignApproveDto);
 
     if (!data) {
-      res.status(404).json({ error: 'Task not found or not in draft status' });
+      res.status(404).json({ error: 'Task not found or not in to_do status' });
       return;
     }
 
@@ -184,7 +183,7 @@ export async function discardTask(req: AuthenticatedRequest, res: Response): Pro
     const data = await tasksService.discardTask(id);
 
     if (!data) {
-      res.status(404).json({ error: 'Task not found or not in draft status' });
+      res.status(404).json({ error: 'Task not found or not in to_do status' });
       return;
     }
 
@@ -211,58 +210,53 @@ export async function regenerateTaskContent(
   const { additional_instruction = '' } = req.body as { additional_instruction?: string };
 
   try {
-    // Fetch ticket with its session to get the transcript
-    const { data: ticket, error: ticketErr } = await supabase
-      .from('tickets')
-      .select('*, processing_sessions(transcript_id)')
-      .eq('id', id)
-      .single();
+    // Fetch the raw ticket row
+    const task = await Ticket.findByPk(id, { raw: true });
 
-    if (ticketErr || !ticket) {
+    if (!task) {
       res.status(404).json({ error: 'Task not found' });
       return;
     }
 
-    if ((ticket as Record<string, unknown>).status !== 'draft') {
-      res.status(400).json({ error: 'Only draft tasks can be regenerated' });
+    const taskRaw = task as unknown as Record<string, unknown>;
+
+    if (taskRaw.status !== 'to_do') {
+      res.status(400).json({ error: 'Only to_do tasks can be regenerated' });
       return;
     }
 
-    // Get transcript text
+    // Resolve transcript via processing session
     let rawTranscript = '';
-    const sessionData = (ticket as Record<string, unknown>).processing_sessions as { transcript_id: string } | null;
+    if (taskRaw.session_id) {
+      const session = await ProcessingSession.findByPk(taskRaw.session_id as string, {
+        attributes: ['transcript_id'],
+        raw: true,
+      }) as { transcript_id: string } | null;
 
-    if (sessionData?.transcript_id) {
-      const { data: transcript } = await supabase
-        .from('transcripts')
-        .select('raw_transcript')
-        .eq('id', sessionData.transcript_id)
-        .single();
-      rawTranscript = (transcript?.raw_transcript as string) ?? '';
+      if (session?.transcript_id) {
+        const transcript = await Transcript.findByPk(session.transcript_id, {
+          attributes: ['raw_transcript'],
+          raw: true,
+        }) as { raw_transcript: string } | null;
+        rawTranscript = transcript?.raw_transcript ?? '';
+      }
     }
 
-    const newDraft = await regenerateTicket(rawTranscript, ticket as Task, additional_instruction);
+    const newDraft = await regenerateTicket(rawTranscript, task as unknown as Task, additional_instruction);
 
-    const { data: updated, error: updateErr } = await supabase
-      .from('tickets')
-      .update({
-        title: newDraft.title,
-        description: newDraft.description,
-        type: newDraft.type,
-        priority: newDraft.priority,
-        edited: true,
-        regeneration_count: ((ticket as Record<string, unknown>).regeneration_count as number ?? 0) + 1,
-        last_regenerated_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', id)
-      .select()
-      .single();
+    const updates = {
+      title:               newDraft.title,
+      description:         newDraft.description,
+      type:                newDraft.type,
+      priority:            newDraft.priority,
+      edited:              true,
+      regeneration_count:  ((taskRaw.regeneration_count as number) ?? 0) + 1,
+      last_regenerated_at: new Date().toISOString(),
+      updated_at:          new Date().toISOString(),
+    };
 
-    if (updateErr) {
-      res.status(500).json({ error: updateErr.message });
-      return;
-    }
+    await Ticket.update(updates, { where: { id } });
+    const updated = await Ticket.findByPk(id, { raw: true });
 
     res.json({ data: updated });
   } catch (err) {
@@ -287,21 +281,21 @@ export async function resolveTask(req: AuthenticatedRequest, res: Response): Pro
   };
 
   try {
-    // Fetch ticket to verify ownership and status
-    const ticket = await tasksService.findRawTask(id);
+    // Fetch task to verify ownership and status
+    const task = await tasksService.findRawTask(id);
 
-    if (!ticket) {
+    if (!task) {
       res.status(404).json({ error: 'Task not found' });
       return;
     }
 
-    const isPrivileged = ADMIN_ROLES.includes(req.user!.role as 'admin' | 'super_admin');
-    if (!isPrivileged && ticket.assignee_id !== req.user!.id) {
+    const isPrivileged = ADMIN_ROLES.includes(req.user!.role as 'admin');
+    if (!isPrivileged && task.assignee_id !== req.user!.id) {
       res.status(403).json({ error: 'Only the assignee can resolve this task' });
       return;
     }
 
-    if (!['in_progress', 'revisions'].includes(ticket.status as string)) {
+    if (!['in_progress', 'revisions'].includes(task.status as string)) {
       res.status(400).json({ error: 'Cannot resolve a task that is not in progress or revisions' });
       return;
     }
@@ -332,15 +326,15 @@ export async function deleteTask(req: AuthenticatedRequest, res: Response): Prom
   const { id } = req.params;
 
   try {
-    const ticket = await tasksService.findRawTask(id);
+    const task = await tasksService.findRawTask(id);
 
-    if (!ticket) {
+    if (!task) {
       res.status(404).json({ error: 'Task not found' });
       return;
     }
 
-    if (ticket.status !== 'discarded') {
-      res.status(400).json({ error: 'Only discarded tasks can be permanently deleted' });
+    if (task.status !== 'blocked') {
+      res.status(400).json({ error: 'Only blocked tasks can be permanently deleted' });
       return;
     }
 
@@ -365,9 +359,9 @@ export async function archiveTask(req: AuthenticatedRequest, res: Response): Pro
   const { archived } = req.body as { archived: boolean };
 
   try {
-    const ticket = await tasksService.findRawTask(id);
+    const task = await tasksService.findRawTask(id);
 
-    if (!ticket) {
+    if (!task) {
       res.status(404).json({ error: 'Task not found' });
       return;
     }

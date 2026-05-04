@@ -58,7 +58,7 @@ function parseDraftsFromText(text: string): TaskDraft[] | null {
 // ─── Prompts ──────────────────────────────────────────────────────────────────
 
 const GENERATE_SYSTEM_SUFFIX = `
-Return ONLY a valid JSON array of ticket objects. Each object must have these fields:
+Return ONLY a valid JSON array of task objects. Each object must have these fields:
 - title (string, concise action-oriented title)
 - description (string, 1–3 sentences with context)
 - type (one of: task | design | development | account_management)
@@ -67,8 +67,8 @@ Return ONLY a valid JSON array of ticket objects. Each object must have these fi
 No markdown, no explanation — just the JSON array.`;
 
 const REGENERATE_SYSTEM_PROMPT = `You are a project management assistant.
-Given a marketing call transcript, an existing ticket, and an additional instruction,
-produce an improved version of the ticket.
+Given a marketing call transcript, an existing task, and an additional instruction,
+produce an improved version of the task.
 
 Return ONLY a valid JSON object with these fields:
 - title (string)
@@ -81,7 +81,7 @@ No markdown, no explanation — just the JSON object.`;
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Generate a list of ticket drafts from a transcript using Groq.
+ * Generate a list of task drafts from a transcript using Groq.
  * Throws a descriptive error if the API key is missing or the API call fails —
  * callers should surface this to the user rather than silently swallowing it.
  */
@@ -126,7 +126,7 @@ export async function generateTickets(
   const drafts = parseDraftsFromText(text);
   if (!drafts) {
     throw new Error(
-      'AI returned an unexpected response — could not parse tasks. Please try again.'
+      'AI returned an unexpected response — could not parse task drafts. Please try again.'
     );
   }
 
@@ -134,7 +134,7 @@ export async function generateTickets(
 }
 
 /**
- * Re-generate a single ticket with an additional instruction.
+ * Re-generate a single task with an additional instruction.
  * Throws a descriptive error if the API key is missing or the API call fails.
  */
 export async function regenerateTicket(
@@ -153,7 +153,7 @@ export async function regenerateTicket(
 
   const userMessage = [
     `## Call Transcript\n${transcript}`,
-    `## Original Ticket\nTitle: ${originalTicket.title}\nDescription: ${originalTicket.description}\nType: ${originalTicket.type}\nPriority: ${originalTicket.priority}`,
+    `## Original Task\nTitle: ${originalTicket.title}\nDescription: ${originalTicket.description}\nType: ${originalTicket.type}\nPriority: ${originalTicket.priority}`,
     `## Additional Instruction\n${additionalInstruction}`,
   ].join('\n\n');
 
@@ -177,7 +177,7 @@ export async function regenerateTicket(
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
     throw new Error(
-      'AI returned an unexpected response — could not parse task. Please try again.'
+      'AI returned an unexpected response — could not parse task draft. Please try again.'
     );
   }
 
@@ -186,7 +186,7 @@ export async function regenerateTicket(
     return sanitizeTaskDraft(parsed);
   } catch {
     throw new Error(
-      'AI returned malformed JSON — could not parse task. Please try again.'
+      'AI returned malformed JSON — could not parse task draft. Please try again.'
     );
   }
 }

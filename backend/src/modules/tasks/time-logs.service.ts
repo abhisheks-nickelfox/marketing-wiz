@@ -1,7 +1,8 @@
 import logger from '../../config/logger';
-import supabase from '../../config/supabase';
+import { TimeLog, User } from '../../models';
 import { CreateTimeLogDto } from './dto/create-time-log.dto';
 import { UpdateTimeLogDto } from './dto/update-time-log.dto';
+import { Ticket } from '../../models';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -26,63 +27,58 @@ export interface TicketAccessRow {
 
 // ── Service methods ──────────────────────────────────────────────────────────
 
-/**
- * Fetch the ticket row needed for access-control checks on time-log operations.
- * Returns null if the ticket does not exist.
- */
 export async function fetchTicketForTimeLogs(
   ticketId: string,
 ): Promise<TicketAccessRow | null> {
-  const { data, error } = await supabase
-    .from('tickets')
-    .select('id, assignee_id, status, revision_count')
-    .eq('id', ticketId)
-    .single();
+  const row = await Ticket.findByPk(ticketId, {
+    attributes: ['id', 'assignee_id', 'status', 'revision_count'],
+    raw: true,
+  });
 
-  if (error || !data) return null;
-  return data as TicketAccessRow;
+  return row ? (row as unknown as TicketAccessRow) : null;
 }
 
-/**
- * Fetch the ticket row for access-control checks on list operations.
- * Only selects id and assignee_id (cheapest query).
- */
 export async function fetchTicketAssignee(
   ticketId: string,
 ): Promise<{ id: string; assignee_id: string } | null> {
-  const { data, error } = await supabase
-    .from('tickets')
-    .select('id, assignee_id')
-    .eq('id', ticketId)
-    .single();
+  const row = await Ticket.findByPk(ticketId, {
+    attributes: ['id', 'assignee_id'],
+    raw: true,
+  });
 
-  if (error || !data) return null;
-  return data as { id: string; assignee_id: string };
+  return row ? (row as unknown as { id: string; assignee_id: string }) : null;
 }
 
-/**
- * List all time logs for a given ticket, ordered newest-first.
- * Joins the user name and email for display.
- */
 export async function listTimeLogsForTicket(ticketId: string): Promise<unknown[]> {
-  const { data, error } = await supabase
-    .from('time_logs')
-    .select('*, users(name, email)')
-    .eq('ticket_id', ticketId)
-    .order('created_at', { ascending: false });
+  // Raw SQL join to fetch user name/email alongside each log
+  const rows = await TimeLog.findAll({
+    where: { ticket_id: ticketId },
+    order: [['created_at', 'DESC']],
+    raw: false, // we'll manually add user data below
+  });
 
-  if (error) {
-    logger.error('[time-logs.service] listTimeLogsForTicket error:', error);
-    throw new Error(error.message);
+  if (rows.length === 0) return [];
+
+  const userIds = [...new Set(rows.map((r) => (r as unknown as TimeLogRow).user_id).filter(Boolean))];
+  const userMap: Record<string, { name: string; email: string }> = {};
+
+  if (userIds.length > 0) {
+    const users = await User.findAll({
+      where: { id: { [require('sequelize').Op.in]: userIds } },
+      attributes: ['id', 'name', 'email'],
+      raw: true,
+    });
+    for (const u of users as unknown as { id: string; name: string; email: string }[]) {
+      userMap[u.id] = { name: u.name, email: u.email };
+    }
   }
 
-  return data ?? [];
+  return rows.map((r) => {
+    const log = r.toJSON() as TimeLogRow;
+    return { ...log, users: userMap[log.user_id] ?? null };
+  });
 }
 
-/**
- * Insert a new time log for the given ticket, tagged to the current revision cycle.
- * Callers must validate that the ticket is in_progress or revisions before calling.
- */
 export async function createTimeLog(options: {
   ticketId: string;
   userId: string;
@@ -91,51 +87,31 @@ export async function createTimeLog(options: {
 }): Promise<TimeLogRow> {
   const { ticketId, userId, revisionCycle, dto } = options;
 
-  const { data, error } = await supabase
-    .from('time_logs')
-    .insert({
-      ticket_id:      ticketId,
-      user_id:        userId,
-      hours:          dto.hours,
-      comment:        dto.comment ?? '',
-      log_type:       dto.log_type,
-      // Tag to current revision cycle for time-history grouping:
-      // cycle 0 = initial work; cycle N = after the Nth revisions transition.
-      revision_cycle: revisionCycle,
-    })
-    .select()
-    .single();
+  const row = await TimeLog.create({
+    ticket_id:      ticketId,
+    user_id:        userId,
+    hours:          dto.hours,
+    comment:        dto.comment ?? '',
+    log_type:       dto.log_type,
+    revision_cycle: revisionCycle,
+  });
 
-  if (error) {
-    logger.error('[time-logs.service] createTimeLog error:', error);
-    throw new Error(error.message);
-  }
-
-  return data as TimeLogRow;
+  return row.toJSON() as TimeLogRow;
 }
 
-/**
- * Fetch a single time log, verifying it belongs to the expected ticket.
- * Returns null if not found.
- */
 export async function fetchTimeLog(
   logId: string,
   ticketId: string,
 ): Promise<{ id: string; user_id: string; ticket_id: string; log_type: string } | null> {
-  const { data, error } = await supabase
-    .from('time_logs')
-    .select('id, user_id, ticket_id, log_type')
-    .eq('id', logId)
-    .eq('ticket_id', ticketId)
-    .single();
+  const row = await TimeLog.findOne({
+    where: { id: logId, ticket_id: ticketId },
+    attributes: ['id', 'user_id', 'ticket_id', 'log_type'],
+    raw: true,
+  });
 
-  if (error || !data) return null;
-  return data as { id: string; user_id: string; ticket_id: string; log_type: string };
+  return row ? (row as unknown as { id: string; user_id: string; ticket_id: string; log_type: string }) : null;
 }
 
-/**
- * Update hours and/or comment on an existing time log.
- */
 export async function updateTimeLog(
   logId: string,
   dto: UpdateTimeLogDto,
@@ -143,29 +119,14 @@ export async function updateTimeLog(
   const payload: Record<string, unknown> = { hours: dto.hours };
   if (dto.comment !== undefined) payload.comment = dto.comment;
 
-  const { data, error } = await supabase
-    .from('time_logs')
-    .update(payload)
-    .eq('id', logId)
-    .select()
-    .single();
+  await TimeLog.update(payload, { where: { id: logId } });
 
-  if (error) {
-    logger.error('[time-logs.service] updateTimeLog error:', error);
-    throw new Error(error.message);
-  }
+  const row = await TimeLog.findByPk(logId, { raw: true });
+  if (!row) throw new Error('Time log not found after update');
 
-  return data as TimeLogRow;
+  return row as unknown as TimeLogRow;
 }
 
-/**
- * Permanently delete a time log by ID.
- */
 export async function deleteTimeLog(logId: string): Promise<void> {
-  const { error } = await supabase.from('time_logs').delete().eq('id', logId);
-
-  if (error) {
-    logger.error('[time-logs.service] deleteTimeLog error:', error);
-    throw new Error(error.message);
-  }
+  await TimeLog.destroy({ where: { id: logId } });
 }

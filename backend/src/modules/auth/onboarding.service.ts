@@ -1,6 +1,7 @@
 import logger from '../../config/logger';
-import supabase from '../../config/supabase';
 import { verifyInviteToken } from '../../services/invite.service';
+import { generateToken } from '../../config/auth';
+import { uploadBase64Image } from '../../config/storage';
 import {
   findUserById,
   fetchInviteNonce,
@@ -11,6 +12,7 @@ import {
 import { findOrCreateSkillByName } from '../skills/skills.service';
 import { sendWelcomeEmail, sendSkillRequestEmail } from '../../services/email.service';
 import { notifyAdmins, notifyUser } from '../notifications/notifications.service';
+import { User } from '../../models';
 import type { CompleteOnboardingDto } from './dto/complete-onboarding.dto';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -78,7 +80,7 @@ export async function validateOnboardingToken(token: string): Promise<ValidateTo
  *   2. Set password + profile fields on the user, mark status Active.
  *   3. Assign skills if provided.
  *   4. Fire-and-forget welcome email.
- *   5. Sign the user in and return a session JWT.
+ *   5. Issue a JWT and return it so the frontend can skip a separate login step.
  *
  * Called by POST /api/auth/onboarding/complete.
  */
@@ -145,15 +147,15 @@ export async function completeOnboarding(
         logger.warn('[onboarding.service] notifyAdmins (skill_request) failed:', e),
       );
 
-      // Email each admin separately — fire-and-forget
+      // Email each admin — fire-and-forget
       void (async () => {
         try {
-          const { data: admins } = await supabase
-            .from('users')
-            .select('email, name')
-            .in('role', ['admin', 'super_admin']);
-          if (!admins) return;
-          for (const admin of admins as { email: string; name: string }[]) {
+          const admins = await User.findAll({
+            where: { role: 'admin' },
+            attributes: ['email', 'name'],
+            raw: true,
+          });
+          for (const admin of admins as unknown as { email: string; name: string }[]) {
             sendSkillRequestEmail(admin.email, fullName, filteredPending).catch((e: unknown) =>
               logger.warn('[onboarding.service] sendSkillRequestEmail failed:', e),
             );
@@ -165,34 +167,27 @@ export async function completeOnboarding(
     }
   }
 
-  // Fire-and-forget welcome email — don't block the response.
+  // Fire-and-forget welcome email.
   sendWelcomeEmail(payload.email, fullName).catch((e) =>
     logger.warn('[onboarding.service] Welcome email failed:', e),
   );
 
-  // Sign the user in and return a session token so the frontend can redirect
-  // straight to the dashboard without requiring a separate login step.
-  const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
-    email:    payload.email,
-    password,
-  });
-
-  if (signInError || !authData.session) {
-    // Account activated but auto-login failed — tell the frontend to redirect to /login.
+  // Issue a JWT directly — no separate login round-trip required.
+  const refetchedUser = await findUserById(payload.userId);
+  if (!refetchedUser) {
     return { token: null, message: 'Account activated. Please log in.' };
   }
 
+  const jwtToken = generateToken(payload.userId, payload.email, refetchedUser.role);
+
   return {
-    token: authData.session.access_token,
-    user:  { id: payload.userId, email: payload.email, name: fullName },
+    token: jwtToken,
+    user: { id: payload.userId, email: payload.email, name: fullName },
   };
 }
 
 /**
- * Upload a base64-encoded avatar for an invited user to Supabase Storage.
- * Falls back to storing the data URL directly when the bucket does not exist
- * (local dev before migration 024 is applied).
- *
+ * Upload a base64-encoded avatar for an invited user to S3 (or data URL fallback).
  * Called by POST /api/auth/onboarding/avatar.
  */
 export async function uploadOnboardingAvatar(
@@ -201,33 +196,12 @@ export async function uploadOnboardingAvatar(
 ): Promise<AvatarUploadResult> {
   const payload = await verifyTokenWithNonce(token);
 
-  const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
-  const buffer     = Buffer.from(base64Data, 'base64');
-
   const mimeMatch = image.match(/^data:(image\/\w+);base64,/);
-  const mimeType  = (mimeMatch?.[1] ?? 'image/jpeg') as
-    'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+  const mimeType = mimeMatch?.[1] ?? 'image/jpeg';
+  const ext = mimeType.split('/')[1];
+  const key = `${payload.userId}.${ext}`;
 
-  const ext      = mimeType.split('/')[1];
-  const filePath = `${payload.userId}.${ext}`;
-
-  const { error: uploadError } = await supabase.storage
-    .from('avatars')
-    .upload(filePath, buffer, { contentType: mimeType, upsert: true });
-
-  let finalUrl: string;
-
-  if (uploadError) {
-    // Storage bucket not set up — store base64 data URL directly (local dev).
-    logger.warn(
-      '[onboarding.service] Storage upload failed, using data URL fallback:',
-      uploadError.message,
-    );
-    finalUrl = image;
-  } else {
-    const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(filePath);
-    finalUrl = urlData.publicUrl;
-  }
+  const finalUrl = await uploadBase64Image(key, image);
 
   await updateUser(payload.userId, { avatar_url: finalUrl });
 

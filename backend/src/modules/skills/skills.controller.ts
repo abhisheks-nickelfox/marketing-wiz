@@ -26,7 +26,7 @@ export async function createSkill(req: AuthenticatedRequest, res: Response): Pro
   }
 
   try {
-    const skill = await skillsService.createSkill(req.body as { name: string; category?: string });
+    const skill = await skillsService.createSkill(req.body);
     res.status(201).json({ data: skill });
   } catch (err) {
     const e = err as Error & { statusCode?: number };
@@ -35,6 +35,42 @@ export async function createSkill(req: AuthenticatedRequest, res: Response): Pro
       return;
     }
     logger.error('[skills.controller] createSkill error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+export async function updateSkill(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    res.status(400).json({ error: 'Validation failed', details: errors.array() });
+    return;
+  }
+
+  const { id } = req.params;
+
+  try {
+    const updated = await skillsService.updateSkill(id, req.body);
+    res.json({ data: updated });
+  } catch (err) {
+    logger.error('[skills.controller] updateSkill error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+// ─── PUT /api/skills/:id/members ─────────────────────────────────────────────
+
+export async function setSkillMembers(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const { id } = req.params;
+  const { user_ids } = req.body;
+
+  if (!Array.isArray(user_ids)) {
+    res.status(400).json({ error: 'user_ids must be an array' });
+    return;
+  }
+
+  try {
+    await skillsService.setSkillMembers(id, user_ids);
+    res.json({ message: 'Skill members updated' });
+  } catch (err) {
+    logger.error('[skills.controller] setSkillMembers error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

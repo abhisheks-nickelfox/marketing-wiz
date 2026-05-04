@@ -203,7 +203,7 @@ export async function deleteProject(req: AuthenticatedRequest, res: Response): P
     const result = await projectsService.deleteProject(id);
 
     if (!result.deleted && result.hasTickets) {
-      res.status(400).json({ error: 'Cannot delete a project that has tickets. Archive it instead.' });
+      res.status(400).json({ error: 'Cannot delete a project that has tasks. Archive it instead.' });
       return;
     }
 

@@ -1,5 +1,6 @@
 import logger from '../config/logger';
-import supabase from '../config/supabase';
+import { Transcript } from '../models';
+import { Op } from 'sequelize';
 import { SyncResult } from '../types';
 
 const FIREFLIES_API_URL = 'https://api.fireflies.ai/graphql';
@@ -32,31 +33,23 @@ interface FirefliesSentence {
 interface FirefliesTranscript {
   id: string;
   title: string;
-  date: string; // ISO timestamp
-  duration: number; // seconds
+  date: string;
+  duration: number;
   participants: string[];
   sentences: FirefliesSentence[];
 }
 
 interface FirefliesResponse {
-  data?: {
-    transcripts: FirefliesTranscript[];
-  };
+  data?: { transcripts: FirefliesTranscript[] };
   errors?: { message: string }[];
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/**
- * Converts the sentences array into a single readable transcript string.
- */
 function buildRawTranscript(sentences: FirefliesSentence[]): string {
   return sentences.map((s) => `${s.speaker_name}: ${s.text}`).join('\n');
 }
 
-/**
- * Returns an ISO string for 30 days ago.
- */
 function thirtyDaysAgo(): string {
   const d = new Date();
   d.setDate(d.getDate() - 30);
@@ -67,10 +60,9 @@ function thirtyDaysAgo(): string {
 
 /**
  * Fetches transcripts from the last 30 days via the Fireflies GraphQL API
- * and upserts them into the Supabase `transcripts` table.
+ * and upserts them into the `transcripts` table via Sequelize.
  *
- * When FIREFLIES_API_KEY is not set the function returns a mock result so
- * the rest of the app can be exercised without a real Fireflies account.
+ * When FIREFLIES_API_KEY is not set the function returns a no-op result.
  */
 export async function syncTranscripts(): Promise<SyncResult> {
   const result: SyncResult = { synced: 0, created: 0, updated: 0, errors: [] };
@@ -98,9 +90,7 @@ export async function syncTranscripts(): Promise<SyncResult> {
       }),
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
+    if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
 
     const json = (await response.json()) as FirefliesResponse;
 
@@ -110,63 +100,48 @@ export async function syncTranscripts(): Promise<SyncResult> {
 
     ffTranscripts = json.data?.transcripts ?? [];
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    result.errors.push(`Fireflies API error: ${message}`);
+    result.errors.push(`Fireflies API error: ${err instanceof Error ? err.message : String(err)}`);
     return result;
   }
 
   result.synced = ffTranscripts.length;
 
-  // ── Fetch existing fireflies_ids from Supabase ────────────────────────────
+  // ── Look up existing fireflies_ids in one batch query ────────────────────
   const ffIds = ffTranscripts.map((t) => t.id);
-  const { data: existingRows, error: fetchError } = await supabase
-    .from('transcripts')
-    .select('id, fireflies_id')
-    .in('fireflies_id', ffIds);
 
-  if (fetchError) {
-    result.errors.push(`Supabase fetch error: ${fetchError.message}`);
-    return result;
-  }
+  const existingRows = await Transcript.findAll({
+    where: { fireflies_id: { [Op.in]: ffIds } },
+    attributes: ['id', 'fireflies_id'],
+    raw: true,
+  });
 
   const existingMap = new Map<string, string>(
-    (existingRows ?? []).map((r: { id: string; fireflies_id: string }) => [r.fireflies_id, r.id])
+    (existingRows as unknown as { id: string; fireflies_id: string }[]).map((r) => [r.fireflies_id, r.id]),
   );
 
   // ── Upsert each transcript ────────────────────────────────────────────────
   for (const ff of ffTranscripts) {
-    const row = {
-      fireflies_id: ff.id,
-      title: ff.title || 'Untitled Call',
-      call_date: new Date(ff.date).toISOString(),
-      duration_sec: ff.duration ?? 0,
-      participants: ff.participants ?? [],
+    const rowData = {
+      fireflies_id:   ff.id,
+      title:          ff.title || 'Untitled Call',
+      call_date:      new Date(ff.date).toISOString(),
+      duration_sec:   ff.duration ?? 0,
+      participants:   ff.participants ?? [],
       raw_transcript: buildRawTranscript(ff.sentences ?? []),
-      archived: false,
-      fetched_at: new Date().toISOString(),
+      archived:       false,
+      fetched_at:     new Date().toISOString(),
     };
 
-    if (existingMap.has(ff.id)) {
-      // Update existing record
-      const { error } = await supabase
-        .from('transcripts')
-        .update(row)
-        .eq('fireflies_id', ff.id);
-
-      if (error) {
-        result.errors.push(`Update error for ${ff.id}: ${error.message}`);
-      } else {
+    try {
+      if (existingMap.has(ff.id)) {
+        await Transcript.update(rowData, { where: { fireflies_id: ff.id } });
         result.updated++;
-      }
-    } else {
-      // Insert new record
-      const { error } = await supabase.from('transcripts').insert(row);
-
-      if (error) {
-        result.errors.push(`Insert error for ${ff.id}: ${error.message}`);
       } else {
+        await Transcript.create(rowData);
         result.created++;
       }
+    } catch (err) {
+      result.errors.push(`Upsert error for ${ff.id}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

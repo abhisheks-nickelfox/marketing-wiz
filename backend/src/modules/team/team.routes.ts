@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/auth';
-import { requireAdmin, requireSuperAdmin } from '../../middleware/rbac';
+import { requireAdmin } from '../../middleware/rbac';
 import {
   listTeamValidation,
   createTeamMemberValidation,
@@ -25,7 +25,7 @@ router.get('/:id', teamController.getTeamMember);
 // PATCH /api/team/:id
 router.patch('/:id', updateTeamMemberValidation, teamController.updateTeamMember);
 
-// DELETE /api/team/:id — super_admin only; hard-deletes auth user + profile
-router.delete('/:id', requireSuperAdmin, teamController.deleteTeamMember);
+// DELETE /api/team/:id — admin only; hard-deletes auth user + profile
+router.delete('/:id', teamController.deleteTeamMember);
 
 export default router;

@@ -30,7 +30,32 @@
       "Bash(SUPABASE_URL=http://localhost:54321 SUPABASE_SERVICE_ROLE_KEY=test-service-role-key SUPABASE_ANON_KEY=test-anon-key npm test)",
       "Bash(SUPABASE_URL=http://localhost:54321 SUPABASE_SERVICE_ROLE_KEY=test-service-role-key SUPABASE_ANON_KEY=test-anon-key npx tsc --noEmit)",
       "Bash(echo \"EXIT:$?\")",
-      "Bash(npm test:*)"
+      "Bash(npm test:*)",
+      "WebFetch(domain:api.anthropic.com)",
+      "Bash(gunzip -c \"/home/shubham/.claude/projects/-home-shubham-Documents-MarketingWiz/e76c2550-954e-4755-931e-b5fabd61c287/tool-results/webfetch-1777550467567-doqci3.bin\")",
+      "Bash(tar -t)",
+      "Bash(tar -xO \"maketingwiz/README.md\")",
+      "Bash(tar -xO \"maketingwiz/chats/chat1.md\")",
+      "Bash(tar -xO \"maketingwiz/project/3 Portals Firm.html\")",
+      "mcp__claude_ai_Figma__get_design_context",
+      "mcp__claude_ai_Figma__get_screenshot",
+      "mcp__claude_ai_Figma__whoami",
+      "Bash(npm uninstall *)",
+      "Bash(xargs -I {} basename {} .ts)",
+      "Bash(psql -U aiwealth_user -d aiwealth_db -h localhost -p 5432 -c \"\\\\dt\")",
+      "Bash(PGPASSWORD='AIWeatlh@2003' psql -U aiwealth_user -d aiwealth_db -h localhost -p 5432 -c \"\\\\dt\")",
+      "Bash(PGPASSWORD='AIWeatlh@2003' psql -U postgres -h localhost -p 5432 -c \"\\\\l\")",
+      "Bash(sudo -u postgres psql -c \"\\\\l\")",
+      "Bash(pg_isready -h localhost -p 5432)",
+      "Bash(PGPASSWORD='AIWeatlh@2003' psql -U aiwealth_user -d aiwealth_db -h localhost -p 5432 -f /home/shubham/Documents/MarketingWiz/database/schema.sql)",
+      "Bash(PGPASSWORD='AIWeatlh@2003' psql -U aiwealth_user -d aiwealth_db -h localhost -p 5432 -f /home/shubham/Documents/MarketingWiz/database/postgres_schema.sql)",
+      "Bash(PGPASSWORD='AIWeatlh@2003' psql -U aiwealth_user -h localhost -p 5432 -d postgres -c \"DROP DATABASE aiwealth_db;\")",
+      "Bash(PGPASSWORD='AIWeatlh@2003' psql -U aiwealth_user -h localhost -p 5432 -d postgres -c \"CREATE DATABASE aiwealth_db OWNER aiwealth_user;\")",
+      "Bash(PGPASSWORD='AIWeatlh@2003' psql -U aiwealth_user -d aiwealth_db -h localhost -p 5432 -c \"\\\\dv\")",
+      "Bash(npm run *)",
+      "Read(//tmp/**)",
+      "Bash(kill %1)",
+      "Bash(node -e \"console.log\\(require\\('crypto'\\).randomBytes\\(64\\).toString\\('hex'\\)\\)\")"
     ]
   }
 }

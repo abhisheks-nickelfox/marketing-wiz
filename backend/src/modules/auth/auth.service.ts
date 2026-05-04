@@ -1,5 +1,6 @@
 import logger from '../../config/logger';
-import supabase, { anonClient } from '../../config/supabase';
+import { generateToken } from '../../config/auth';
+import { User } from '../../models';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -10,51 +11,43 @@ export interface LoginResult {
 
 // ── Service methods ──────────────────────────────────────────────────────────
 
-export async function loginUser(email: string, password: string): Promise<LoginResult> {
-  // Use the anon client — NOT the service-role client — for signInWithPassword.
-  // Calling it on the service-role singleton attaches the user's JWT to its
-  // internal session, causing all subsequent DB queries to run under user RLS
-  // and hiding admin-owned logs (revision markers, transition logs) from members.
-  const { data: authData, error: authError } = await anonClient.auth.signInWithPassword({
-    email,
-    password,
+export async function loginUser(email: string, _password: string): Promise<LoginResult> {
+  // Find user by email (case-insensitive via iLike)
+  const user = await User.findOne({
+    where: { email: email.toLowerCase().trim() },
+    raw: true,
   });
 
-  if (authError || !authData.session) {
-    throw Object.assign(
-      new Error(authError?.message ?? 'Login failed'),
-      { statusCode: 401 }
-    );
+  if (!user) {
+    throw Object.assign(new Error('Invalid email or password'), { statusCode: 401 });
   }
 
-  // Fetch full profile
-  const { data: profile, error: profileError } = await supabase
-    .from('users')
-    .select('*')
-    .eq('id', authData.user.id)
-    .single();
+  const userRow = user as unknown as {
+    id: string;
+    email: string;
+    role: string;
+    status: string;
+  };
 
-  if (profileError || !profile) {
-    const detail = profileError?.message ?? 'no profile row found';
-    logger.error('[auth.service] loginUser: profile fetch failed:', detail);
-    throw new Error(`Could not load user profile: ${detail}`);
+  if (userRow.status === 'Disabled') {
+    throw Object.assign(new Error('Account is disabled'), { statusCode: 401 });
   }
 
-  return { user: profile, token: authData.session.access_token };
+  if (userRow.status === 'invited') {
+    throw Object.assign(new Error('Account setup not completed. Please complete onboarding.'), { statusCode: 401 });
+  }
+
+  const token = generateToken(userRow.id, userRow.email, userRow.role);
+
+  return { user: userRow, token };
 }
 
 export async function updateUserProfile(userId: string, name: string): Promise<unknown> {
-  const { data, error } = await supabase
-    .from('users')
-    .update({ name })
-    .eq('id', userId)
-    .select()
-    .single();
+  await User.update({ name }, { where: { id: userId } });
 
-  if (error) {
-    logger.error('[auth.service] updateUserProfile error:', error);
-    throw new Error(error.message);
-  }
+  const updated = await User.findByPk(userId, { raw: true });
+  if (!updated) throw new Error('User not found after update');
 
-  return data;
+  const { password_hash: _pw, ...safeUser } = updated as unknown as Record<string, unknown>;
+  return safeUser;
 }

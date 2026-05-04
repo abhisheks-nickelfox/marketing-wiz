@@ -1,5 +1,7 @@
 import logger from '../../config/logger';
-import supabase from '../../config/supabase';
+import { Op } from 'sequelize';
+import sequelize from '../../config/database';
+import { Project, Firm, Ticket, TimeLog, ProjectMember, User } from '../../models';
 import type { CreateProjectDto } from './dto/create-project.dto';
 import type { UpdateProjectDto } from './dto/update-project.dto';
 
@@ -7,7 +9,7 @@ import type { UpdateProjectDto } from './dto/update-project.dto';
 
 export type WorkflowStatus = 'todo' | 'in_progress' | 'in_review' | 'approved' | 'completed';
 
-export interface Project {
+export interface ProjectRow {
   id:              string;
   firm_id:         string;
   name:            string;
@@ -18,7 +20,7 @@ export interface Project {
   updated_at:      string;
 }
 
-export interface ProjectMember {
+export interface ProjectMemberRow {
   user_id:    string;
   name:       string;
   email:      string;
@@ -26,10 +28,10 @@ export interface ProjectMember {
   added_at:   string;
 }
 
-export interface ProjectWithStats extends Project {
+export interface ProjectWithStats extends ProjectRow {
   firm_name:    string | null;
   ticket_count: number;
-  members:      ProjectMember[];
+  members:      ProjectMemberRow[];
 }
 
 export interface TaskSummary {
@@ -58,144 +60,130 @@ export interface ProjectOverview extends ProjectWithStats {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-async function fetchMembers(projectId: string): Promise<ProjectMember[]> {
-  const { data, error } = await supabase
-    .from('project_members')
-    .select('user_id, added_at, users(name, email, avatar_url)')
-    .eq('project_id', projectId)
-    .order('added_at', { ascending: true });
+async function fetchMembers(projectId: string): Promise<ProjectMemberRow[]> {
+  const rows = await ProjectMember.findAll({
+    where: { project_id: projectId },
+    include: [
+      {
+        model: User,
+        as: 'user',
+        attributes: ['name', 'email', 'avatar_url'],
+        required: true,
+      },
+    ],
+    order: [['added_at', 'ASC']],
+    raw: false,
+  });
 
-  if (error) {
-    logger.error('[projects.service] fetchMembers error:', error);
-    return [];
-  }
-
-  return (data ?? []).map((row: Record<string, unknown>) => {
-    const user = row.users as { name: string; email: string; avatar_url: string | null } | null;
+  return rows.map((row) => {
+    const r = row as unknown as { user_id: string; added_at: string; user: { name: string; email: string; avatar_url: string | null } };
     return {
-      user_id:    row.user_id as string,
-      name:       user?.name  ?? '',
-      email:      user?.email ?? '',
-      avatar_url: user?.avatar_url ?? null,
-      added_at:   row.added_at as string,
+      user_id:    r.user_id,
+      name:       r.user?.name  ?? '',
+      email:      r.user?.email ?? '',
+      avatar_url: r.user?.avatar_url ?? null,
+      added_at:   r.added_at,
     };
   });
 }
 
 async function syncMembers(projectId: string, memberIds: string[]): Promise<void> {
-  // Delete existing members not in new list
-  await supabase
-    .from('project_members')
-    .delete()
-    .eq('project_id', projectId)
-    .not('user_id', 'in', `(${memberIds.map((id) => `'${id}'`).join(',')})`);
+  // Delete members not in new list
+  const where: Record<string, unknown> = { project_id: projectId };
+  if (memberIds.length > 0) {
+    where.user_id = { [Op.notIn]: memberIds };
+  }
+  await ProjectMember.destroy({ where });
 
   if (memberIds.length === 0) return;
 
-  // Upsert new members (ignore duplicates)
+  // Upsert new members (ignore duplicates via ignoreDuplicates)
   const rows = memberIds.map((user_id) => ({ project_id: projectId, user_id }));
-  const { error } = await supabase
-    .from('project_members')
-    .upsert(rows, { onConflict: 'project_id,user_id', ignoreDuplicates: true });
-
-  if (error) {
-    logger.error('[projects.service] syncMembers error:', error);
-    throw new Error(error.message);
-  }
-}
-
-function shapeProject(p: Record<string, unknown>): Project {
-  const { firms: _f, ...rest } = p;
-  return rest as unknown as Project;
+  await ProjectMember.bulkCreate(rows, { ignoreDuplicates: true });
 }
 
 // ── Service methods ───────────────────────────────────────────────────────────
 
 export async function findAllProjects(firmId?: string): Promise<ProjectWithStats[]> {
-  let query = supabase
-    .from('projects')
-    .select('*, firms(name)')
-    .order('created_at', { ascending: false });
+  const where: Record<string, unknown> = {};
+  if (firmId) where.firm_id = firmId;
 
-  if (firmId) query = query.eq('firm_id', firmId);
+  const projects = await Project.findAll({
+    where,
+    order: [['created_at', 'DESC']],
+    raw: true,
+  });
 
-  const { data: projects, error } = await query;
-  if (error) throw new Error(error.message);
+  if (projects.length === 0) return [];
 
-  const projectIds = (projects ?? []).map((p: Record<string, unknown>) => p.id as string);
+  const projectList = projects as unknown as ProjectRow[];
+  const projectIds  = projectList.map((p) => p.id);
+  const firmIds     = [...new Set(projectList.map((p) => p.firm_id).filter(Boolean))];
+
+  // Batch: firm names
+  const firmMap: Record<string, string> = {};
+  if (firmIds.length > 0) {
+    const firms = await Firm.findAll({ where: { id: { [Op.in]: firmIds } }, attributes: ['id', 'name'], raw: true });
+    for (const f of firms as unknown as { id: string; name: string }[]) firmMap[f.id] = f.name;
+  }
 
   // Batch: ticket counts
   const ticketCountMap: Record<string, number> = {};
   if (projectIds.length > 0) {
-    const { data: ticketCounts, error: cErr } = await supabase
-      .from('tickets')
-      .select('project_id')
-      .in('project_id', projectIds);
-
-    if (cErr) throw new Error(cErr.message);
-    for (const row of ticketCounts ?? []) {
-      const r = row as { project_id: string };
+    const ticketRows = await Ticket.findAll({
+      where: { project_id: { [Op.in]: projectIds } },
+      attributes: ['project_id'],
+      raw: true,
+    });
+    for (const r of ticketRows as unknown as { project_id: string }[]) {
       ticketCountMap[r.project_id] = (ticketCountMap[r.project_id] ?? 0) + 1;
     }
   }
 
-  // Batch: members per project
-  const memberMap: Record<string, ProjectMember[]> = {};
-  if (projectIds.length > 0) {
-    const { data: memberRows, error: mErr } = await supabase
-      .from('project_members')
-      .select('project_id, user_id, added_at, users(name, email, avatar_url)')
-      .in('project_id', projectIds);
+  // Batch: project members
+  const memberRows = await ProjectMember.findAll({
+    where: { project_id: { [Op.in]: projectIds } },
+    include: [{ model: User, as: 'user', attributes: ['name', 'email', 'avatar_url'], required: true }],
+    raw: false,
+  });
 
-    if (mErr) throw new Error(mErr.message);
-    for (const row of memberRows ?? []) {
-      const r = row as Record<string, unknown>;
-      const user = r.users as { name: string; email: string; avatar_url: string | null } | null;
-      const pid = r.project_id as string;
-      if (!memberMap[pid]) memberMap[pid] = [];
-      memberMap[pid].push({
-        user_id:    r.user_id as string,
-        name:       user?.name  ?? '',
-        email:      user?.email ?? '',
-        avatar_url: user?.avatar_url ?? null,
-        added_at:   r.added_at as string,
-      });
-    }
+  const memberMap: Record<string, ProjectMemberRow[]> = {};
+  for (const row of memberRows) {
+    const r = row as unknown as { project_id: string; user_id: string; added_at: string; user: { name: string; email: string; avatar_url: string | null } };
+    if (!memberMap[r.project_id]) memberMap[r.project_id] = [];
+    memberMap[r.project_id].push({
+      user_id:    r.user_id,
+      name:       r.user?.name  ?? '',
+      email:      r.user?.email ?? '',
+      avatar_url: r.user?.avatar_url ?? null,
+      added_at:   r.added_at,
+    });
   }
 
-  return (projects ?? []).map((p: Record<string, unknown>) => {
-    const firm = p.firms as { name: string } | null;
-    return {
-      ...shapeProject(p),
-      firm_name:    firm?.name ?? null,
-      ticket_count: ticketCountMap[p.id as string] ?? 0,
-      members:      memberMap[p.id as string]      ?? [],
-    };
-  });
+  return projectList.map((p) => ({
+    ...p,
+    firm_name:    firmMap[p.firm_id] ?? null,
+    ticket_count: ticketCountMap[p.id] ?? 0,
+    members:      memberMap[p.id]      ?? [],
+  }));
 }
 
 export async function findProjectById(id: string): Promise<ProjectWithStats | null> {
-  const { data: project, error } = await supabase
-    .from('projects')
-    .select('*, firms(name)')
-    .eq('id', id)
-    .single();
+  const project = await Project.findByPk(id, { raw: true });
+  if (!project) return null;
 
-  if (error || !project) return null;
+  const p = project as unknown as ProjectRow;
 
-  const { count } = await supabase
-    .from('tickets')
-    .select('id', { count: 'exact', head: true })
-    .eq('project_id', id);
-
-  const members = await fetchMembers(id);
-  const p = project as Record<string, unknown>;
-  const firm = p.firms as { name: string } | null;
+  const [firmRow, ticketCount, members] = await Promise.all([
+    Firm.findByPk(p.firm_id, { attributes: ['name'], raw: true }),
+    Ticket.count({ where: { project_id: id } }),
+    fetchMembers(id),
+  ]);
 
   return {
-    ...shapeProject(p),
-    firm_name:    firm?.name ?? null,
-    ticket_count: count ?? 0,
+    ...p,
+    firm_name:    (firmRow as unknown as { name: string } | null)?.name ?? null,
+    ticket_count: ticketCount,
     members,
   };
 }
@@ -204,66 +192,62 @@ export async function getProjectOverview(id: string): Promise<ProjectOverview | 
   const base = await findProjectById(id);
   if (!base) return null;
 
-  // Fetch all tasks for this project
-  const { data: tickets, error: tErr } = await supabase
-    .from('tickets')
-    .select('id, title, status, priority, assignee_id, deadline, project_id')
-    .eq('project_id', id)
-    .eq('archived', false)
-    .order('updated_at', { ascending: false });
+  const projectTasks = await Ticket.findAll({
+    where: { project_id: id, archived: false },
+    attributes: ['id', 'title', 'status', 'priority', 'assignee_id', 'deadline', 'project_id'],
+    order: [['updated_at', 'DESC']],
+    raw: true,
+  });
 
-  if (tErr) throw new Error(tErr.message);
-
-  // Batch time_spent per ticket
-  const ticketIds = (tickets ?? []).map((t: Record<string, unknown>) => t.id as string);
+  const taskList = projectTasks as unknown as Record<string, unknown>[];
+  const taskIds  = taskList.map((t) => t.id as string);
   const timeMap: Record<string, number> = {};
 
-  if (ticketIds.length > 0) {
-    const { data: logs } = await supabase
-      .from('time_logs')
-      .select('ticket_id, hours, log_type')
-      .in('ticket_id', ticketIds)
-      .not('log_type', 'in', '("final","revision","transition")');
-
-    for (const log of logs ?? []) {
-      const l = log as { ticket_id: string; hours: number };
-      timeMap[l.ticket_id] = (timeMap[l.ticket_id] ?? 0) + l.hours;
+  if (taskIds.length > 0) {
+    const logs = await TimeLog.findAll({
+      where: {
+        ticket_id: { [Op.in]: taskIds },
+        log_type:  { [Op.notIn]: ['final', 'revision', 'transition'] },
+      },
+      attributes: ['ticket_id', 'hours'],
+      raw: true,
+    });
+    for (const l of logs as unknown as { ticket_id: string; hours: number }[]) {
+      timeMap[l.ticket_id] = (timeMap[l.ticket_id] ?? 0) + Number(l.hours ?? 0);
     }
   }
 
   const STATUS_GROUP: Record<string, string> = {
-    draft:              'todo',
-    in_progress:        'in_progress',
-    revisions:          'in_progress',
-    internal_review:    'in_review',
-    client_review:      'in_review',
-    compliance_review:  'in_review',
-    approved:           'approved',
-    closed:             'completed',
-    discarded:          'discarded',
+    draft:             'todo',
+    in_progress:       'in_progress',
+    revisions:         'in_progress',
+    internal_review:   'in_review',
+    client_review:     'in_review',
+    compliance_review: 'in_review',
+    approved:          'approved',
+    closed:            'completed',
+    discarded:         'discarded',
   };
 
   const tasksByStatus: Record<string, TaskSummary[]> = {
     todo: [], in_progress: [], in_review: [], approved: [], completed: [], discarded: [],
   };
 
-  for (const t of tickets ?? []) {
-    const ticket = t as Record<string, unknown>;
-    const group  = STATUS_GROUP[ticket.status as string] ?? 'todo';
-    const summary: TaskSummary = {
-      id:          ticket.id          as string,
-      title:       ticket.title       as string,
-      status:      ticket.status      as string,
-      priority:    ticket.priority    as string,
-      assignee_id: ticket.assignee_id as string | null,
-      deadline:    ticket.deadline    as string | null,
-      project_id:  ticket.project_id  as string | null,
-      time_spent:  timeMap[ticket.id as string] ?? 0,
-    };
-    tasksByStatus[group].push(summary);
+  for (const t of taskList) {
+    const group = STATUS_GROUP[t.status as string] ?? 'todo';
+    tasksByStatus[group].push({
+      id:          t.id          as string,
+      title:       t.title       as string,
+      status:      t.status      as string,
+      priority:    t.priority    as string,
+      assignee_id: t.assignee_id as string | null,
+      deadline:    t.deadline    as string | null,
+      project_id:  t.project_id  as string | null,
+      time_spent:  timeMap[t.id as string] ?? 0,
+    });
   }
 
-  const total = (tickets ?? []).length;
+  const total = taskList.length;
   return {
     ...base,
     tasks_by_status: tasksByStatus,
@@ -282,38 +266,31 @@ export async function getProjectOverview(id: string): Promise<ProjectOverview | 
 export async function createProject(dto: CreateProjectDto): Promise<ProjectWithStats> {
   const { firm_id, name, description, workflow_status = 'todo', member_ids = [] } = dto;
 
-  const { data: firm, error: firmErr } = await supabase
-    .from('firms').select('id').eq('id', firm_id).single();
-
-  if (firmErr || !firm) {
+  const firm = await Firm.findByPk(firm_id, { attributes: ['id'], raw: true });
+  if (!firm) {
     throw Object.assign(new Error('Firm not found'), { statusCode: 404 });
   }
 
-  const { data: project, error } = await supabase
-    .from('projects')
-    .insert({ firm_id, name: name.trim(), description: description?.trim() ?? null, status: 'active', workflow_status })
-    .select()
-    .single();
+  const project = await Project.create({
+    firm_id,
+    name:            name.trim(),
+    description:     description?.trim() ?? null,
+    status:          'active',
+    workflow_status: workflow_status as WorkflowStatus,
+  });
 
-  if (error) throw new Error(error.message);
-
-  const created = project as Project;
-
-  // Add initial members
   if (member_ids.length > 0) {
-    await syncMembers(created.id, member_ids);
+    await syncMembers(project.id, member_ids);
   }
 
-  const members = await fetchMembers(created.id);
+  const members = await fetchMembers(project.id);
 
-  return { ...created, firm_name: null, ticket_count: 0, members };
+  return { ...(project.toJSON() as ProjectRow), firm_name: null, ticket_count: 0, members };
 }
 
 export async function updateProject(id: string, updates: UpdateProjectDto): Promise<ProjectWithStats | null> {
-  const { data: existing, error: fetchErr } = await supabase
-    .from('projects').select('id').eq('id', id).single();
-
-  if (fetchErr || !existing) return null;
+  const existing = await Project.findByPk(id, { attributes: ['id'], raw: true });
+  if (!existing) return null;
 
   const { member_ids, ...rest } = updates;
   const patch: Record<string, unknown> = { ...rest };
@@ -321,11 +298,9 @@ export async function updateProject(id: string, updates: UpdateProjectDto): Prom
   if (typeof patch.description === 'string') patch.description = (patch.description as string).trim() || null;
 
   if (Object.keys(patch).length > 0) {
-    const { error } = await supabase.from('projects').update(patch).eq('id', id);
-    if (error) throw new Error(error.message);
+    await Project.update(patch, { where: { id } });
   }
 
-  // Sync members if provided
   if (member_ids !== undefined) {
     await syncMembers(id, member_ids);
   }
@@ -334,55 +309,37 @@ export async function updateProject(id: string, updates: UpdateProjectDto): Prom
 }
 
 export async function addProjectMember(projectId: string, userId: string): Promise<void> {
-  const { error } = await supabase
-    .from('project_members')
-    .upsert({ project_id: projectId, user_id: userId }, { onConflict: 'project_id,user_id', ignoreDuplicates: true });
-
-  if (error) throw new Error(error.message);
+  await ProjectMember.upsert({ project_id: projectId, user_id: userId });
 }
 
 export async function removeProjectMember(projectId: string, userId: string): Promise<void> {
-  const { error } = await supabase
-    .from('project_members')
-    .delete()
-    .eq('project_id', projectId)
-    .eq('user_id', userId);
-
-  if (error) throw new Error(error.message);
+  await ProjectMember.destroy({ where: { project_id: projectId, user_id: userId } });
 }
 
-export async function listProjectMembers(projectId: string): Promise<ProjectMember[]> {
+export async function listProjectMembers(projectId: string): Promise<ProjectMemberRow[]> {
   return fetchMembers(projectId);
 }
 
-export async function toggleProjectArchive(id: string): Promise<Project | null> {
-  const { data: existing, error: fetchErr } = await supabase
-    .from('projects').select('id, status').eq('id', id).single();
+export async function toggleProjectArchive(id: string): Promise<ProjectRow | null> {
+  const existing = await Project.findByPk(id, { attributes: ['id', 'status'], raw: true });
+  if (!existing) return null;
 
-  if (fetchErr || !existing) return null;
+  const currentStatus = (existing as unknown as { status: string }).status;
+  const newStatus = currentStatus === 'active' ? 'archived' : 'active';
 
-  const newStatus = (existing as { status: string }).status === 'active' ? 'archived' : 'active';
+  await Project.update({ status: newStatus }, { where: { id } });
 
-  const { data: updated, error } = await supabase
-    .from('projects').update({ status: newStatus }).eq('id', id).select().single();
-
-  if (error) throw new Error(error.message);
-  return updated as Project;
+  const updated = await Project.findByPk(id, { raw: true });
+  return updated ? (updated as unknown as ProjectRow) : null;
 }
 
 export async function deleteProject(id: string): Promise<{ deleted: boolean; hasTickets: boolean }> {
-  const { data: existing, error: fetchErr } = await supabase
-    .from('projects').select('id').eq('id', id).single();
+  const existing = await Project.findByPk(id, { attributes: ['id'], raw: true });
+  if (!existing) return { deleted: false, hasTickets: false };
 
-  if (fetchErr || !existing) return { deleted: false, hasTickets: false };
+  const ticketCount = await Ticket.count({ where: { project_id: id } });
+  if (ticketCount > 0) return { deleted: false, hasTickets: true };
 
-  const { count } = await supabase
-    .from('tickets').select('id', { count: 'exact', head: true }).eq('project_id', id);
-
-  if ((count ?? 0) > 0) return { deleted: false, hasTickets: true };
-
-  const { error } = await supabase.from('projects').delete().eq('id', id);
-  if (error) throw new Error(error.message);
-
+  await Project.destroy({ where: { id } });
   return { deleted: true, hasTickets: false };
 }

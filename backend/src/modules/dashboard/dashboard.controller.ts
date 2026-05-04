@@ -27,7 +27,7 @@ export async function teamWorkload(_req: AuthenticatedRequest, res: Response): P
   }
 }
 
-// ─── GET /api/dashboard/overdue-tickets ───────────────────────────────────────
+// ─── GET /api/dashboard/overdue-tasks ────────────────────────────────────────
 
 export async function overdueTickets(_req: AuthenticatedRequest, res: Response): Promise<void> {
   try {

@@ -5,6 +5,7 @@ import {
   updateProfileValidation,
   forgotPasswordValidation,
   resetPasswordValidation,
+  changePasswordValidation,
 } from './auth.validation';
 import {
   validateTokenValidation,
@@ -33,6 +34,9 @@ router.post('/forgot-password', forgotPasswordValidation, authController.forgotP
 
 // POST /api/auth/reset-password — public
 router.post('/reset-password', resetPasswordValidation, authController.resetPassword);
+
+// POST /api/auth/change-password — requires authentication
+router.post('/change-password', authenticate, changePasswordValidation, authController.changePassword);
 
 // ── Onboarding (public — no auth required) ───────────────────────────────────
 

@@ -1,70 +1,53 @@
 /**
  * POST /api/auth/login
  *
- * Tests the login endpoint in isolation.  Supabase is fully mocked so no
- * network calls are made.  The cron job and server listen() are NOT started —
- * we import `app` directly from src/index.ts, which exports the Express app
- * before calling app.listen().
+ * Tests the login endpoint in isolation. Sequelize models and JWT are mocked
+ * so no database or network calls are made.
  */
 
 import request from 'supertest';
 
-// ── Mock Supabase before any module that imports it is loaded ─────────────────
-import {
-  supabaseMockModule,
-  mockAuthResponse,
-  mockDbResponse,
-  mockDbQueue,
-  resetMocks,
-} from '../helpers/mockSupabase';
+// ── Mocks must be declared before imports ─────────────────────────────────────
 
-jest.mock('../../config/supabase', () => supabaseMockModule());
-
-// Mock node-cron so the cron.schedule() call in index.ts is a no-op
+jest.mock('../../models', () => require('../helpers/mockModels').mockModelsModule());
 jest.mock('node-cron', () => ({ schedule: jest.fn() }));
-
-// Mock the fireflies sync so startup doesn't try to reach the network
 jest.mock('../../services/fireflies.service', () => ({
   syncTranscripts: jest.fn().mockResolvedValue({ synced: 0, created: 0, updated: 0, errors: [] }),
 }));
+jest.mock('../../config/database', () => ({
+  __esModule: true,
+  default: { authenticate: jest.fn().mockResolvedValue(undefined), sync: jest.fn() },
+  connectDB:  jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock('../../models/index', () => require('../helpers/mockModels').mockModelsModule());
 
-// ── Import app AFTER mocks are in place ───────────────────────────────────────
+// ── Import after mocks ────────────────────────────────────────────────────────
+
+import { MockUser, resetAllMocks } from '../helpers/mockModels';
 import app from '../../index';
 
-// ── Shared fake data ──────────────────────────────────────────────────────────
+// ── Fixtures ──────────────────────────────────────────────────────────────────
 
-const FAKE_PROFILE = {
-  id: 'user-uuid-1234',
-  email: 'alice@example.com',
-  name: 'Alice',
-  role: 'admin',
+const ACTIVE_USER = {
+  id:          'user-uuid-1234',
+  email:       'alice@example.com',
+  name:        'Alice',
+  role:        'admin',
   permissions: [],
-  status: 'Active',
-  created_at: '2024-01-01T00:00:00.000Z',
-  updated_at: null,
-};
-
-const FAKE_SESSION = {
-  access_token: 'fake-jwt-token',
-  token_type: 'bearer',
-  expires_in: 3600,
+  status:      'Active',
+  created_at:  '2024-01-01T00:00:00.000Z',
+  updated_at:  null,
 };
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('POST /api/auth/login', () => {
-  beforeEach(() => {
-    resetMocks();
-  });
+  beforeEach(() => resetAllMocks());
 
   // ── Happy path ──────────────────────────────────────────────────────────────
 
   it('returns 200 with user and token on valid credentials', async () => {
-    // anonClient.auth.signInWithPassword success
-    mockAuthResponse({ user: { id: FAKE_PROFILE.id }, session: FAKE_SESSION });
-    // loginUser calls: supabase.from('users').select().eq().single()
-    // That is one DB call (single()), returning FAKE_PROFILE
-    mockDbResponse(FAKE_PROFILE);
+    MockUser.findOne.mockResolvedValueOnce(ACTIVE_USER);
 
     const res = await request(app)
       .post('/api/auth/login')
@@ -72,13 +55,12 @@ describe('POST /api/auth/login', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data).toBeDefined();
-    expect(res.body.data.token).toBe('fake-jwt-token');
+    expect(res.body.data.token).toBeDefined();
     expect(res.body.data.user).toBeDefined();
   });
 
-  it('returned user object has expected shape and no password field', async () => {
-    mockAuthResponse({ user: { id: FAKE_PROFILE.id }, session: FAKE_SESSION });
-    mockDbResponse(FAKE_PROFILE);
+  it('returned user has expected shape and no password field', async () => {
+    MockUser.findOne.mockResolvedValueOnce(ACTIVE_USER);
 
     const res = await request(app)
       .post('/api/auth/login')
@@ -89,9 +71,8 @@ describe('POST /api/auth/login', () => {
     expect(user.email).toBeDefined();
     expect(user.name).toBeDefined();
     expect(user.role).toBeDefined();
-    // password must never be returned
     expect(user.password).toBeUndefined();
-    expect(user.encrypted_password).toBeUndefined();
+    expect(user.password_hash).toBeUndefined();
   });
 
   // ── Validation errors ───────────────────────────────────────────────────────
@@ -132,32 +113,38 @@ describe('POST /api/auth/login', () => {
     expect(res.body.error).toBe('Validation failed');
   });
 
-  // ── Wrong credentials ───────────────────────────────────────────────────────
+  // ── Auth failures ───────────────────────────────────────────────────────────
 
-  it('returns 401 when Supabase rejects the credentials', async () => {
-    // signInWithPassword returns an error (invalid credentials)
-    mockAuthResponse(
-      { user: null, session: null },
-      { message: 'Invalid login credentials' }
-    );
+  it('returns 401 when user is not found', async () => {
+    MockUser.findOne.mockResolvedValueOnce(null);
 
     const res = await request(app)
       .post('/api/auth/login')
-      .send({ email: 'alice@example.com', password: 'wrongpassword' });
+      .send({ email: 'nobody@example.com', password: 'wrongpassword' });
 
     expect(res.status).toBe(401);
     expect(res.body.error).toBeDefined();
   });
 
-  it('returns 401 when auth succeeds but no session is returned', async () => {
-    // Edge case: authError is null but session is also null (shouldn't happen in prod
-    // but the service guards against it)
-    mockAuthResponse({ user: { id: 'uid' }, session: null });
+  it('returns 401 when account is disabled', async () => {
+    MockUser.findOne.mockResolvedValueOnce({ ...ACTIVE_USER, status: 'Disabled' });
 
     const res = await request(app)
       .post('/api/auth/login')
-      .send({ email: 'alice@example.com', password: 'somepassword' });
+      .send({ email: 'alice@example.com', password: 'password' });
 
     expect(res.status).toBe(401);
+    expect(res.body.error).toMatch(/disabled/i);
+  });
+
+  it('returns 401 when account is invited (onboarding not complete)', async () => {
+    MockUser.findOne.mockResolvedValueOnce({ ...ACTIVE_USER, status: 'invited' });
+
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'alice@example.com', password: 'password' });
+
+    expect(res.status).toBe(401);
+    expect(res.body.error).toMatch(/onboarding/i);
   });
 });

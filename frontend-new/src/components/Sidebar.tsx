@@ -8,14 +8,17 @@ import ExpandableNavItem from './sidebar/ExpandableNavItem';
 import { useFirms } from '../hooks/useFirms';
 
 import vectorLogo    from '../assets/logo/Logomark.svg';
-import iconInbox     from '../assets/navbar-icon/Icon.png';
-import iconDashboard from '../assets/navbar-icon/Icon (2).png';
-import iconFirms     from '../assets/navbar-icon/building-07.png';
-import iconTasks     from '../assets/navbar-icon/check-done-02.png';
-import iconTimesheet from '../assets/navbar-icon/Icon (1).png';
-import iconSettings  from '../assets/navbar-icon/settings-01.png';
-import iconUsers     from '../assets/navbar-icon/users-01.png';
-import iconTranscripts from '../assets/navbar-icon/cpu-chip-02.png';
+import iconInbox      from '../assets/navbar-icon/icon-inbox.png';
+import iconDashboard  from '../assets/navbar-icon/icon-dashboard.png';
+import iconFirms      from '../assets/navbar-icon/icon-firms.png';
+import iconTasks      from '../assets/navbar-icon/icon-my-tasks.png';
+import iconTimesheet  from '../assets/navbar-icon/icon-timesheet.png';
+import iconSettings   from '../assets/navbar-icon/icon-settings.png';
+import iconUsers      from '../assets/navbar-icon/icon-users.png';
+import iconTranscripts from '../assets/navbar-icon/icon-transcripts.png';
+import iconProjects    from '../assets/navbar-icon/icon-projects.svg';
+import iconTeamPulse   from '../assets/navbar-icon/icon-team-pulse.svg';
+import iconTimeReports from '../assets/navbar-icon/icon-time-reports.svg';
 
 const NavIcon = ({ src }: { src: string }) => (
   <img src={src} alt="" width={20} height={20} className="shrink-0" />
@@ -48,6 +51,9 @@ function getActiveNav(pathname: string): string {
   if (pathname.startsWith('/transcripts'))           return 'transcripts';
   if (pathname.startsWith('/settings'))              return 'settings';
   if (pathname.startsWith('/firms'))                 return 'firms';
+  if (pathname.startsWith('/projects'))              return 'projects';
+  if (pathname.startsWith('/team-pulse'))            return 'team-pulse';
+  if (pathname.startsWith('/time-reports'))          return 'time-reports';
   return '';
 }
 
@@ -112,6 +118,12 @@ export default function Sidebar() {
               onClick={() => navigate('/dashboard')}
             />
           </div>
+          <NavItem
+            label="Projects"
+            icon={<NavIcon src={iconProjects} />}
+            active={activeNav === 'projects'}
+            onClick={() => navigate('/projects')}
+          />
           {firmsLoading ? (
             <div className="ml-2 flex flex-col gap-1 py-1">
               {[1, 2, 3].map((i) => (
@@ -126,6 +138,7 @@ export default function Sidebar() {
                 items={firmItems}
                 activeItemId={activeFirm}
                 onItemClick={(id) => navigate(`/firms/${id}`)}
+                addAction={{ label: 'Add a firm', onClick: () => navigate('/firms/new') }}
               />
             </div>
           )}
@@ -145,6 +158,12 @@ export default function Sidebar() {
             icon={<NavIcon src={iconTimesheet} />}
             active={activeNav === 'timesheet'}
             onClick={() => navigate('/timesheet')}
+          />
+          <NavItem
+            label="Time Reports"
+            icon={<NavIcon src={iconTimeReports} />}
+            active={activeNav === 'time-reports'}
+            onClick={() => navigate('/time-reports')}
           />
         </NavSection>
 
@@ -170,6 +189,12 @@ export default function Sidebar() {
               onClick={() => navigate('/users')}
             />
           </div>
+          <NavItem
+            label="Team Pulse"
+            icon={<NavIcon src={iconTeamPulse} />}
+            active={activeNav === 'team-pulse'}
+            onClick={() => navigate('/team-pulse')}
+          />
           <NavItem
             label="Settings"
             icon={<NavIcon src={iconSettings} />}

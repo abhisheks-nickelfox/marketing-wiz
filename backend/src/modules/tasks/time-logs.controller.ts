@@ -12,15 +12,15 @@ export async function listTimeLogs(req: AuthenticatedRequest, res: Response): Pr
   const { id: ticketId } = req.params;
 
   try {
-    // Verify ticket exists and check member access rights
-    const ticket = await timeLogsService.fetchTicketAssignee(ticketId);
+    // Verify task exists and check member access rights
+    const task = await timeLogsService.fetchTicketAssignee(ticketId);
 
-    if (!ticket) {
-      res.status(404).json({ error: 'Ticket not found' });
+    if (!task) {
+      res.status(404).json({ error: 'Task not found' });
       return;
     }
 
-    if (req.user!.role === 'member' && ticket.assignee_id !== req.user!.id) {
+    if (req.user!.role === 'member' && task.assignee_id !== req.user!.id) {
       res.status(403).json({ error: 'Access denied' });
       return;
     }
@@ -46,30 +46,30 @@ export async function createTimeLog(req: AuthenticatedRequest, res: Response): P
   const dto = req.body as CreateTimeLogDto;
 
   try {
-    // Verify ticket exists and member has access.
+    // Verify task exists and member has access.
     // revision_count is fetched so new logs are tagged to the current cycle.
-    const ticket = await timeLogsService.fetchTicketForTimeLogs(ticketId);
+    const task = await timeLogsService.fetchTicketForTimeLogs(ticketId);
 
-    if (!ticket) {
-      res.status(404).json({ error: 'Ticket not found' });
+    if (!task) {
+      res.status(404).json({ error: 'Task not found' });
       return;
     }
 
-    if (req.user!.role === 'member' && ticket.assignee_id !== req.user!.id) {
-      res.status(403).json({ error: 'You are not assigned to this ticket' });
+    if (req.user!.role === 'member' && task.assignee_id !== req.user!.id) {
+      res.status(403).json({ error: 'You are not assigned to this task' });
       return;
     }
 
     // Time logging is only valid while actively working: in_progress or revisions
-    if (!['in_progress', 'revisions'].includes(ticket.status)) {
-      res.status(400).json({ error: 'Cannot log time on a ticket in this status' });
+    if (!['in_progress', 'revisions'].includes(task.status)) {
+      res.status(400).json({ error: 'Cannot log time on a task in this status' });
       return;
     }
 
     const data = await timeLogsService.createTimeLog({
       ticketId,
       userId:        req.user!.id,
-      revisionCycle: ticket.revision_count ?? 0,
+      revisionCycle: task.revision_count ?? 0,
       dto,
     });
 
@@ -93,7 +93,7 @@ export async function updateTimeLog(req: AuthenticatedRequest, res: Response): P
   const dto = req.body as UpdateTimeLogDto;
 
   try {
-    // Verify the log exists and belongs to this ticket
+    // Verify the log exists and belongs to this task
     const log = await timeLogsService.fetchTimeLog(logId, ticketId);
 
     if (!log) {

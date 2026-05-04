@@ -263,6 +263,53 @@ export async function sendAccountDisabledEmail(
   });
 }
 
+/** Security notification sent after a password reset is completed successfully. */
+export async function sendPasswordChangedEmail(
+  userEmail: string,
+  userName: string,
+): Promise<void> {
+  const firstName = userName?.trim().split(/\s+/)[0] ?? 'there';
+
+  const content = `
+    <h2 style="font-size:22px;font-weight:700;color:#181D27;margin:0 0 8px;">
+      Your password was changed
+    </h2>
+    <p style="font-size:15px;color:#535862;margin:0 0 24px;line-height:1.6;">
+      Hi <strong>${firstName}</strong>, your ${FROM_NAME} password was successfully changed.
+    </p>
+
+    <table width="100%" cellpadding="0" cellspacing="0"
+      style="border-collapse:collapse;border-radius:8px;overflow:hidden;border:1px solid #E9EAEB;margin-bottom:24px;">
+      <tbody>
+        <tr style="background:#F9FAFB;">
+          <td style="padding:16px 20px;">
+            <p style="margin:0 0 4px;font-size:13px;font-weight:600;color:#414651;">When</p>
+            <p style="margin:0;font-size:14px;color:#535862;">${new Date().toUTCString()}</p>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p style="font-size:14px;color:#535862;margin:0 0 24px;line-height:1.7;">
+      If you made this change, no further action is needed.
+    </p>
+
+    <div style="background:#FFF1F3;border:1px solid #FEA3B4;border-radius:8px;padding:16px 20px;margin-bottom:0;">
+      <p style="margin:0;font-size:13px;color:#C01048;line-height:1.6;">
+        <strong>Didn't make this change?</strong> Your account may be compromised. Please contact
+        <a href="mailto:${SUPPORT_EMAIL}" style="color:#C01048;font-weight:600;">${SUPPORT_EMAIL}</a>
+        immediately.
+      </p>
+    </div>
+  `;
+
+  await sendEmail({
+    to:      userEmail,
+    subject: 'Your password was changed',
+    html:    baseTemplate(content),
+  });
+}
+
 /** Password reset email sent when a user requests a password reset. */
 export async function sendPasswordResetEmail(
   userEmail: string,

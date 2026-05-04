@@ -9,7 +9,7 @@ import type { UpdateUserDto } from './dto/update-user.dto';
 import { sendAccountDisabledEmail, sendProfileUpdateEmail, sendInviteEmail } from '../../services/email.service';
 import { generateInviteToken } from '../../services/invite.service';
 import { FRONTEND_URL } from '../../config/constants';
-import supabase from '../../config/supabase';
+import { uploadBase64Image } from '../../config/storage';
 import { notifyAdmins } from '../notifications/notifications.service';
 
 // ─── GET /api/users ───────────────────────────────────────────────────────────
@@ -220,32 +220,12 @@ export async function uploadUserAvatar(req: AuthenticatedRequest, res: Response)
       return;
     }
 
-    const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
-    const buffer     = Buffer.from(base64Data, 'base64');
-
     const mimeMatch = image.match(/^data:(image\/\w+);base64,/);
-    const mimeType  = (mimeMatch?.[1] ?? 'image/jpeg') as
-      'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+    const mimeType  = mimeMatch?.[1] ?? 'image/jpeg';
+    const ext       = mimeType.split('/')[1];
+    const key       = `${id}.${ext}`;
 
-    const ext      = mimeType.split('/')[1];
-    const filePath = `${id}.${ext}`;
-
-    let avatarUrl: string;
-
-    const { error: uploadError } = await supabase.storage
-      .from('avatars')
-      .upload(filePath, buffer, { contentType: mimeType, upsert: true });
-
-    if (uploadError) {
-      // Storage bucket not set up — store base64 data URL directly (local dev fallback)
-      logger.warn('[users.controller] Storage upload failed, using data URL fallback:', uploadError.message);
-      avatarUrl = image;
-    } else {
-      const { data: urlData } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(filePath);
-      avatarUrl = urlData.publicUrl;
-    }
+    const avatarUrl = await uploadBase64Image(key, image);
 
     await usersService.updateUser(id, { avatar_url: avatarUrl });
 

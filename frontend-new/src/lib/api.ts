@@ -1,53 +1,17 @@
 // ── API client for frontend-new ───────────────────────────────────────────────
 // All requests go through this module. Never use fetch() directly in components.
+// Token injection and error normalisation are handled by axios interceptors in
+// src/lib/network/interceptors.ts
 
-const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:3000/api';
+import axiosInstance from './network/axiosInstance';
 
-function getToken(): string | null {
-  return localStorage.getItem('mw_token') ?? sessionStorage.getItem('mw_token');
-}
-
-async function request<T>(
-  method: string,
-  path: string,
-  body?: unknown,
-): Promise<T> {
-  const token = getToken();
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-  try {
-    const res = await fetch(`${BASE_URL}${path}`, {
-      method,
-      signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    });
-
-    let json: unknown;
-    try {
-      json = await res.json();
-    } catch {
-      throw new Error(`Server error (${res.status}). Please try again.`);
-    }
-
-    if (!res.ok) {
-      const err = json as { error?: string };
-      throw new Error(err.error ?? `Request failed with status ${res.status}`);
-    }
-
-    return json as T;
-  } catch (err) {
-    if (err instanceof Error && err.name === 'AbortError') {
-      throw new Error('Request timed out. Please try again.');
-    }
-    throw err;
-  } finally {
-    clearTimeout(timeoutId);
-  }
+async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const response = await axiosInstance.request<T>({
+    method,
+    url: path,
+    data: body,
+  });
+  return response.data;
 }
 
 // ── Auth API ──────────────────────────────────────────────────────────────────
@@ -56,7 +20,7 @@ export interface AuthUser {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'member' | 'project_manager' | 'super_admin';
+  role: 'admin' | 'member' | 'project_manager';
   permissions: string[];
 }
 
@@ -76,15 +40,27 @@ export const authApi = {
 
   resetPassword: (token: string, password: string) =>
     request<{ message: string }>('POST', '/auth/reset-password', { token, password }),
+
+  changePassword: (current_password: string, new_password: string) =>
+    request<{ message: string }>('POST', '/auth/change-password', { current_password, new_password }),
 };
 
 // ── Shared types ─────────────────────────────────────────────────────────────
+
+export interface SkillMember {
+  id: string;
+  name: string;
+  avatar_url: string | null;
+}
 
 export interface Skill {
   id: string;
   name: string;
   category: string | null;
+  description?: string | null;
+  color?: string | null;
   created_at: string;
+  members: SkillMember[];
 }
 
 export interface User {
@@ -95,7 +71,7 @@ export interface User {
   phone_number: string | null;
   avatar_url: string | null;
   email: string;
-  role: 'admin' | 'member' | 'project_manager' | 'super_admin';
+  role: 'admin' | 'member' | 'project_manager';
   member_role: string | null;
   status: 'Active' | 'invited' | 'Disabled';
   permissions: string[];
@@ -243,11 +219,17 @@ export const skillsApi = {
   list: () =>
     request<{ data: Skill[] }>('GET', '/skills').then((r) => r.data),
 
-  create: (payload: { name: string; category?: string }) =>
+  create: (payload: { name: string; category?: string; description?: string; color?: string }) =>
     request<{ data: Skill }>('POST', '/skills', payload).then((r) => r.data),
+
+  update: (id: string, payload: { name?: string; category?: string; description?: string; color?: string }) =>
+    request<{ data: Skill }>('PATCH', `/skills/${id}`, payload).then((r) => r.data),
 
   delete: (id: string) =>
     request<{ message: string }>('DELETE', `/skills/${id}`),
+
+  setMembers: (id: string, user_ids: string[]) =>
+    request<{ message: string }>('PUT', `/skills/${id}/members`, { user_ids }),
 };
 
 // ── Transcripts API ───────────────────────────────────────────────────────────
@@ -268,7 +250,17 @@ export interface Transcript {
 export interface Firm {
   id: string;
   name: string;
+  location: string | null;
+  website: string | null;
+  logo_url: string | null;
   description: string | null;
+  contact_name: string | null;
+  contact_email: string | null;
+  contact_role: string | null;
+  contact_phone: string | null;
+  account_manager_id: string | null;
+  default_prompt_id: string | null;
+  created_at: string;
 }
 
 export interface Prompt {
@@ -288,7 +280,7 @@ export interface Task {
   description: string | null;
   type: string;
   priority: 'low' | 'normal' | 'high' | 'urgent';
-  status: string;
+  status: 'to_do' | 'assigned' | 'in_progress' | 'revisions' | 'internal_review' | 'client_review' | 'completed' | 'blocked';
   deadline: string | null;
   estimated_hours: number | null;
   ai_generated: boolean;
@@ -312,7 +304,7 @@ export const transcriptsApi = {
     request<{ data: Transcript }>('PATCH', `/transcripts/${id}/archive`).then((r) => r.data),
   sync: () => request<{ data: unknown }>('POST', '/transcripts/sync').then((r) => r.data),
   process: (id: string, payload: { firm_id: string; prompt_id: string; text_notes?: string }) =>
-    request<{ data: { session_id: string; firm_id: string; tickets: Task[] } }>(
+    request<{ data: { session_id: string; firm_id: string; tasks: Task[] } }>(
       'POST', `/transcripts/${id}/process`, payload,
     ).then((r) => r.data),
 };
@@ -320,10 +312,28 @@ export const transcriptsApi = {
 export const firmsApi = {
   list: () => request<{ data: Firm[] }>('GET', '/firms').then((r) => r.data),
   get: (id: string) => request<{ data: Firm }>('GET', `/firms/${id}`).then((r) => r.data),
+  create: (payload: Partial<Firm> & { name: string }) =>
+    request<{ data: Firm }>('POST', '/firms', payload).then((r) => r.data),
+  update: (id: string, payload: Partial<Firm>) =>
+    request<{ data: Firm }>('PATCH', `/firms/${id}`, payload).then((r) => r.data),
+  delete: (id: string) => request<void>('DELETE', `/firms/${id}`),
 };
 
 export const promptsApi = {
   list: () => request<{ data: Prompt[] }>('GET', '/prompts').then((r) => r.data),
+};
+
+export type TaskStatus = Task['status'];
+
+export const VALID_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
+  to_do:           ['assigned', 'in_progress', 'blocked'],
+  assigned:        ['in_progress', 'blocked'],
+  in_progress:     ['revisions', 'internal_review', 'blocked'],
+  revisions:       ['in_progress'],
+  internal_review: ['client_review', 'revisions'],
+  client_review:   ['completed', 'revisions'],
+  completed:       [],
+  blocked:         ['to_do', 'in_progress'],
 };
 
 export const tasksApi = {
@@ -339,10 +349,23 @@ export const tasksApi = {
     request<{ data: Task }>('PATCH', `/tasks/${id}`, payload).then((r) => r.data),
   assignApprove: (id: string, payload: { assignee_id: string; priority?: string; deadline?: string }) =>
     request<{ data: Task }>('PATCH', `/tasks/${id}/assign-approve`, payload).then((r) => r.data),
+  transition: (id: string, status: TaskStatus, change_note?: string) =>
+    request<{ data: Task }>('PATCH', `/tasks/${id}/transition`, { status, change_note }).then((r) => r.data),
   discard: (id: string) =>
     request<{ data: Task }>('PATCH', `/tasks/${id}/discard`).then((r) => r.data),
   archive: (id: string, archived: boolean) =>
     request<{ data: Task }>('PATCH', `/tasks/${id}/archive`, { archived }).then((r) => r.data),
+};
+
+// ── Org Settings API ──────────────────────────────────────────────────────────
+
+export const orgSettingsApi = {
+  get: () =>
+    request<{ data: { id: string; logo_url: string | null; updated_at: string } }>('GET', '/org-settings')
+      .then((r) => r.data),
+  uploadLogo: (image: string) =>
+    request<{ data: { logo_url: string } }>('POST', '/org-settings/logo', { image })
+      .then((r) => r.data),
 };
 
 // ── Notifications API ─────────────────────────────────────────────────────────
@@ -364,4 +387,47 @@ export const notificationsApi = {
     request<void>('PATCH', `/notifications/${id}/read`),
   markAllRead: () =>
     request<void>('PATCH', '/notifications/read-all'),
+};
+
+// ── Task Types API ────────────────────────────────────────────────────────────
+
+export interface TaskTypeMember {
+  id: string;
+  name: string;
+  avatar_url: string | null;
+}
+
+export interface TaskType {
+  id: string;
+  name: string;
+  description: string | null;
+  color: string | null;
+  created_at: string;
+  members: TaskTypeMember[];
+  task_count: number;
+}
+
+export interface CreateTaskTypePayload {
+  name: string;
+  description?: string;
+  color?: string;
+  member_ids?: string[];
+}
+
+export interface UpdateTaskTypePayload {
+  name?: string;
+  description?: string;
+  color?: string;
+  member_ids?: string[];
+}
+
+export const taskTypesApi = {
+  list: () =>
+    request<{ data: TaskType[] }>('GET', '/task-types').then((r) => r.data),
+  create: (payload: CreateTaskTypePayload) =>
+    request<{ data: TaskType }>('POST', '/task-types', payload).then((r) => r.data),
+  update: (id: string, payload: UpdateTaskTypePayload) =>
+    request<{ data: TaskType }>('PATCH', `/task-types/${id}`, payload).then((r) => r.data),
+  delete: (id: string) =>
+    request<void>('DELETE', `/task-types/${id}`),
 };

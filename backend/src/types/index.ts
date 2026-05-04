@@ -2,21 +2,19 @@ import { Request } from 'express';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export type UserRole = 'admin' | 'member' | 'project_manager' | 'super_admin';
+export type UserRole = 'admin' | 'member' | 'project_manager';
 export type PromptType = 'pm' | 'campaigns' | 'content';
 export type TaskType = 'task' | 'design' | 'development' | 'account_management';
 export type TaskPriority = 'low' | 'normal' | 'high' | 'urgent';
 export type TaskStatus =
-  | 'draft'
+  | 'to_do'
+  | 'assigned'
   | 'in_progress'
-  | 'resolved'
+  | 'revisions'
   | 'internal_review'
   | 'client_review'
-  | 'compliance_review'
-  | 'approved'
-  | 'closed'
-  | 'revisions'
-  | 'discarded';
+  | 'completed'
+  | 'blocked';
 export type LogType = 'estimate' | 'partial' | 'final' | 'revision';
 
 // ─── Domain Models ────────────────────────────────────────────────────────────
@@ -27,6 +25,9 @@ export const PERMISSIONS = [
   { key: 'process_transcripts',   label: 'Process Transcripts',   description: 'Access and process meeting transcripts' },
   { key: 'view_all_tickets',      label: 'View All Tasks',        description: 'See all tasks across the team' },
   { key: 'manage_prompts',        label: 'Manage Prompts',        description: 'Edit AI prompt templates' },
+  { key: 'create_projects',       label: 'Project Creation',      description: 'Create new projects' },
+  { key: 'create_tasks',          label: 'Task Creation',         description: 'Create new tasks' },
+  { key: 'view_global_timesheet', label: 'Global Timesheet',      description: 'View all team timesheets' },
 ] as const;
 
 export type PermissionKey = typeof PERMISSIONS[number]['key'];

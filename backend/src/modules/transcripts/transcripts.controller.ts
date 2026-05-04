@@ -112,7 +112,7 @@ export async function processTranscript(req: AuthenticatedRequest, res: Response
       res.status(400).json({
         error:
           `Transcript is too short (${wordCount} word${wordCount === 1 ? '' : 's'}). ` +
-          `Minimum ${MIN_TRANSCRIPT_WORDS} words required to generate meaningful tickets.`,
+          `Minimum ${MIN_TRANSCRIPT_WORDS} words required to generate meaningful tasks.`,
       });
       return;
     }
@@ -125,8 +125,8 @@ export async function processTranscript(req: AuthenticatedRequest, res: Response
       return;
     }
 
-    // Run AI ticket generation
-    const ticketDrafts = await generateTickets(
+    // Run AI task generation
+    const taskDrafts = await generateTickets(
       transcript.raw_transcript,
       prompt.system_prompt,
       text_notes
@@ -138,7 +138,7 @@ export async function processTranscript(req: AuthenticatedRequest, res: Response
       firm_id,
       prompt_id,
       text_notes,
-      ticketDrafts,
+      taskDrafts,
       req.user!.id
     );
 
@@ -147,14 +147,14 @@ export async function processTranscript(req: AuthenticatedRequest, res: Response
       return;
     }
 
-    // Insert tickets
-    const tickets = await transcriptsService.insertTicketsFromDrafts(session.id, firm_id, ticketDrafts);
+    // Insert tasks
+    const tasks = await transcriptsService.insertTicketsFromDrafts(session.id, firm_id, taskDrafts);
 
     res.status(201).json({
       data: {
         session_id: session.id,
         firm_id,
-        tickets,
+        tasks,
       },
     });
   } catch (err) {

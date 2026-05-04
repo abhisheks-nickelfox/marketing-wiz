@@ -5,7 +5,7 @@ import { MIN_TIME_LOG_HOURS, MAX_TIME_LOG_HOURS } from '../../config/constants';
 const MEMBER_LOG_TYPES = ['estimate', 'partial', 'final', 'revision'] as const;
 
 export const createTimeLogValidation = [
-  param('id').isUUID('loose').withMessage('Invalid ticket ID'),
+  param('id').isUUID('loose').withMessage('Invalid task ID'),
   body('hours')
     .isFloat({ min: MIN_TIME_LOG_HOURS })
     .withMessage(`Hours must be at least ${MIN_TIME_LOG_HOURS}`),
@@ -16,7 +16,7 @@ export const createTimeLogValidation = [
 ];
 
 export const updateTimeLogValidation = [
-  param('id').isUUID('loose').withMessage('Invalid ticket ID'),
+  param('id').isUUID('loose').withMessage('Invalid task ID'),
   param('logId').isUUID('loose').withMessage('Invalid log ID'),
   body('hours')
     .isFloat({ min: MIN_TIME_LOG_HOURS, max: MAX_TIME_LOG_HOURS })
@@ -25,6 +25,6 @@ export const updateTimeLogValidation = [
 ];
 
 export const deleteTimeLogValidation = [
-  param('id').isUUID('loose').withMessage('Invalid ticket ID'),
+  param('id').isUUID('loose').withMessage('Invalid task ID'),
   param('logId').isUUID('loose').withMessage('Invalid log ID'),
 ];

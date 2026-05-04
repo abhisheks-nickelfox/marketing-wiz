@@ -1,42 +1,16 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import dotenv from 'dotenv';
+/**
+ * This file is intentionally empty.
+ *
+ * The Supabase client has been replaced by:
+ *   - PostgreSQL + Sequelize  →  src/config/database.ts  +  src/models/
+ *   - JWT auth                →  src/config/auth.ts
+ *   - AWS S3                  →  src/config/storage.ts
+ *
+ * If you see an import from this file in a service, that service has not
+ * been migrated yet.  Remove the import and replace the query with a Sequelize
+ * equivalent from the corresponding model in src/models/.
+ */
 
-dotenv.config();
-
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseUrl) {
-  throw new Error('Missing environment variable: SUPABASE_URL');
-}
-
-if (!supabaseServiceRoleKey) {
-  throw new Error('Missing environment variable: SUPABASE_SERVICE_ROLE_KEY');
-}
-
-// Service-role client bypasses Row Level Security — use only on the backend.
-// NEVER call supabase.auth.signInWithPassword() or supabase.auth.getUser() on
-// this client — those calls attach the user's JWT to its internal session,
-// contaminating subsequent DB queries so they run under user RLS instead of
-// service-role (making admin-owned logs invisible to members).
-const supabase: SupabaseClient = createClient(supabaseUrl, supabaseServiceRoleKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-});
-
-// Anon-key client for auth operations only (signInWithPassword, getUser, etc.)
-// Keeps the service-role client's session state permanently clean.
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
-if (!supabaseAnonKey) {
-  throw new Error('Missing environment variable: SUPABASE_ANON_KEY');
-}
-export const anonClient: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-});
-
-export default supabase;
+export default {};
+export const anonClient = {};
+export function createFreshAnonClient() { return {}; }

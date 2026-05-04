@@ -12,7 +12,7 @@ export const createTranscriptValidation = [
       if (wordCount < MIN_TRANSCRIPT_WORDS) {
         throw new Error(
           `Transcript is too short (${wordCount} word${wordCount === 1 ? '' : 's'}). ` +
-          `Minimum ${MIN_TRANSCRIPT_WORDS} words required to generate meaningful tickets.`
+          `Minimum ${MIN_TRANSCRIPT_WORDS} words required to generate meaningful tasks.`
         );
       }
       return true;

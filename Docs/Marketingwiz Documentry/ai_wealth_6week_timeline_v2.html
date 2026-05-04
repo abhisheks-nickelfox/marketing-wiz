@@ -1,0 +1,650 @@
+
+<h2 class="sr-only">AI Wealth Connections 6-week development timeline, updated with confirmed Week 1 deliverables and functional headings per week.</h2>
+<style>
+*{box-sizing:border-box}
+.tl{font-family:var(--font-sans);padding:1.5rem 0}
+.tl-meta{margin-bottom:1.5rem}
+.tl-meta h3{font-size:18px;font-weight:500;color:var(--color-text-primary);margin:0 0 4px}
+.tl-meta p{font-size:13px;color:var(--color-text-secondary);margin:0}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:1.5rem}
+.stat{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:10px 14px}
+.stat-n{font-size:22px;font-weight:500;color:var(--color-text-primary)}
+.stat-l{font-size:11px;color:var(--color-text-secondary);margin-top:2px}
+.week{border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;margin-bottom:1.25rem}
+.wh{display:flex;align-items:center;gap:10px;padding:11px 16px;flex-wrap:wrap}
+.wnum{font-size:11px;font-weight:500;padding:3px 10px;border-radius:20px;white-space:nowrap}
+.wtitle{font-size:14px;font-weight:500;color:var(--color-text-primary)}
+.wfunc{font-size:12px;color:var(--color-text-secondary);margin-left:0}
+.wst{font-size:11px;font-weight:500;padding:2px 9px;border-radius:20px;margin-left:auto;white-space:nowrap}
+.wbody{padding:4px 16px 14px}
+.pbar{height:3px;background:var(--color-background-secondary);border-radius:2px;margin:10px 0 12px}
+.pfill{height:100%;border-radius:2px}
+.fgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:8px;margin-bottom:8px}
+.fc{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:10px 12px;border:0.5px solid var(--color-border-tertiary)}
+.fc-name{font-size:13px;font-weight:500;color:var(--color-text-primary);margin:0 0 7px;display:flex;align-items:center;gap:6px}
+.fc-check{width:14px;height:14px;border-radius:3px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.tl-items{list-style:none;margin:0;padding:0}
+.tl-items li{font-size:12px;color:var(--color-text-secondary);padding:2px 0;display:flex;align-items:flex-start;gap:6px;line-height:1.4}
+.dot{width:5px;height:5px;border-radius:50%;margin-top:4px;flex-shrink:0}
+.d-done{background:#639922}
+.d-todo{background:#888780}
+.wnote{font-size:12px;color:var(--color-text-secondary);border-left:2px solid var(--color-border-secondary);padding-left:10px;margin-top:8px;line-height:1.6;border-radius:0}
+
+.w1 .wh{background:#EAF3DE}
+.w1 .wnum{background:#639922;color:#173404}
+.w1 .wst{background:#C0DD97;color:#3B6D11}
+.w2 .wh{background:#E6F1FB}
+.w2 .wnum{background:#378ADD;color:#042C53}
+.w2 .wst{background:#B5D4F4;color:#185FA5}
+.w3 .wh{background:#EEEDFE}
+.w3 .wnum{background:#7F77DD;color:#26215C}
+.w3 .wst{background:#CECBF6;color:#3C3489}
+.w4 .wh{background:#FAEEDA}
+.w4 .wnum{background:#BA7517;color:#412402}
+.w4 .wst{background:#FAC775;color:#854F0B}
+.w5 .wh{background:#FBEAF0}
+.w5 .wnum{background:#D4537E;color:#4B1528}
+.w5 .wst{background:#F4C0D1;color:#72243E}
+.w6 .wh{background:#E1F5EE}
+.w6 .wnum{background:#1D9E75;color:#04342C}
+.w6 .wst{background:#9FE1CB;color:#085041}
+
+.sec-lbl{font-size:11px;font-weight:500;letter-spacing:.07em;color:var(--color-text-secondary);margin:1.5rem 0 .75rem;text-transform:uppercase}
+.gap-block{border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;margin-bottom:1rem}
+.gap-hd{padding:10px 16px;display:flex;align-items:center;gap:10px}
+.gap-title{font-size:13px;font-weight:500}
+.gap-badge{font-size:11px;padding:2px 8px;border-radius:20px}
+.gap-body{padding:10px 16px 14px}
+.gap-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px}
+.gi{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:10px 12px;border-left:3px solid #E24B4A}
+.gi-t{font-size:12px;font-weight:500;color:var(--color-text-primary);margin:0 0 3px}
+.gi-d{font-size:11px;color:var(--color-text-secondary);margin:0;line-height:1.5}
+.gi-hi{border-left-color:#BA7517}
+
+.ext-block{border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;margin-bottom:1rem}
+.ext-hd{padding:10px 16px;background:#FAEEDA;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ext-title{font-size:13px;font-weight:500;color:#854F0B}
+.ext-badge{font-size:11px;padding:2px 8px;border-radius:20px;background:#BA7517;color:#FAEEDA}
+.ext-body{padding:10px 16px 14px}
+.ext-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px}
+.ei{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:10px 12px;border-left:3px solid #BA7517}
+.ei-t{font-size:12px;font-weight:500;color:var(--color-text-primary);margin:0 0 2px}
+.ei-w{font-size:11px;color:#854F0B;margin:0 0 3px;font-weight:500}
+.ei-d{font-size:11px;color:var(--color-text-secondary);margin:0;line-height:1.5}
+
+.disc{background:var(--color-background-secondary);border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:14px 16px;margin-top:1.5rem}
+.disc-title{font-size:12px;font-weight:500;color:var(--color-text-primary);margin:0 0 6px;display:flex;align-items:center;gap:6px}
+.disc-icon{width:14px;height:14px;border-radius:50%;border:1.5px solid var(--color-text-secondary);display:inline-flex;align-items:center;justify-content:center;font-size:9px;color:var(--color-text-secondary);flex-shrink:0;line-height:1}
+.disc p{font-size:12px;color:var(--color-text-secondary);margin:4px 0 0;line-height:1.6}
+</style>
+
+<div class="tl">
+<div class="tl-meta">
+  <h3>AI Wealth Connections — Development Timeline</h3>
+  <p>6-week base roadmap · Derived from Figma designs · Week 1 confirmed complete</p>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="stat-n">6</div><div class="stat-l">Base weeks</div></div>
+  <div class="stat"><div class="stat-n">1</div><div class="stat-l">Weeks complete</div></div>
+  <div class="stat"><div class="stat-n">13</div><div class="stat-l">Critical gaps</div></div>
+  <div class="stat"><div class="stat-n">+4–6</div><div class="stat-l">Extended weeks</div></div>
+</div>
+
+<!-- ── WEEK 1 ── -->
+<div class="week w1">
+  <div class="wh">
+    <span class="wnum">Week 1</span>
+    <div>
+      <div class="wtitle">User management &amp; dashboard</div>
+      <div class="wfunc" style="font-size:11px;color:#3B6D11;margin-top:1px">Team admin · User invite &amp; edit · Dashboard overview</div>
+    </div>
+    <span class="wst">Completed</span>
+  </div>
+  <div class="wbody">
+    <div class="pbar"><div class="pfill" style="width:100%;background:#639922"></div></div>
+    <div class="fgrid">
+
+      <div class="fc">
+        <p class="fc-name">
+          <span class="fc-check" style="background:#EAF3DE">
+            <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M1.5 4.5L3.5 6.5L7.5 2.5" stroke="#3B6D11" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          Dashboard UI
+        </p>
+        <ul class="tl-items">
+          <li><span class="dot d-done"></span>Welcome greeting + today task count</li>
+          <li><span class="dot d-done"></span>Total Tasks donut chart (8 status segments)</li>
+          <li><span class="dot d-done"></span>Your Focus Today panel (overdue, due today, notifications, personal tasks)</li>
+          <li><span class="dot d-done"></span>Quick Links — Add Client, View Timesheets, Create a Project, Manage Transcripts</li>
+          <li><span class="dot d-done"></span>Project Summary table (name, client, assignees, due, priority, status)</li>
+          <li><span class="dot d-done"></span>Date range tabs (All time / Custom / 30d / 7d / 24h)</li>
+          <li><span class="dot d-done"></span>Filter by Firm + Filter by Status dropdowns</li>
+          <li><span class="dot d-done"></span>Tasks / Timesheets / Transcripts tab bar</li>
+          <li><span class="dot d-done"></span>Global header — search bar, timer widget, user avatar + email dropdown</li>
+        </ul>
+      </div>
+
+      <div class="fc">
+        <p class="fc-name">
+          <span class="fc-check" style="background:#EAF3DE">
+            <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M1.5 4.5L3.5 6.5L7.5 2.5" stroke="#3B6D11" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          Team table (Users → Team)
+        </p>
+        <ul class="tl-items">
+          <li><span class="dot d-done"></span>100-user paginated table</li>
+          <li><span class="dot d-done"></span>Name + avatar + @handle per row</li>
+          <li><span class="dot d-done"></span>Status badges — Active, Invited, Disabled</li>
+          <li><span class="dot d-done"></span>Role (job title string, e.g. Product Designer)</li>
+          <li><span class="dot d-done"></span>Email address column</li>
+          <li><span class="dot d-done"></span>Skills tag chips (Design, Product, Marketing + count overflow)</li>
+          <li><span class="dot d-done"></span>Extra Permissions gear popover — Project Creation, Task Creation, Global Timesheet checkboxes</li>
+          <li><span class="dot d-done"></span>Row actions — Settings gear, Delete, Edit pencil</li>
+          <li><span class="dot d-done"></span>Pagination (Previous / page numbers / Next)</li>
+          <li><span class="dot d-done"></span>Invite Team button (top right)</li>
+        </ul>
+      </div>
+
+      <div class="fc">
+        <p class="fc-name">
+          <span class="fc-check" style="background:#EAF3DE">
+            <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M1.5 4.5L3.5 6.5L7.5 2.5" stroke="#3B6D11" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          Invite user
+        </p>
+        <ul class="tl-items">
+          <li><span class="dot d-done"></span>Email address input field</li>
+          <li><span class="dot d-done"></span>Role dropdown — Admin, Project Manager, Member (Member default checked)</li>
+          <li><span class="dot d-done"></span>Save button → POST invite</li>
+          <li><span class="dot d-done"></span>Success toast — "Invitation has been sent successfully"</li>
+          <li><span class="dot d-done"></span>User appears in table with Invited status badge</li>
+          <li><span class="dot d-done"></span>Cancel button</li>
+        </ul>
+      </div>
+
+      <div class="fc">
+        <p class="fc-name">
+          <span class="fc-check" style="background:#EAF3DE">
+            <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M1.5 4.5L3.5 6.5L7.5 2.5" stroke="#3B6D11" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          Edit user profile
+        </p>
+        <ul class="tl-items">
+          <li><span class="dot d-done"></span>Name fields (first + last)</li>
+          <li><span class="dot d-done"></span>Email address field</li>
+          <li><span class="dot d-done"></span>Photo upload — drag &amp; drop + click (SVG/PNG/JPG/GIF, max 800×800px)</li>
+          <li><span class="dot d-done"></span>Role dropdown (Member / PM / Admin)</li>
+          <li><span class="dot d-done"></span>Cost field — dollar amount + Weekly/Monthly frequency</li>
+          <li><span class="dot d-done"></span>Skills display — cards showing skill name + years experience</li>
+          <li><span class="dot d-done"></span>Add More Skills modal — rows of Skill dropdown + Experience range + remove ✕</li>
+          <li><span class="dot d-done"></span>Update &amp; Continue button in skills modal</li>
+          <li><span class="dot d-done"></span>Extra Permissions — Project Creation, Task Creation, Global Timesheet (static checkboxes)</li>
+          <li><span class="dot d-done"></span>Active / Disabled status dropdown (top right)</li>
+          <li><span class="dot d-done"></span>2FA status display (Enabled pill)</li>
+          <li><span class="dot d-done"></span>Breadcrumb: Settings → Users → [Name]</li>
+        </ul>
+      </div>
+
+    </div>
+    <p class="wnote">Dashboard tab bar (Tasks / Timesheets / Transcripts) and all header infrastructure delivered this week as shared layout components used across all subsequent weeks.</p>
+  </div>
+</div>
+
+<!-- ── WEEK 2 ── -->
+<div class="week w2">
+  <div class="wh">
+    <span class="wnum">Week 2</span>
+    <div>
+      <div class="wtitle">Admin settings &amp; firm management</div>
+      <div class="wfunc" style="font-size:11px;color:#185FA5;margin-top:1px">Settings (Personal · Org · Project) · Add Firm wizard · Firm overview &amp; communications</div>
+    </div>
+    <span class="wst">Up next</span>
+  </div>
+  <div class="wbody">
+    <div class="pbar"><div class="pfill" style="width:0%;background:#378ADD"></div></div>
+    <div class="fgrid">
+      <div class="fc">
+        <p class="fc-name">Personal info (Settings)</p>
+        <ul class="tl-items">
+          <li><span class="dot d-todo"></span>Name, email, photo upload</li>
+          <li><span class="dot d-todo"></span>Change Password button</li>
+          <li><span class="dot d-todo"></span>Role display (read-only for self)</li>
+          <li><span class="dot d-todo"></span>2FA setup wizard — Choose Method (App / Email) → Verify Code steps</li>
+          <li><span class="dot d-todo"></span>Skills section — same card layout as user profile</li>
+          <li><span class="dot d-todo"></span>Personal Info / Organisation Info / Project Settings tab bar</li>
+        </ul>
+      </div>
+      <div class="fc">
+        <p class="fc-name">Organisation info</p>
+        <ul class="tl-items">
+          <li><span class="dot d-todo"></span>Organisation details tab — logo upload area</li>
+          <li><span class="dot d-todo"></span>Skills tab — Skill Management table (Skill Type tag, Description, Members with Skill avatars, Ongoing usage count)</li>
+          <li><span class="dot d-todo"></span>Add a Skill slide-out — Skill Type input, Description textarea, 16-color tag picker, Team with Skill avatar picker</li>
+          <li><span class="dot d-todo"></span>Create button → skill saved to org library</li>
+          <li><span class="dot d-todo"></span>Delete icon per skill row</li>
+          <li><span class="dot d-todo"></span>Pagination on skill table</li>
+        </ul>
+      </div>
+      <div class="fc">
+        <p class="fc-name">Project settings</p>
+        <ul class="tl-items">
+          <li><span class="dot d-todo"></span>Task types tab — Task Type Management table (type tag, description, default team, usage)</li>
+          <li><span class="dot d-todo"></span>Create A Task Type slide-out — name, description, 16-color picker, default team avatar picker</li>
+          <li><span class="dot d-todo"></span>Create button → saved, available in project/task forms</li>
+          <li><span class="dot d-todo"></span>Delete icon per task type row</li>
+          <li><span class="dot d-todo"></span>Pagination on task type table</li>
+        </ul>
+      </div>
+      <div class="fc">
+        <p class="fc-name">Add a firm (3-step wizard)</p>
+        <ul class="tl-items">
+          <li><span class="dot d-todo"></span>Step 1 — Firm details: name, location, website URL, logo upload, short description, Update &amp; Continue</li>
+          <li><span class="dot d-todo"></span>Step 2 — Primary contact: name, role, email, phone (country code selector), Update &amp; Continue</li>
+          <li><span class="dot d-todo"></span>Step 3 — Choose Account Manager: team member grid (avatar + @handle), Add Client</li>
+          <li><span class="dot d-todo"></span>Step progress indicator (filled / active / pending dots)</li>
+          <li><span class="dot d-todo"></span>New firm appears in sidebar alphabetically</li>
+        </ul>
+      </div>
+      <div class="fc">
+        <p class="fc-name">Firm overview</p>
+        <ul class="tl-items">
+          <li><span class="dot d-todo"></span>Firm logo + name + About text block</li>
+          <li><span class="dot d-todo"></span>Actions dropdown — Edit, Delete</li>
+          <li><span class="dot d-todo"></span>Communications tab — threaded chat (sender, timestamp, read receipts ✓✓, hover toolbar: emoji / reply / copy / react)</li>
+          <li><span class="dot d-todo"></span>Reply composer — inline text input + send</li>
+          <li><span class="dot d-todo"></span>Requests tab (placeholder — no screen designed yet)</li>
+          <li><span class="dot d-todo"></span>Quick Links panel — DropBox, Reports, HubSpot tiles</li>
+          <li><span class="dot d-todo"></span>Location + Website + Point of Contact card</li>
+          <li><span class="dot d-todo"></span>MW Accounts Manager card</li>
+          <li><span class="dot d-todo"></span>Overview / Client Requests / Projects / Time Reports / Notes tab bar</li>
+        </ul>
+      </div>
+      <div class="fc">
+        <p class="fc-name">Firm sidebar navigation</p>
+        <ul class="tl-items">
+          <li><span class="dot d-todo"></span>Alphabetical scrollable firm list in left nav</li>
+          <li><span class="dot d-todo"></span>+ Add a firm pinned at top</li>
+          <li><span class="dot d-todo"></span>Active firm highlighted</li>
+          <li><span class="dot d-todo"></span>Firms expand/collapse toggle in main nav</li>
+        </ul>
+      </div>
+    </div>
+    <p class="wnote">Communications thread is text-reply only as designed — no file upload button exists in the current Figma composer. Skill and Task Type edit forms are not designed; only the create versions exist.</p>
+  </div>
+</div>
+
+<!-- ── WEEK 3 ── -->
+<div class="week w3">
+  <div class="wh">
+    <span class="wnum">Week 3</span>
+    <div>
+      <div class="wtitle">Project management &amp; task workflows</div>
+      <div class="wfunc" style="font-size:11px;color:#534AB7;margin-top:1px">Project Summary · Project detail · Firm-scoped projects · My Tasks · Task status flow</div>
+    </div>
+    <span class="wst">Upcoming</span>
+  </div>
+  <div class="wbody">
+    <div class="pbar"><div class="pfill" style="width:0%;background:#7F77DD"></div></div>
+    <div class="fgrid">
+      <div class="fc">
+        <p class="fc-name">Global Project Summary</p>
+        <ul class="tl-items">
+          <li><span class="dot d-todo"></span>Status-grouped sections — To Do, Assigned, In Progress, Internal Review</li>
+          <li><span class="dot d-todo"></span>Project row: name + tags, client, assignee avatars, due date, priority badge, status pill</li>
+          <li><span class="dot d-todo"></span>Row context menu — Edit, Delete (with safety), Convert to Template, Export project data</li>
+          <li><span class="dot d-todo"></span>Filter panel — status checkboxes + firm list + Apply/Clear</li>
+          <li><span class="dot d-todo"></span>Section count badges (e.g. To Do 3)</li>
+        </ul>
+      </div>
+      <div class="fc">
+        <p class="fc-name">Project search (split pane)</p>
+        <ul class="tl-items">
+          <li><span class="dot d-todo"></span>Left pane — firm → project → subtask collapsible tree</li>
+          <li><span class="dot d-todo"></span>Search Projects/tasks input with ⌘K</li>
+          <li><span class="dot d-todo"></span>Right pane — selected project full detail</li>
+          <li><span class="dot d-todo"></span>All / firm name groupings in tree</li>
+        </ul>
+      </div>
+      <div class="fc">
+        <p class="fc-name">Create a project (modal)</p>
+        <ul class="tl-items">
+          <li><span class="dot d-todo"></span>Choose from a template dropdown (No Templates Required default)</li>
+          <li><span class="dot d-todo"></span>Name of project (required)</li>
+          <li><span class="dot d-todo"></span>Description textarea</li>
+          <li><span class="dot d-todo"></span>Project type dropdown + Tasks/Subtask type dropdown</li>
+          <li><span class="dot d-todo"></span>Start date + End date pickers</li>
+          <li><span class="dot d-todo"></span>Assignee multi-picker (avatars + + button)</li>
+          <li><span class="dot d-todo"></span>Priority dropdown (High/Medium/Low)</li>
+          <li><span class="dot d-todo"></span>Upload files area — SVG/PNG/JPG max 800×400</li>
+          <li><span class="dot d-todo"></span>Create + Cancel buttons</li>
+        </ul>
+      </div>
+      <div class="fc">
+        <p class="fc-name">Project detail view</p>
+        <ul class="tl-items">
+          <li><span class="dot d-todo"></span>Header: name, created by + date, Actions dropdown (Edit, Delete, Convert to Template, Export)</li>
+          <li><span class="dot d-todo"></span>Assignees multi-avatar + Status + Priority + Due date row</li>
+          <li><span class="dot d-todo"></span>Task Type tags + Timesheet entry (hours + timer icon)</li>
+          <li><span class="dot d-todo"></span>Description text block</li>
+          <li><span class="dot d-todo"></span>Attachments — PDF card + MP4 card with delete icons</li>
+          <li><span class="dot d-todo"></span>Custom Fields — Service type tags</li>
+          <li><span class="dot d-todo"></span>Sub Tasks list — each row: name, assignees, due date, priority</li>
+          <li><span class="dot d-todo"></span>Breadcrumb: Projects → [Firm] → [Project name]</li>
+        </ul>
+      </div>
+      <div class="fc">
+        <p class="fc-name">Activity panel (project)</p>
+        <ul class="tl-items">
+          <li><span class="dot d-todo"></span>Recent tab — chat thread with timestamps, sender avatars, read ticks</li>
+          <li><span class="dot d-todo"></span>Files &amp; Links tab — document/media list</li>
+          <li><span class="dot d-todo"></span>Notes tab — placeholder (no screen designed)</li>
+          <li><span class="dot d-todo"></span>Message composer — text input + send icon</li>
+          <li><span class="dot d-todo"></span>Reaction toolbar on hover (emoji, reply, copy, react icons)</li>
+          <li><span class="dot d-todo"></span>Close panel (X) button</li>
+        </ul>
+      </div>
+      <div class="fc">
+        <p class="fc-name">Project edit slide-out</p>
+        <ul class="tl-items">
+          <li><span class="dot d-todo"></span>Share project URL + Copy link button</li>
+          <li><span class="dot d-todo"></span>Name, description, project status dropdown</li>
+          <li><span class="dot d-todo"></span>Team members list with Remove buttons</li>
+          <li><span class="dot d-todo"></span>+ Add team member action</li>
+          <li><span class="dot d-todo"></span>Save / Cancel / View Task buttons</li>
+        </ul>
+      </div>
+      <div class="fc">
+        <p class="fc-name">Firm-scoped projects</p>
+        <ul class="tl-items">
+          <li><span class="dot d-todo"></span>Project View / Task View toggle</li>
+          <li><span class="dot d-todo"></span>Add Project + Add Task buttons in firm context</li>
+          <li><span class="dot d-todo"></span>Client Tasks filter drawer — Date Range (Daily/Weekly/Monthly), Status, By Assignee (with search), By Task Type</li>
+          <li><span class="dot d-todo"></span>Task View flat task list grouped by status</li>
+          <li><span class="dot d-todo"></span>Row context menu — Edit, Delete, Convert to a template</li>
+        </ul>
+      </div>
+      <div class="fc">
+        <p class="fc-name">My Tasks</p>
+        <ul class="tl-items">
+          <li><span class="dot d-todo"></span>Tasks assigned to current user grouped by status</li>
+          <li><span class="dot d-todo"></span>Left quick-filter sidebar: To do (10), Assigned to me (10), Today Due (10), Overdue (10), Active, Assigned, In Progress, Urgent, Blocked, Revisions, Closed, Complete</li>
+          <li><span class="dot d-todo"></span>Task row hover tooltip — Project name, Client, Assigned by</li>
+          <li><span class="dot d-todo"></span>Filter panel — Status checkboxes + Firm list</li>
+          <li><span class="dot d-todo"></span>+ Add Project / + Add Task buttons</li>
+        </ul>
+      </div>
+      <div class="fc">
+        <p class="fc-name">Task status workflow + timesheet popover</p>
+        <ul class="tl-items">
+          <li><span class="dot d-todo"></span>8 statuses: To Do → Assigned → In Progress → Revisions → Internal Review → Client Review → Completed (+ Blocked)</li>
+          <li><span class="dot d-todo"></span>Status pill click → dropdown change on task</li>
+          <li><span class="dot d-todo"></span>Timesheet popover on task — time input (freeform or timer), date + time range picker, Notes field, Billable toggle, Save button</li>
+          <li><span class="dot d-todo"></span>Time entries list — per-user rows with project subtotal + edit inline</li>
+          <li><span class="dot d-todo"></span>Inbox notification triggered on status change</li>
+        </ul>
+      </div>
+    </div>
+    <p class="wnote">Task timesheet popover lives on the project detail view and is delivered this week. The global timer → task assignment modal is a missing feature (not designed in Figma) and is listed below.</p>
+  </div>
+</div>
+
+<!-- ── WEEK 4 ── -->
+<div class="week w4">
+  <div class="wh">
+    <span class="wnum">Week 4</span>
+    <div>
+      <div class="wtitle">Inbox &amp; personal timesheet</div>
+      <div class="wfunc" style="font-size:11px;color:#854F0B;margin-top:1px">Inbox feed · Activity threads · Filter drawer · My Timesheet weekly grid</div>
+    </div>
+    <span class="wst">Upcoming</span>
+  </div>
+  <div class="wbody">
+    <div class="pbar"><div class="pfill" style="width:0%;background:#BA7517"></div></div>
+    <div class="fgrid">
+      <div class="fc">
+        <p class="fc-name">Inbox feed</p>
+        <ul class="tl-items">
+          <li><span class="dot d-todo"></span>Time-grouped sections — Today, Yesterday, Last 7 Days, month name</li>
+          <li><span class="dot d-todo"></span>Two row types — project task rows (folder icon) + subtask rows (branch icon)</li>
+          <li><span class="dot d-todo"></span>@mention tag highlighted in preview snippet</li>
+          <li><span class="dot d-todo"></span>Date label on every row</li>
+          <li><span class="dot d-todo"></span>Mark all as read + Clear all header actions</li>
+          <li><span class="dot d-todo"></span>Individual Clear button per row (visible on hover)</li>
+          <li><span class="dot d-todo"></span>Filter button (top right)</li>
+          <li><span class="dot d-todo"></span>Page subtitle: "Manage your team members, roles, and access across projects"</li>
+        </ul>
+      </div>
+      <div class="fc">
+        <p class="fc-name">Inbox activity panel</p>
+        <ul class="tl-items">
+          <li><span class="dot d-todo"></span>Right-side slide panel on row click</li>
+          <li><span class="dot d-todo"></span>Task title + project / firm breadcrumb</li>
+          <li><span class="dot d-todo"></span>Clear all button (top right of panel)</li>
+          <li><span class="dot d-todo"></span>Threaded messages — sender avatar, name, timestamp</li>
+          <li><span class="dot d-todo"></span>File attachment display (e.g. Figma File badge)</li>
+          <li><span class="dot d-todo"></span>Status change activity items (Logan Burgess changed status: Revisions → Internal Review)</li>
+          <li><span class="dot d-todo"></span>Assignment activity items (assigned / unassigned log)</li>
+          <li><span class="dot d-todo"></span>Reaction row (thumbs up + smile icons) + Reply button per message</li>
+          <li><span class="dot d-todo"></span>Text-only reply composer at bottom</li>
+        </ul>
+      </div>
+      <div class="fc">
+        <p class="fc-name">Inbox filter drawer</p>
+        <ul class="tl-items">
+          <li><span class="dot d-todo"></span>Filter By section — Mentions (4), Replies (2), Unread (6), Assigned to me (11), Overdue (8), Cleared (5) checkboxes</li>
+          <li><span class="dot d-todo"></span>Clients section with search input (⌘K)</li>
+          <li><span class="dot d-todo"></span>Client list: Ancora, Accelerated Wealth Partners, Azimuth Capital, Badgley Phelps, Brand Asset Management, Coastal Bridge Advisors, Fairway Wealth, Focus Partners Wealth + Show 10 more</li>
+          <li><span class="dot d-todo"></span>Clear Filter + Apply buttons (footer)</li>
+        </ul>
+      </div>
+      <div class="fc">
+        <p class="fc-name">My Timesheet weekly grid</p>
+        <ul class="tl-items">
+          <li><span class="dot d-todo"></span>Column headers: Tasks | Sun–Sat dates with daily hours target | Total</li>
+          <li><span class="dot d-todo"></span>Task rows — task name (with branch icon) + per-day hour values + row total</li>
+          <li><span class="dot d-todo"></span>Timer icon per filled cell (clock icon for quick-log)</li>
+          <li><span class="dot d-todo"></span>Week navigation — left/right arrows + "Mar 22 – Mar 26" date range label + chevron</li>
+          <li><span class="dot d-todo"></span>+ Add task button at bottom of grid</li>
+          <li><span class="dot d-todo"></span>Breadcrumb: Timesheet → By Team</li>
+          <li><span class="dot d-todo"></span>Page heading: My Timesheet — Manage your timesheets</li>
+        </ul>
+      </div>
+    </div>
+    <p class="wnote">Inbox reply composer is text-only as designed in Figma. No file upload button exists in the composer. My Timesheet cell click-to-edit interaction is not designed — cells display values only.</p>
+  </div>
+</div>
+
+<!-- ── WEEK 5 ── -->
+<div class="week w5">
+  <div class="wh">
+    <span class="wnum">Week 5</span>
+    <div>
+      <div class="wtitle">Time reporting — by team &amp; by client</div>
+      <div class="wfunc" style="font-size:11px;color:#72243E;margin-top:1px">Time Reports module · Team detail panel · Client detail panel · Export timesheet</div>
+    </div>
+    <span class="wst">Upcoming</span>
+  </div>
+  <div class="wbody">
+    <div class="pbar"><div class="pfill" style="width:0%;background:#D4537E"></div></div>
+    <div class="fgrid">
+      <div class="fc">
+        <p class="fc-name">Time Reports — By Team</p>
+        <ul class="tl-items">
+          <li><span class="dot d-todo"></span>By Team / By Client tab toggle</li>
+          <li><span class="dot d-todo"></span>Daily / Weekly / Monthly / Select dates filter tabs</li>
+          <li><span class="dot d-todo"></span>Team members table — Name + avatar, Hours Spent, Allowed Hours, Hourly Rate</li>
+          <li><span class="dot d-todo"></span>100-user paginated list</li>
+          <li><span class="dot d-todo"></span>Three-dot menu on table header</li>
+          <li><span class="dot d-todo"></span>Row click → right detail panel</li>
+        </ul>
+      </div>
+      <div class="fc">
+        <p class="fc-name">Team member time detail panel</p>
+        <ul class="tl-items">
+          <li><span class="dot d-todo"></span>Member avatar + name + role badge</li>
+          <li><span class="dot d-todo"></span>Time Reports filter — Daily / Weekly / Monthly / Select dates</li>
+          <li><span class="dot d-todo"></span>Sort by Team dropdown + Sort by Status dropdown</li>
+          <li><span class="dot d-todo"></span>Billable toggle (on/off)</li>
+          <li><span class="dot d-todo"></span>Total Hours — spent / allowed (e.g. 38.50hrs / 40hrs)</li>
+          <li><span class="dot d-todo"></span>Hours allocation — expandable client rows with task breakdown and status badge</li>
+          <li><span class="dot d-todo"></span>Export timesheet button</li>
+          <li><span class="dot d-todo"></span>Close panel (X)</li>
+        </ul>
+      </div>
+      <div class="fc">
+        <p class="fc-name">Time Reports — By Client</p>
+        <ul class="tl-items">
+          <li><span class="dot d-todo"></span>Firms table — Company name, Accounts Manager (avatar + name), Primary Contact (avatar + name), Time Spent</li>
+          <li><span class="dot d-todo"></span>Section label: "These companies have purchased in the last 12 months"</li>
+          <li><span class="dot d-todo"></span>Daily / Weekly / Monthly / Select dates tabs</li>
+          <li><span class="dot d-todo"></span>Row click → right client detail panel</li>
+        </ul>
+      </div>
+      <div class="fc">
+        <p class="fc-name">Client time detail panel</p>
+        <ul class="tl-items">
+          <li><span class="dot d-todo"></span>Firm name header</li>
+          <li><span class="dot d-todo"></span>Daily / Weekly / Monthly / Select dates filter</li>
+          <li><span class="dot d-todo"></span>Sort by Firm + Sort by Status + Billable toggle</li>
+          <li><span class="dot d-todo"></span>Total Hours summary</li>
+          <li><span class="dot d-todo"></span>Task breakdown rows (e.g. Home page content creation 14.00hrs, Home page design 23.20hrs, Revision &amp; Feedback — Meeting 01.30hrs)</li>
+          <li><span class="dot d-todo"></span>Expandable / collapsible task group rows</li>
+          <li><span class="dot d-todo"></span>Export timesheet button</li>
+        </ul>
+      </div>
+    </div>
+    <p class="wnote">Export format (CSV / PDF / email) and submission destination are not specified in any Figma screen. A product decision is required before the export button can be fully wired.</p>
+  </div>
+</div>
+
+<!-- ── WEEK 6 ── -->
+<div class="week w6">
+  <div class="wh">
+    <span class="wnum">Week 6</span>
+    <div>
+      <div class="wtitle">Team pulse, integration &amp; QA</div>
+      <div class="wfunc" style="font-size:11px;color:#085041;margin-top:1px">Team Pulse availability · Cross-feature wiring · Empty states · Permission enforcement · QA</div>
+    </div>
+    <span class="wst">Upcoming</span>
+  </div>
+  <div class="wbody">
+    <div class="pbar"><div class="pfill" style="width:0%;background:#1D9E75"></div></div>
+    <div class="fgrid">
+      <div class="fc">
+        <p class="fc-name">Team Pulse</p>
+        <ul class="tl-items">
+          <li><span class="dot d-todo"></span>100-user table — Name + avatar, Total Tasks (clickable count), Pulse availability badge</li>
+          <li><span class="dot d-todo"></span>Availability states — Available (green, no active items), Available Soon (amber, only In Progress)</li>
+          <li><span class="dot d-todo"></span>Task count hover popover — 8-status breakdown (To Do, Assigned, Inprogress, Revisions, Blocked, Internal Review, Client Review, Completed)</li>
+          <li><span class="dot d-todo"></span>Daily / Weekly / Monthly / Select dates filter</li>
+          <li><span class="dot d-todo"></span>Bulk select checkboxes per row</li>
+          <li><span class="dot d-todo"></span>Three-dot menu (table-level)</li>
+        </ul>
+      </div>
+      <div class="fc">
+        <p class="fc-name">Cross-feature integration</p>
+        <ul class="tl-items">
+          <li><span class="dot d-todo"></span>Task status change → Inbox notification for all assignees</li>
+          <li><span class="dot d-todo"></span>Dashboard task counts sync to live data</li>
+          <li><span class="dot d-todo"></span>Team Pulse availability refreshed on task update</li>
+          <li><span class="dot d-todo"></span>Time entries from task popover → Time Reports By Team + By Client</li>
+          <li><span class="dot d-todo"></span>New project → appears in Dashboard Project Summary + Firm Projects tab</li>
+          <li><span class="dot d-todo"></span>New user invite → available in all team pickers (project, task type, skill)</li>
+        </ul>
+      </div>
+      <div class="fc">
+        <p class="fc-name">Polish &amp; QA</p>
+        <ul class="tl-items">
+          <li><span class="dot d-todo"></span>Empty states for all tables, panels and lists</li>
+          <li><span class="dot d-todo"></span>Loading skeleton screens on all data fetches</li>
+          <li><span class="dot d-todo"></span>Error boundary and network failure states</li>
+          <li><span class="dot d-todo"></span>Permission-based UI enforcement — hide/disable elements by role + extra permissions</li>
+          <li><span class="dot d-todo"></span>Responsive layout check across all 6 weeks of screens</li>
+          <li><span class="dot d-todo"></span>Accessibility pass — keyboard nav, focus rings, aria labels</li>
+        </ul>
+      </div>
+    </div>
+    <p class="wnote">Team Pulse is the lightest Figma module — primarily a read view. The bulk of Week 6 is cross-feature data wiring, real API integration, and QA across all 35+ screens delivered in Weeks 1–5.</p>
+  </div>
+</div>
+
+<!-- ── MISSING FEATURES ── -->
+<p class="sec-lbl">Missing features — not in current Figma designs</p>
+
+<div class="gap-block">
+  <div class="gap-hd" style="background:#FCEBEB">
+    <span class="gap-title" style="color:#A32D2D">Critical — blocks real usage without these screens</span>
+    <span class="gap-badge" style="background:#E24B4A;color:#FCEBEB">13 gaps</span>
+  </div>
+  <div class="gap-body">
+    <div class="gap-grid">
+      <div class="gi"><p class="gi-t">Create Task form / modal</p><p class="gi-d">"Add Task" button appears everywhere but no form is designed. All task creation is blocked.</p></div>
+      <div class="gi"><p class="gi-t">Edit Task form</p><p class="gi-d">Edit exists in every context menu but the form/modal is not in any Figma screen.</p></div>
+      <div class="gi"><p class="gi-t">Skill edit form (User + Org)</p><p class="gi-d">Edit pencil icon visible on skill cards in both Settings and User profiles — no form designed.</p></div>
+      <div class="gi"><p class="gi-t">Task Type edit form</p><p class="gi-d">Edit icon in the Task Type table has no slide-out. Only the Create version exists in Figma.</p></div>
+      <div class="gi"><p class="gi-t">Client Requests module</p><p class="gi-d">Tab appears on every firm page and in the projects nav. No list, detail or data model is designed.</p></div>
+      <div class="gi"><p class="gi-t">Notes module (Project + Firm)</p><p class="gi-d">Notes tab appears in Project Activity and Firm tabs. No editor, list or save state is designed.</p></div>
+      <div class="gi"><p class="gi-t">Timer stop → task assignment</p><p class="gi-d">Stopping the global header timer shows no modal to assign logged time to a project/task.</p></div>
+      <div class="gi"><p class="gi-t">My Timesheet cell editing</p><p class="gi-d">Weekly grid shows hours but no click-to-edit interaction is designed. Values are display-only.</p></div>
+      <div class="gi"><p class="gi-t">Sub-task creation form</p><p class="gi-d">"Add Task" in Sub Tasks section of project detail has no form behind it in Figma.</p></div>
+      <div class="gi"><p class="gi-t">File upload in chat composers</p><p class="gi-d">Files appear in threads (Firm comms + Project Activity) but no upload button exists in any composer.</p></div>
+      <div class="gi"><p class="gi-t">Transcript Management</p><p class="gi-d">"Manage Transcripts" Quick Link on Dashboard leads nowhere — no module is designed.</p></div>
+      <div class="gi"><p class="gi-t">Export format + destination</p><p class="gi-d">"Export Timesheet" and "Export project data" appear in multiple places. No format, flow or success state is designed.</p></div>
+      <div class="gi"><p class="gi-t">Lead capture — validation + backend</p><p class="gi-d">3-field landing form has no validation states, no success screen, no GDPR notice, no submit destination.</p></div>
+    </div>
+  </div>
+</div>
+
+<div class="gap-block">
+  <div class="gap-hd" style="background:#FEF3C7">
+    <span class="gap-title" style="color:#854F0B">High — needed for production quality</span>
+    <span class="gap-badge" style="background:#BA7517;color:#FAEEDA">10 gaps</span>
+  </div>
+  <div class="gap-body">
+    <div class="gap-grid">
+      <div class="gi gi-hi"><p class="gi-t">Inbox search + compose new thread</p><p class="gi-d">No search bar. No way to start a new conversation — only reply to existing activity rows.</p></div>
+      <div class="gi gi-hi"><p class="gi-t">Dashboard donut drill-down</p><p class="gi-d">Clicking a status segment should filter the Project Summary table. Interaction not designed.</p></div>
+      <div class="gi gi-hi"><p class="gi-t">Focus Today panel CTAs</p><p class="gi-d">Badge counts (e.g. 62 overdue) have no link. Should navigate to a filtered task list.</p></div>
+      <div class="gi gi-hi"><p class="gi-t">Task dependencies (blocked-by)</p><p class="gi-d">No way to link a task as blocked by another. Blocked status exists but has no dependency field.</p></div>
+      <div class="gi gi-hi"><p class="gi-t">Permission logic spec + enforcement</p><p class="gi-d">How Role + Extra Permissions combine is not documented. No UI enforcement rules specified.</p></div>
+      <div class="gi gi-hi"><p class="gi-t">Timesheet approval workflow</p><p class="gi-d">No submit-for-approval, approve or reject flow. Time entries have no sign-off mechanism.</p></div>
+      <div class="gi gi-hi"><p class="gi-t">Org Info details form</p><p class="gi-d">Org Info tab shows only a logo upload — no org name, address, timezone or billing email.</p></div>
+      <div class="gi gi-hi"><p class="gi-t">Firm Notes + Time Reports tabs</p><p class="gi-d">Both tabs present in firm page nav but neither has a screen designed.</p></div>
+      <div class="gi gi-hi"><p class="gi-t">Attachment preview modal</p><p class="gi-d">PDF and MP4 on project detail are clickable but no preview viewer or modal is designed.</p></div>
+      <div class="gi gi-hi"><p class="gi-t">Team Pulse workload bar + assign</p><p class="gi-d">No visual capacity bar per member. No way to assign a task directly from the Pulse view.</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── EXTENDED ── -->
+<p class="sec-lbl">Extended timeline — weeks 7–10 (contingent on Figma updates)</p>
+
+<div class="ext-block">
+  <div class="ext-hd">
+    <span class="ext-title">+4 weeks estimated once missing features are designed in Figma</span>
+    <span class="ext-badge">Weeks 7–10</span>
+  </div>
+  <div class="ext-body">
+    <div class="ext-grid">
+      <div class="ei"><p class="ei-t">Create + Edit Task modal</p><p class="ei-w">Week 7 · ~3 days</p><p class="ei-d">Full form — name, status, priority, due date, assignees, task type, description, attachments.</p></div>
+      <div class="ei"><p class="ei-t">Skill + Task Type edit forms</p><p class="ei-w">Week 7 · ~1 day each</p><p class="ei-d">Re-use existing create slide-outs in edit mode with pre-populated values and Update CTA.</p></div>
+      <div class="ei"><p class="ei-t">Timer stop → task assignment</p><p class="ei-w">Week 7 · ~1 day</p><p class="ei-d">Modal on timer stop: project + task selector. Auto-saves time entry.</p></div>
+      <div class="ei"><p class="ei-t">Client Requests module</p><p class="ei-w">Week 8 · ~4 days</p><p class="ei-d">New data model, list + detail views, status flow. Requires Figma design first.</p></div>
+      <div class="ei"><p class="ei-t">Notes module (Project + Firm)</p><p class="ei-w">Week 8 · ~2 days</p><p class="ei-d">Rich text editor, autosave, multi-user. Shared component used in both locations.</p></div>
+      <div class="ei"><p class="ei-t">My Timesheet cell editing</p><p class="ei-w">Week 9 · ~2 days</p><p class="ei-d">Click-to-edit cells with validation, save-on-blur, and daily hour cap.</p></div>
+      <div class="ei"><p class="ei-t">Inbox search + compose</p><p class="ei-w">Week 9 · ~2 days</p><p class="ei-d">Search bar + new thread composer scoped to a project or firm.</p></div>
+      <div class="ei"><p class="ei-t">File upload in composers</p><p class="ei-w">Week 9 · ~1 day</p><p class="ei-d">Shared upload component for Firm communications and Project Activity reply fields.</p></div>
+      <div class="ei"><p class="ei-t">Transcript Management</p><p class="ei-w">Week 10 · ~3 days</p><p class="ei-d">List, upload, search, firm/project link, view/download. Needs Figma design first.</p></div>
+      <div class="ei"><p class="ei-t">Timesheet approval + export</p><p class="ei-w">Week 10 · ~2 days</p><p class="ei-d">Submit / Approve / Reject flow + export format decision (CSV or PDF).</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── DISCLAIMER ── -->
+<div class="disc">
+  <p class="disc-title"><span class="disc-icon">i</span>Disclaimer — all timelines are subject to change</p>
+  <p>All timelines are estimates based on the Figma designs reviewed in April 2026 and are subject to change without notice. Timelines may be revised if: (1) Figma designs are updated, revised or expanded — any redesign of a delivered screen restarts development effort for that screen; (2) new features are added to the Figma scope mid-sprint; (3) technical dependencies, API design decisions or third-party integrations are unresolved ahead of the relevant week; (4) QA feedback requires significant rework; or (5) team capacity changes. The extended timeline (Weeks 7–10) is entirely contingent on missing features being designed in Figma before development begins — no development will be started on undesigned features. This document is a living roadmap and should be reviewed and updated after every Figma revision.</p>
+</div>
+
+</div>

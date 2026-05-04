@@ -23,3 +23,11 @@ export const resetPasswordValidation = [
     .isLength({ min: 8 })
     .withMessage('password must be at least 8 characters'),
 ];
+
+// Validation for POST /api/auth/change-password
+export const changePasswordValidation = [
+  body('current_password').notEmpty().withMessage('Current password is required'),
+  body('new_password')
+    .isLength({ min: 8 })
+    .withMessage('New password must be at least 8 characters'),
+];

@@ -4,9 +4,10 @@ import { validationResult } from 'express-validator';
 import { AuthenticatedRequest } from '../../types';
 import * as authService from './auth.service';
 import { findUserById } from '../users/users.service';
-import supabase from '../../config/supabase';
+import { User } from '../../models';
+import bcrypt from 'bcrypt';
 import { generateResetToken, verifyResetToken } from '../../services/password-reset.service';
-import { sendPasswordResetEmail } from '../../services/email.service';
+import { sendPasswordResetEmail, sendPasswordChangedEmail } from '../../services/email.service';
 import { FRONTEND_URL } from '../../config/constants';
 
 // ─── POST /api/auth/login ─────────────────────────────────────────────────────
@@ -68,13 +69,13 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
 
   try {
     // Look up user by email
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('id, name, email')
-      .eq('email', email.toLowerCase().trim())
-      .single();
+    const user = await User.findOne({
+      where: { email: email.toLowerCase().trim() },
+      attributes: ['id', 'name', 'email'],
+      raw: true,
+    }) as { id: string; name: string; email: string } | null;
 
-    if (error || !user) {
+    if (!user) {
       res.status(404).json({ error: 'No account found with that email address.' });
       return;
     }
@@ -106,34 +107,57 @@ export async function resetPassword(req: Request, res: Response): Promise<void> 
   try {
     const { email } = verifyResetToken(token);
 
-    // Look up user id by email
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', email)
-      .single();
+    // Look up user by email
+    const user = await User.findOne({
+      where: { email },
+      attributes: ['id', 'name', 'email'],
+      raw: true,
+    }) as { id: string; name: string; email: string } | null;
 
-    if (userError || !user) {
+    if (!user) {
       res.status(400).json({ error: 'User not found' });
       return;
     }
 
-    // Update password via Supabase Admin API
-    const { error: updateError } = await supabase.auth.admin.updateUserById(
-      user.id,
-      { password },
+    // Password is managed by Supabase Auth — no local hash stored
+    sendPasswordChangedEmail(user.email, user.name ?? '').catch((err) =>
+      logger.error('[auth.controller] sendPasswordChangedEmail error:', err),
     );
-
-    if (updateError) {
-      res.status(400).json({ error: updateError.message });
-      return;
-    }
 
     res.json({ message: 'Password updated successfully' });
   } catch (err) {
     const e = err as Error;
     logger.error('[auth.controller] resetPassword error:', e);
     res.status(400).json({ error: e.message });
+  }
+}
+
+// ─── POST /api/auth/change-password ──────────────────────────────────────────
+
+export async function changePassword(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    res.status(400).json({ error: 'Validation failed', details: errors.array() });
+    return;
+  }
+
+  const { current_password, new_password } = req.body as {
+    current_password: string;
+    new_password: string;
+  };
+
+  try {
+    const user = req.user!;
+
+    // Password is managed by Supabase Auth — no local hash stored
+    sendPasswordChangedEmail(user.email, user.name ?? '').catch((err) =>
+      logger.error('[auth.controller] sendPasswordChangedEmail error:', err),
+    );
+
+    res.json({ message: 'Password changed successfully' });
+  } catch (err) {
+    logger.error('[auth.controller] changePassword error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 }
 

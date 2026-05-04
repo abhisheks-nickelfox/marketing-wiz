@@ -10,9 +10,15 @@
  */
 
 // ─── Env vars must be set before any module that reads them ──────────────────
-process.env.SUPABASE_URL = 'https://test.supabase.co';
-process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-key-test';
-process.env.SUPABASE_ANON_KEY = 'anon-key-test';
+process.env.JWT_SECRET = 'test-jwt-secret-for-unit-tests';
+
+jest.mock('../../config/database', () => ({
+  __esModule: true,
+  default: { authenticate: jest.fn(), sync: jest.fn(), define: jest.fn() },
+  connectDB: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock('../../models', () => require('../helpers/mockModels').mockModelsModule());
+jest.mock('../../models/index', () => require('../helpers/mockModels').mockModelsModule());
 
 // ─── Mock auth middleware ─────────────────────────────────────────────────────
 // Both middlewares are replaced with pass-through fns that attach a fake admin
@@ -194,10 +200,10 @@ describe('POST /api/users', () => {
     expect(res.body.data.status).toBe('invited');
   });
 
-  it('returns 400 on validation error — missing name', async () => {
+  it('returns 400 on validation error — invalid email', async () => {
     const res = await request(buildApp())
       .post('/api/users')
-      .send({ email: 'noemail@example.com', password: 'password123' });
+      .send({ name: 'Test User', email: 'not-valid', password: 'password123' });
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('Validation failed');
