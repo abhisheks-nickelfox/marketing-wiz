@@ -55,7 +55,10 @@
       "Bash(npm run *)",
       "Read(//tmp/**)",
       "Bash(kill %1)",
-      "Bash(node -e \"console.log\\(require\\('crypto'\\).randomBytes\\(64\\).toString\\('hex'\\)\\)\")"
+      "Bash(node -e \"console.log\\(require\\('crypto'\\).randomBytes\\(64\\).toString\\('hex'\\)\\)\")",
+      "Bash(sed -n '710,720p' /home/shubham/Documents/MarketingWiz/frontend-new/src/pages/SettingsPage.tsx)",
+      "Bash(sed -n '836,845p' /home/shubham/Documents/MarketingWiz/frontend-new/src/pages/SettingsPage.tsx)",
+      "Bash(sed -n '1107,1115p' /home/shubham/Documents/MarketingWiz/frontend-new/src/pages/SettingsPage.tsx)"
     ]
   }
 }

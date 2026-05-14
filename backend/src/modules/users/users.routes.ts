@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/auth';
-import { requireAdmin } from '../../middleware/rbac';
+import { requireAdmin, requireMember } from '../../middleware/rbac';
 import {
   createUserValidation,
   updateUserValidation,
@@ -9,6 +9,9 @@ import {
 import * as usersController from './users.controller';
 
 const router = Router();
+
+// GET  /api/users/mentions — member+: lightweight list for @mention picker
+router.get('/mentions', authenticate, requireMember, usersController.getMentionableUsers);
 
 // GET  /api/users        — admin only: list all users with their skills
 router.get('/', authenticate, requireAdmin, usersController.listUsers);

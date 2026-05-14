@@ -42,7 +42,6 @@ jest.mock('../../middleware/auth', () => ({
 jest.mock('../../middleware/rbac', () => ({
   requireAdmin:      (_req: any, _res: any, next: any) => next(),
   requireMember:     (_req: any, _res: any, next: any) => next(),
-  requireSuperAdmin: (_req: any, _res: any, next: any) => next(),
   requirePermission: () => (_req: any, _res: any, next: any) => next(),
 }));
 

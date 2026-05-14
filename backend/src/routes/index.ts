@@ -14,6 +14,7 @@ import transcriptsRouter from '../modules/transcripts/transcripts.routes';
 import tasksRouter from '../modules/tasks/tasks.routes';
 import orgSettingsRouter from '../modules/org-settings/org-settings.routes';
 import taskTypesRouter from '../modules/task-types/task-types.routes';
+import messagesRouter from '../modules/messages/messages.routes';
 
 const router = Router();
 
@@ -36,5 +37,6 @@ router.use('/transcripts', transcriptsRouter);
 router.use('/tasks', tasksRouter);
 router.use('/org-settings', orgSettingsRouter);
 router.use('/task-types',  taskTypesRouter);
+router.use('/messages', messagesRouter);
 
 export default router;

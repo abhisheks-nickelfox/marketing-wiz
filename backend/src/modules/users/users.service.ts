@@ -1,6 +1,6 @@
 import bcrypt from 'bcrypt';
 import logger from '../../config/logger';
-import { User, UserSkill, Skill } from '../../models';
+import { User, UserSkill, Skill, ProcessingSession } from '../../models';
 import { Op } from 'sequelize';
 import type { CreateUserDto } from './dto/create-user.dto';
 import type { UpdateUserDto } from './dto/update-user.dto';
@@ -96,14 +96,42 @@ function stripPassword(row: Record<string, unknown>): Record<string, unknown> {
 
 // ── Service methods ──────────────────────────────────────────────────────────
 
-export async function findAllUsers(): Promise<UserResult[]> {
-  const rows = await User.findAll({
-    order: [['created_at', 'DESC']],
-    raw: true,
-  });
+// ── Pagination constants ──────────────────────────────────────────────────────
+
+const DEFAULT_USER_LIST_LIMIT = 50;
+const MAX_USER_LIST_LIMIT     = 200;
+
+export interface PaginatedUsersResult {
+  data:  UserResult[];
+  total: number;
+  page:  number;
+  limit: number;
+}
+
+export async function findAllUsers(
+  page: number  = 1,
+  limit: number = DEFAULT_USER_LIST_LIMIT,
+): Promise<PaginatedUsersResult> {
+  // Clamp inputs so callers cannot request unlimited rows
+  const safePage  = Math.max(1, page);
+  const safeLimit = Math.min(MAX_USER_LIST_LIMIT, Math.max(1, limit));
+  const offset    = (safePage - 1) * safeLimit;
+
+  // Fetch count and current page concurrently — avoids two sequential round-trips
+  const [total, rows] = await Promise.all([
+    User.count(),
+    User.findAll({
+      order:  [['created_at', 'DESC']],
+      limit:  safeLimit,
+      offset,
+      raw:    true,
+    }),
+  ]);
 
   const safe = (rows as unknown as Record<string, unknown>[]).map(stripPassword);
-  return attachSkills(safe);
+  const data = await attachSkills(safe);
+
+  return { data, total, page: safePage, limit: safeLimit };
 }
 
 export async function findUserById(id: string): Promise<UserResult | null> {
@@ -179,6 +207,9 @@ export async function updateUser(id: string, dto: UpdateUserDto): Promise<UserRe
   if (status !== undefined)         patch.status         = status;
   if (rate_amount !== undefined)    patch.rate_amount    = rate_amount ?? null;
   if (rate_frequency !== undefined) patch.rate_frequency = rate_frequency ?? null;
+  if (password !== undefined && password) {
+    patch.password_hash = await bcrypt.hash(password, 12);
+  }
 
   if (Object.keys(patch).length > 0) {
     await User.update(patch, { where: { id } });
@@ -254,6 +285,19 @@ export async function fetchInviteNonce(userId: string): Promise<string | null> {
 export async function deleteUser(id: string, requesterId: string): Promise<void> {
   if (id === requesterId) {
     throw Object.assign(new Error('Cannot delete your own account'), { statusCode: 400 });
+  }
+
+  // Guard: processing_sessions.created_by has an ON DELETE RESTRICT FK.
+  // If this user has processed any transcripts the DB will reject the delete
+  // with a FK violation. We surface a clear 409 instead of a 500.
+  const sessionCount = await ProcessingSession.count({ where: { created_by: id } });
+  if (sessionCount > 0) {
+    throw Object.assign(
+      new Error(
+        'Cannot delete user: they have processed transcripts. Reassign or archive their work first.',
+      ),
+      { statusCode: 409 },
+    );
   }
 
   const count = await User.destroy({ where: { id } });

@@ -1,7 +1,7 @@
 import { body } from 'express-validator';
 
 export const createSkillValidation = [
-  body('name').trim().notEmpty().withMessage('Skill name is required'),
+  body('name').trim().notEmpty().matches(/[a-zA-Z]/).withMessage('Skill name must contain at least one letter'),
   body('category')
     .optional({ nullable: true, checkFalsy: true })
     .isString().trim()
@@ -20,7 +20,8 @@ export const updateSkillValidation = [
   body('name')
     .optional()
     .trim().notEmpty()
-    .withMessage('Skill name cannot be empty'),
+    .matches(/[a-zA-Z]/)
+    .withMessage('Skill name must contain at least one letter'),
   body('category')
     .optional({ nullable: true, checkFalsy: true })
     .isString().trim()

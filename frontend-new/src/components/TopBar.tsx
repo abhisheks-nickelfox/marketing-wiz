@@ -37,7 +37,7 @@ function useBreadcrumbs(): Crumb[] {
   }
 
   // /firms/:id
-  if (parts[0] === 'firms' && parts[1]) {
+  if (parts[0] === 'firms' && parts[1] && parts[1] !== 'new') {
     return [
       { label: 'Firms' },
       { label: parts[1] }, // resolved by FirmNameCrumb below
@@ -73,6 +73,11 @@ function useBreadcrumbs(): Crumb[] {
   // /users
   if (pathname === '/users') {
     return [{ label: 'Users' }];
+  }
+
+  // /projects
+  if (pathname === '/projects') {
+    return [{ label: 'Projects' }];
   }
 
   return [];

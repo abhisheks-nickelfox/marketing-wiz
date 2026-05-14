@@ -8,8 +8,8 @@ export const validateTokenValidation = [
 // Validation for POST /api/auth/onboarding/complete
 export const completeOnboardingValidation = [
   body('token').notEmpty().withMessage('token is required'),
-  body('first_name').notEmpty().trim().withMessage('first_name is required'),
-  body('last_name').notEmpty().trim().withMessage('last_name is required'),
+  body('first_name').trim().notEmpty().matches(/[a-zA-Z]/).withMessage('First name must contain at least one letter'),
+  body('last_name').trim().notEmpty().matches(/[a-zA-Z]/).withMessage('Last name must contain at least one letter'),
   body('phone_number')
     .optional({ nullable: true, checkFalsy: true })
     .trim()
@@ -20,6 +20,25 @@ export const completeOnboardingValidation = [
   body('password')
     .isLength({ min: 8 })
     .withMessage('password must be at least 8 characters'),
+  body('skills')
+    .optional()
+    .isArray()
+    .withMessage('skills must be an array'),
+  body('skills.*.skill_name')
+    .optional()
+    .isString()
+    .trim()
+    .notEmpty()
+    .withMessage('Each skill must have a skill_name'),
+  body('skills.*.experience')
+    .optional({ nullable: true, checkFalsy: true })
+    .isString()
+    .custom((val) => {
+      if (val === null || val === undefined || val === '') return true;
+      const n = Number(val);
+      if (isNaN(n) || n < 1 || n > 50) throw new Error('Experience must be a number between 1 and 50');
+      return true;
+    }),
   body('pending_skills')
     .optional()
     .isArray()

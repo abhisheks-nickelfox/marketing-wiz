@@ -1,78 +1,46 @@
-import { useState } from 'react';
-import { ChevronDown, ChevronRight, FilterLines } from '@untitled-ui/icons-react';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ChevronDown, ChevronLeft, ChevronRight, FilterLines, Check } from '@untitled-ui/icons-react';
 import AvatarStack from '../ui/AvatarStack';
-import { PriorityBadge, TaskStatusBadge } from '../tasks/TaskBadges';
+import { TaskStatusBadge } from '../tasks/TaskBadges';
+import { useTasks, useUpdateTask } from '../../hooks/useTasks';
+import { useFirms } from '../../hooks/useFirms';
+import { useActiveUsers } from '../../hooks/useUsers';
+import Avatar from '../ui/Avatar';
+import type { Task } from '../../lib/api';
+
+// ── Dot colors cycling per firm ───────────────────────────────────────────────
+
+const DOT_COLORS = ['#F79009', '#2E90FA', '#7F56D9', '#17B26A', '#F04438', '#FAC515', '#EE46BC'];
+
+function dotColorForFirm(firmId: string | null, _firmNames: string[]): string {
+  if (!firmId) return '#A4A7AE';
+  return DOT_COLORS[Math.abs(firmId.charCodeAt(0) + firmId.charCodeAt(firmId.length - 1)) % DOT_COLORS.length];
+}
+
+// ── Priority styles ───────────────────────────────────────────────────────────
+
+const PRIORITY_STYLES: Record<string, { label: string; bg: string; text: string }> = {
+  low:    { label: 'Low',    bg: '#F2F4F7', text: '#344054' },
+  normal: { label: 'Medium', bg: '#EFF8FF', text: '#1570EF' },
+  high:   { label: 'High',   bg: '#FEF0C7', text: '#B54708' },
+  urgent: { label: 'Urgent', bg: '#FEF3F2', text: '#B42318' },
+};
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface Project {
-  id:        string;
-  name:      string;
-  tag?:      string;
-  tagColor?: string;
-  dot:       string;        // dot color
-  client:    string;
-  assignees: { name: string; bg: string }[];
-  dueDate:   string;
-  priority:  'low' | 'normal' | 'high' | 'urgent';
-  status:    'in_progress' | 'draft' | 'resolved' | 'discarded' | 'internal_review';
-  children?: Omit<Project, 'children'>[];
+interface RowData {
+  id:         string;
+  firmId:     string | null;
+  name:       string;
+  dot:        string;
+  client:     string;
+  assignees:  { name: string; bg: string }[];
+  assigneeId: string | null;
+  dueDate:    string;
+  priority:   Task['priority'];
+  status:     Task['status'];
 }
-
-// ── Dummy data ────────────────────────────────────────────────────────────────
-
-const AVATARS = [
-  { name: 'Alice', bg: '#D6BBFB' },
-  { name: 'Bob',   bg: '#93C5FD' },
-  { name: 'Carol', bg: '#6EE7B7' },
-  { name: 'Dave',  bg: '#FCA5A5' },
-];
-
-const PROJECTS: Project[] = [
-  {
-    id: '1', name: 'Website changes For AWP', tag: 'Website design', tagColor: '#EFF8FF',
-    dot: '#F79009', client: 'Ashwati Capital', assignees: AVATARS, dueDate: 'Tomorrow',
-    priority: 'high', status: 'in_progress',
-    children: [
-      { id: '1-1', name: 'Home page redesign',   dot: '#F79009', client: 'Ashwati Capital', assignees: AVATARS.slice(0,2), dueDate: 'Tomorrow', priority: 'high', status: 'in_progress' },
-      { id: '1-2', name: 'Copy & Content update', dot: '#F79009', client: 'Ashwati Capital', assignees: AVATARS.slice(0,2), dueDate: 'Tomorrow', priority: 'normal', status: 'draft' },
-    ],
-  },
-  {
-    id: '2', name: 'Marketing Landing page',
-    dot: '#2E90FA', client: 'Ashwati Capital', assignees: AVATARS.slice(0,3), dueDate: 'Tomorrow',
-    priority: 'high', status: 'in_progress',
-    children: [
-      { id: '2-1', name: 'SEO Optimization', dot: '#2E90FA', client: 'Ashwati Capital', assignees: AVATARS.slice(0,2), dueDate: 'Tomorrow', priority: 'high', status: 'in_progress' },
-    ],
-  },
-  {
-    id: '3', name: 'Website changes For AWP', tag: 'Website design', tagColor: '#F4F3FF',
-    dot: '#7F56D9', client: 'IGA Health', assignees: AVATARS, dueDate: 'Tomorrow',
-    priority: 'high', status: 'in_progress',
-  },
-  {
-    id: '4', name: 'Marketing Landing page',
-    dot: '#17B26A', client: 'IGA Health', assignees: AVATARS.slice(1,4), dueDate: 'Tomorrow',
-    priority: 'high', status: 'in_progress',
-  },
-  {
-    id: '5', name: 'Website changes For AWP', tag: 'Website design', tagColor: '#EFF8FF',
-    dot: '#F04438', client: 'Ashwati Capital', assignees: AVATARS, dueDate: 'Tomorrow',
-    priority: 'high', status: 'in_progress',
-  },
-  {
-    id: '6', name: 'Website changes For AWP', tag: 'Website design', tagColor: '#FFF6ED',
-    dot: '#FAC515', client: 'Ashwati Capital', assignees: AVATARS.slice(0,3), dueDate: 'Tomorrow',
-    priority: 'high', status: 'in_progress',
-  },
-  {
-    id: '7', name: 'Marketing Landing page',
-    dot: '#EE46BC', client: 'IGA Health', assignees: AVATARS.slice(0,2), dueDate: 'Tomorrow',
-    priority: 'high', status: 'in_progress',
-  },
-];
-
 
 // ── Project dot (concentric rings) ───────────────────────────────────────────
 
@@ -86,78 +54,190 @@ function ProjectDot({ color }: { color: string }) {
   );
 }
 
+// ── Priority dropdown ─────────────────────────────────────────────────────────
+
+function PriorityDropdown({ row }: { row: RowData }) {
+  const [open, setOpen] = useState(false);
+  const ref             = useRef<HTMLDivElement>(null);
+  const updateTask      = useUpdateTask();
+  const style           = PRIORITY_STYLES[row.priority] ?? PRIORITY_STYLES.normal;
+
+  useEffect(() => {
+    if (!open) return;
+    function handleMouseDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleMouseDown);
+    return () => document.removeEventListener('mousedown', handleMouseDown);
+  }, [open]);
+
+  function select(priority: Task['priority']) {
+    updateTask.mutate({ id: row.id, payload: { priority, firm_id: row.firmId ?? undefined } });
+    setOpen(false);
+  }
+
+  return (
+    <div ref={ref} className="relative inline-block">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold border transition-opacity hover:opacity-80"
+        style={{ backgroundColor: style.bg, color: style.text, borderColor: style.bg }}
+      >
+        <span className="w-1.5 h-1.5 rounded-full bg-current" />
+        {style.label}
+        <ChevronDown width={10} height={10} className="ml-0.5 opacity-60" />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-[#E9EAEB] rounded-lg shadow-lg py-1 min-w-[110px]">
+          {(Object.keys(PRIORITY_STYLES) as Task['priority'][]).map((p) => {
+            const ps = PRIORITY_STYLES[p];
+            return (
+              <button
+                key={p}
+                onClick={() => select(p)}
+                className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 transition-colors text-left"
+              >
+                <span
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold"
+                  style={{ backgroundColor: ps.bg, color: ps.text }}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                  {ps.label}
+                </span>
+                {p === row.priority && <Check width={12} height={12} className="ml-auto text-[#7F56D9]" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Assignee picker ───────────────────────────────────────────────────────────
+
+function AssigneePicker({ row }: { row: RowData }) {
+  const [open, setOpen]  = useState(false);
+  const ref              = useRef<HTMLDivElement>(null);
+  const updateTask       = useUpdateTask();
+  const { data: users = [] } = useActiveUsers();
+
+  useEffect(() => {
+    if (!open) return;
+    function handleMouseDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleMouseDown);
+    return () => document.removeEventListener('mousedown', handleMouseDown);
+  }, [open]);
+
+  function select(userId: string | null) {
+    updateTask.mutate({ id: row.id, payload: { assignee_id: userId, firm_id: row.firmId ?? undefined } });
+    setOpen(false);
+  }
+
+  return (
+    <div ref={ref} className="relative inline-block">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1 rounded hover:opacity-80 transition-opacity"
+      >
+        {row.assignees.length > 0 ? (
+          <AvatarStack avatars={row.assignees} max={3} showAddButton={false} />
+        ) : (
+          <span className="w-6 h-6 rounded-full border border-dashed border-gray-300 flex items-center justify-center text-[11px] text-gray-400 hover:border-[#7F56D9] hover:text-[#7F56D9] transition-colors">
+            +
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-[#E9EAEB] rounded-lg shadow-lg py-1 min-w-[180px] max-h-48 overflow-y-auto">
+          {/* Unassign option */}
+          <button
+            onClick={() => select(null)}
+            className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 transition-colors text-left"
+          >
+            <span className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-[10px] text-gray-400 shrink-0">—</span>
+            <span className="text-[12px] text-gray-500">Unassign</span>
+            {!row.assigneeId && <Check width={12} height={12} className="ml-auto text-[#7F56D9]" />}
+          </button>
+          <div className="border-t border-gray-100 my-1" />
+          {users.map((u) => (
+            <button
+              key={u.id}
+              onClick={() => select(u.id)}
+              className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 transition-colors text-left"
+            >
+              <Avatar name={u.name} src={u.avatar_url ?? undefined} size="xs" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[12px] text-gray-800 font-medium truncate">{u.name}</p>
+                <p className="text-[10px] text-gray-400 truncate">{u.member_role ?? u.role}</p>
+              </div>
+              {u.id === row.assigneeId && <Check width={12} height={12} className="ml-auto text-[#7F56D9] shrink-0" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Row component ─────────────────────────────────────────────────────────────
 
 interface RowProps {
-  project:    Project | Omit<Project, 'children'>;
-  depth?:     number;
-  expanded?:  boolean;
-  onToggle?:  () => void;
+  row:    RowData;
+  depth?: number;
 }
 
-function ProjectRow({ project, depth = 0, expanded, onToggle }: RowProps) {
-  const hasChildren = 'children' in project && !!project.children?.length;
+function ProjectRow({ row, depth = 0 }: RowProps) {
+  const navigate = useNavigate();
 
   return (
     <tr className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
 
-      {/* Project name */}
+      {/* Task name */}
       <td className="py-2.5 pr-3">
         <div
           className="flex items-center gap-2"
           style={{ paddingLeft: depth > 0 ? `${depth * 20}px` : 0 }}
         >
-          {hasChildren ? (
-            <button onClick={onToggle} className="shrink-0 text-gray-400 hover:text-gray-600 p-0.5" aria-label={expanded ? 'Collapse' : 'Expand'}>
-              {expanded
-                ? <ChevronDown width={14} height={14} />
-                : <ChevronRight width={14} height={14} />
-              }
-            </button>
-          ) : (
-            <span className="w-5 shrink-0" />
-          )}
-
-          <ProjectDot color={project.dot} />
-
-          <span className={`text-[13px] font-semibold leading-tight ${depth > 0 ? 'text-gray-600' : 'text-gray-900'}`}>
-            {project.name}
-          </span>
-
-          {project.tag && (
-            <span
-              className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md border border-blue-200 text-blue-700 shrink-0"
-              style={{ backgroundColor: project.tagColor ?? '#EFF8FF' }}
-            >
-              {project.tag}
-            </span>
-          )}
+          <span className="w-5 shrink-0" />
+          <ProjectDot color={row.dot} />
+          <button
+            onClick={() => row.firmId && navigate(`/firms/${row.firmId}/tasks/${row.id}`)}
+            className="text-[13px] font-semibold leading-tight text-gray-900 hover:text-[#7F56D9] transition-colors text-left truncate max-w-[220px]"
+            title={row.name}
+          >
+            {row.name}
+          </button>
         </div>
       </td>
 
       {/* Client */}
       <td className="py-2.5 pr-3">
-        <span className="text-[12px] text-gray-700">{project.client}</span>
+        <span className="text-[12px] text-gray-700">{row.client}</span>
       </td>
 
       {/* Assignee */}
       <td className="py-2.5 pr-3">
-        <AvatarStack avatars={project.assignees} max={3} showAddButton={false} />
+        <AssigneePicker row={row} />
       </td>
 
       {/* Due date */}
       <td className="py-2.5 pr-3">
-        <span className="text-[12px] text-gray-700">{project.dueDate}</span>
+        <span className="text-[12px] text-gray-700">{row.dueDate}</span>
       </td>
 
       {/* Priority */}
       <td className="py-2.5 pr-3">
-        <PriorityBadge priority={project.priority} />
+        <PriorityDropdown row={row} />
       </td>
 
       {/* Status */}
       <td className="py-2.5">
-        <TaskStatusBadge status={project.status} />
+        <TaskStatusBadge status={row.status} />
       </td>
     </tr>
   );
@@ -165,29 +245,51 @@ function ProjectRow({ project, depth = 0, expanded, onToggle }: RowProps) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-const FIRMS     = ['All Firms', 'Ashwati Capital', 'IGA Health'];
-const ASSIGNEES = ['All Assignees', 'Alice', 'Bob', 'Carol'];
+const PAGE_SIZE = 20;
 
 export default function TasksTable() {
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set(['1']));
-  const [firmFilter,  setFirmFilter]  = useState('All Firms');
-  const [firmOpen,    setFirmOpen]    = useState(false);
+  const [firmFilter,     setFirmFilter]     = useState('All Firms');
+  const [firmOpen,       setFirmOpen]       = useState(false);
   const [assigneeFilter, setAssigneeFilter] = useState('All Assignees');
   const [assigneeOpen,   setAssigneeOpen]   = useState(false);
+  const [page, setPage] = useState(1);
 
-  const toggle = (id: string) => {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
+  const { data: tasks = [] } = useTasks();
+  const { data: firms = [] } = useFirms();
 
-  const filtered = PROJECTS.filter((p) => {
-    if (firmFilter !== 'All Firms' && p.client !== firmFilter) return false;
-    if (assigneeFilter !== 'All Assignees' && !p.assignees.some((a) => a.name === assigneeFilter)) return false;
+  // Build unique assignee names from loaded tasks for the filter dropdown
+  const assigneeNames = useMemo(() => {
+    const names = new Set<string>();
+    tasks.forEach((t) => { if (t.assignee?.name) names.add(t.assignee.name); });
+    return ['All Assignees', ...Array.from(names)];
+  }, [tasks]);
+
+  const firmOptions = useMemo(() => ['All Firms', ...firms.map((f) => f.name)], [firms]);
+
+  // Map Task → RowData for the table
+  const rows: RowData[] = useMemo(() => tasks.map((task) => ({
+    id:         task.id,
+    firmId:     task.firm_id,
+    name:       task.title,
+    dot:        dotColorForFirm(task.firm_id, firms.map((f) => f.id)),
+    client:     task.firms?.name ?? '—',
+    assignees:  task.assignee ? [{ name: task.assignee.name, bg: '#D6BBFB' }] : [],
+    assigneeId: task.assignee_id,
+    dueDate:    task.deadline ?? '—',
+    priority:   task.priority,
+    status:     task.status,
+  })), [tasks, firms]);
+
+  const filtered = rows.filter((r) => {
+    if (firmFilter !== 'All Firms' && r.client !== firmFilter) return false;
+    if (assigneeFilter !== 'All Assignees' && !r.assignees.some((a) => a.name === assigneeFilter)) return false;
     return true;
   });
+
+  useEffect(() => { setPage(1); }, [firmFilter, assigneeFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageRows   = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   function FilterDropdown({
     label, value, options, open, onToggle, onSelect,
@@ -232,12 +334,12 @@ export default function TasksTable() {
 
         <div className="flex items-center gap-2">
           <FilterDropdown
-            label="Filter by firm" value={firmFilter} options={FIRMS}
+            label="Filter by firm" value={firmFilter} options={firmOptions}
             open={firmOpen} onToggle={() => { setFirmOpen((v) => !v); setAssigneeOpen(false); }}
             onSelect={setFirmFilter}
           />
           <FilterDropdown
-            label="Filter by Assignee" value={assigneeFilter} options={ASSIGNEES}
+            label="Filter by Assignee" value={assigneeFilter} options={assigneeNames}
             open={assigneeOpen} onToggle={() => { setAssigneeOpen((v) => !v); setFirmOpen(false); }}
             onSelect={setAssigneeFilter}
           />
@@ -258,33 +360,48 @@ export default function TasksTable() {
             </tr>
           </thead>
           <tbody className="bg-white">
-            {filtered.flatMap((project) => {
-              const isExpanded = expandedIds.has(project.id);
-              const rows = [
-                <ProjectRow
-                  key={project.id}
-                  project={project}
-                  expanded={isExpanded}
-                  onToggle={() => toggle(project.id)}
-                />,
-              ];
-              if (isExpanded && project.children) {
-                project.children.forEach((child) =>
-                  rows.push(<ProjectRow key={child.id} project={child} depth={1} />)
-                );
-              }
-              return rows;
-            })}
+            {pageRows.map((row) => (
+              <ProjectRow key={row.id} row={row} />
+            ))}
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={6} className="py-8 text-center text-sm text-gray-400">
-                  No projects match the selected filters.
+                  No tasks match the selected filters.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-3 px-1">
+          <p className="text-[12px] text-gray-500">
+            {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}
+          </p>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="p-1 rounded text-gray-500 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              aria-label="Previous page"
+            >
+              <ChevronLeft width={16} height={16} />
+            </button>
+            <span className="text-[12px] text-gray-600 px-2">
+              {page} / {totalPages}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="p-1 rounded text-gray-500 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              aria-label="Next page"
+            >
+              <ChevronRight width={16} height={16} />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

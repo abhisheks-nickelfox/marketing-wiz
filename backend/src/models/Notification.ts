@@ -1,18 +1,23 @@
 import { DataTypes, Model, Optional } from 'sequelize';
 import sequelize from '../config/database';
+import User from './User';
 
 export interface NotificationAttributes {
   id: string;
   user_id: string;
   ticket_id: string | null;
-  title: string;
+  actor_id: string | null;
+  type: string;
+  title: string | null;
   message: string;
   read: boolean;
   created_at: string;
+  scope: string;
+  scope_id: string | null;
 }
 
 export interface NotificationCreationAttributes extends Optional<NotificationAttributes,
-  'id' | 'ticket_id' | 'title' | 'read' | 'created_at'
+  'id' | 'ticket_id' | 'actor_id' | 'type' | 'title' | 'read' | 'created_at' | 'scope' | 'scope_id'
 > {}
 
 class Notification extends Model<NotificationAttributes, NotificationCreationAttributes>
@@ -20,10 +25,14 @@ class Notification extends Model<NotificationAttributes, NotificationCreationAtt
   declare id: string;
   declare user_id: string;
   declare ticket_id: string | null;
-  declare title: string;
+  declare actor_id: string | null;
+  declare type: string;
+  declare title: string | null;
   declare message: string;
   declare read: boolean;
   declare created_at: string;
+  declare scope: string;
+  declare scope_id: string | null;
 }
 
 Notification.init(
@@ -33,9 +42,11 @@ Notification.init(
       primaryKey: true,
       defaultValue: DataTypes.UUIDV4,
     },
-    user_id: { type: DataTypes.UUID, allowNull: false },
+    user_id:   { type: DataTypes.UUID, allowNull: false },
     ticket_id: { type: DataTypes.UUID, allowNull: true },
-    title: { type: DataTypes.TEXT, allowNull: false, defaultValue: '' },
+    actor_id:  { type: DataTypes.UUID, allowNull: true },
+    type: { type: DataTypes.TEXT, allowNull: false, defaultValue: 'general' },
+    title: { type: DataTypes.TEXT, allowNull: true },
     message: { type: DataTypes.TEXT, allowNull: false },
     read: {
       type: DataTypes.BOOLEAN,
@@ -47,6 +58,8 @@ Notification.init(
       allowNull: false,
       defaultValue: DataTypes.NOW,
     },
+    scope:    { type: DataTypes.TEXT, allowNull: false, defaultValue: 'task' },
+    scope_id: { type: DataTypes.UUID, allowNull: true },
   },
   {
     sequelize,
@@ -54,5 +67,7 @@ Notification.init(
     timestamps: false,
   },
 );
+
+Notification.belongsTo(User, { foreignKey: 'actor_id', as: 'actor' });
 
 export default Notification;

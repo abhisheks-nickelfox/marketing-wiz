@@ -3,6 +3,7 @@
 export interface UpdateFirmDto {
   name?: string;
   location?: string;
+  address?: string;
   website?: string;
   logo_url?: string | null;
   description?: string;

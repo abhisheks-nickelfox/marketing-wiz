@@ -71,27 +71,33 @@ beforeEach(() => resetAllMocks());
 // ── findAllUsers ──────────────────────────────────────────────────────────────
 
 describe('findAllUsers', () => {
-  it('returns empty array when no users exist', async () => {
+  it('returns empty data array with zero total when no users exist', async () => {
+    MockUser.count.mockResolvedValueOnce(0);
     MockUser.findAll.mockResolvedValueOnce([]);
 
     const result = await usersService.findAllUsers();
 
-    expect(result).toEqual([]);
+    expect(result.data).toEqual([]);
+    expect(result.total).toBe(0);
+    expect(result.page).toBe(1);
+    expect(result.limit).toBe(50);
   });
 
-  it('returns users with skills attached', async () => {
+  it('returns users with skills attached in paginated shape', async () => {
+    MockUser.count.mockResolvedValueOnce(1);
     MockUser.findAll.mockResolvedValueOnce([MOCK_USER_ROW]);
     MockUserSkill.findAll.mockResolvedValueOnce([MOCK_SKILL_ROW]);
 
     const result = await usersService.findAllUsers();
 
-    expect(result).toHaveLength(1);
-    expect(result[0].skills).toHaveLength(1);
-    expect(result[0].skills[0].name).toBe('SEO');
+    expect(result.data).toHaveLength(1);
+    expect(result.total).toBe(1);
+    expect(result.data[0].skills).toHaveLength(1);
+    expect(result.data[0].skills[0].name).toBe('SEO');
   });
 
   it('throws when DB query fails', async () => {
-    MockUser.findAll.mockRejectedValueOnce(new Error('DB error'));
+    MockUser.count.mockRejectedValueOnce(new Error('DB error'));
 
     await expect(usersService.findAllUsers()).rejects.toThrow('DB error');
   });

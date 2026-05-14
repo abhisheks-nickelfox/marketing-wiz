@@ -8,6 +8,7 @@ export interface TicketAttributes {
   assignee_id: string | null;
   project_id: string | null;
   task_type_id: string | null;
+  parent_task_id: string | null;
   title: string;
   description: string;
   type: string;
@@ -28,8 +29,8 @@ export interface TicketAttributes {
 
 export interface TicketCreationAttributes extends Optional<TicketAttributes,
   'id' | 'session_id' | 'assignee_id' | 'project_id' | 'task_type_id' |
-  'description' | 'change_note' | 'estimated_hours' | 'ai_generated' |
-  'edited' | 'archived' | 'deadline' | 'regeneration_count' |
+  'parent_task_id' | 'description' | 'change_note' | 'estimated_hours' |
+  'ai_generated' | 'edited' | 'archived' | 'deadline' | 'regeneration_count' |
   'last_regenerated_at' | 'revision_count' | 'created_at' | 'updated_at'
 > {}
 
@@ -41,6 +42,7 @@ class Ticket extends Model<TicketAttributes, TicketCreationAttributes>
   declare assignee_id: string | null;
   declare project_id: string | null;
   declare task_type_id: string | null;
+  declare parent_task_id: string | null;
   declare title: string;
   declare description: string;
   declare type: string;
@@ -71,6 +73,7 @@ Ticket.init(
     assignee_id: { type: DataTypes.UUID, allowNull: true },
     project_id: { type: DataTypes.UUID, allowNull: true },
     task_type_id: { type: DataTypes.UUID, allowNull: true },
+    parent_task_id: { type: DataTypes.UUID, allowNull: true },
     title: { type: DataTypes.TEXT, allowNull: false },
     description: { type: DataTypes.TEXT, allowNull: false, defaultValue: '' },
     type: { type: DataTypes.TEXT, allowNull: false },

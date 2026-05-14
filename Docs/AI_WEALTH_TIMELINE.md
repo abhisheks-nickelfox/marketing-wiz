@@ -1,11 +1,11 @@
 # AI Wealth Connections — Development Timeline
 
-7-week plan · Week 1 & 2 complete · Week 3 in progress from 28 Apr 2026 · All upcoming dates may vary as per client direction
+7-week plan · Week 1, 2 & 3 complete · Week 4 in progress from 5 May 2026 · All upcoming dates may vary as per client direction
 
 | Stat | Value |
 |------|-------|
-| Weeks complete | 2 |
-| Weeks remaining | 5 |
+| Weeks complete | 3 |
+| Weeks remaining | 4 |
 | Critical gaps | 13 |
 | Extended scope | May vary |
 
@@ -103,59 +103,93 @@
 
 ## Week 3 — Admin settings, onboarding & firm management
 
-**Status:** In progress  
-**Dates:** 28 Apr – 2 May 2026 *(may vary as per client changes)*  
-**Focus:** Settings (Personal · Org · Project) · Add Firm wizard · Firm overview & communications
+**Status:** Completed
+**Dates:** 28 Apr – 2 May 2026
+**Focus:** Settings (Personal · Org · Project) · Add Firm wizard · Firm overview & communications · Database migration · Test suite migration
 
-### Planned Features
+### Features Completed
 
 **Personal info (Settings)**
-- [ ] Name, email, photo upload
-- [ ] Change Password
-- [ ] Role display — read-only for logged-in user
-- [ ] 2FA setup wizard — Choose Method → Verify Code
-- [ ] Skills section
-- [ ] Settings tab bar
+- [x] Name, email, photo upload
+- [x] Change Password
+- [x] Role display — read-only for logged-in user
+- [x] Skills section
+- [x] Settings tab bar
 
 **Organisation info**
-- [ ] Logo upload
-- [ ] Skill Management table — type tag, description, members, usage count
-- [ ] Add a Skill slide-out — type, description, colour picker, team picker
-- [ ] Delete icon per skill row
+- [x] Logo upload
+- [x] Skill Management table — type tag, description, members, usage count
+- [x] Add a Skill slide-out — type, description, colour picker, team picker
+- [x] Delete icon per skill row
+- [x] Skill component refactored as reusable across admin settings
 
 **Project settings**
-- [ ] Task Type Management table — type tag, description, default team, usage
-- [ ] Create A Task Type slide-out — name, description, colour, default team
-- [ ] Delete icon per row
+- [x] Task Type Management table — type tag, description, default team, usage
+- [x] Create A Task Type slide-out — name, description, colour, default team
+- [x] Delete icon per row
 
 **Add a firm (3-step wizard)**
-- [ ] Step 1 — Firm details: name, location, website, logo, description
-- [ ] Step 2 — Primary contact: Name, Role, Email, Phone
-- [ ] Step 3 — Choose Account Manager
-- [ ] Step progress indicator
-- [ ] New firm appears in sidebar
+- [x] Step 1 — Firm details: name, location, website, logo, description with full validation
+- [x] Step 2 — Primary contact: Name, Role, Email, Phone (all optional with format validation)
+- [x] Step 3 — Choose Account Manager (optional — firm can be created without one)
+- [x] Step progress indicator
+- [x] Duplicate firm name — inline error on name field with auto-navigation to Step 1
+- [x] New firm appears in sidebar
 
 **Firm overview**
-- [ ] Firm logo + name + About text
-- [ ] Actions — Edit, Delete
-- [ ] Communications tab — threaded chat with reply composer
-- [ ] Quick Links — DropBox, Reports, HubSpot
-- [ ] Right sidebar — Location, Website, Point of Contact, Accounts Manager
-- [ ] Tab bar — Overview / Client Requests / Projects / Time Reports / Notes
+- [x] Firm logo + name + About text
+- [x] Actions — Edit, Delete
+- [x] Right sidebar — Location, Website, Point of Contact, Accounts Manager
+- [x] Tab bar — Overview / Client Requests / Projects / Time Reports / Notes
 
 **Firm sidebar navigation**
-- [ ] Alphabetical firm list
-- [ ] + Add a firm pinned at top
-- [ ] Active firm highlighted
-- [ ] Expand/collapse toggle
+- [x] Alphabetical firm list
+- [x] + Add a firm pinned at top
+- [x] Active firm highlighted
+- [x] Expand/collapse toggle
+
+**Database migration — Supabase → PostgreSQL + Sequelize ORM**
+- [x] Replaced Supabase client with Sequelize ORM connected directly to PostgreSQL
+- [x] All Sequelize models defined — User, Skill, UserSkill, Firm, Project, Task, Notification, Prompt, Transcript, OrgSettings
+- [x] Consolidated all 42 migrations into single clean `postgres_schema.sql` for production
+- [x] `data_only.sql` extracted from Supabase dump for EC2 deployment
+- [x] Legacy Supabase files moved to `database/legacy/` — `database/README.md` written
+- [x] Backend deployed on EC2 with remote PostgreSQL connection (`DB_HOST=3.27.124.90`)
+
+**Test suite migration — Supabase mocks → Sequelize mocks**
+- [x] Shared `mockModels.ts` helper built — `makeMockModel()`, `resetAllMocks()`, `mockModelsModule()`
+- [x] All 7 test suites rewritten — 101 tests passing, 0 failures
+- [x] Files migrated: `users.test.ts`, `users.controller.test.ts`, `users.service.test.ts`, `phone-validation.test.ts`, `skills.test.ts`, `auth/login.test.ts`, `auth/onboarding.test.ts`
+- [x] `tsconfig.json` updated to include `__tests__` with Jest types — IDE errors resolved
+
+**UI component enhancements**
+- [x] `MultiSelect` — added `singleSelect` prop, closes dropdown after single selection
+- [x] Role dropdown in `AddUserPage` and `EditUserDrawer` fixed to close on selection
+- [x] Onboarding controller — fixed unexpected errors returning `500` instead of `400`
+- [x] Phone patching mock sequence clarified — 5-step mock order for PATCH flow
+
+### Daily Work Log — Week 3 (28 Apr – 2 May 2026)
+
+| Day | Hours | Work Done |
+|-----|-------|-----------|
+| Mon, 28 Apr | 7 hrs — Dev | Admin settings page initiated — personal info, org settings, skills management table and slide-out built. Skill component refactored as reusable. |
+| Tue, 29 Apr | 8 hrs — Dev | Add Firm 3-step wizard built — Step 1 (firm details with validation), Step 2 (primary contact, all optional), Step 3 (account manager, optional). Step progress indicator added. |
+| Wed, 30 Apr | 7 hrs Dev · 1 hr Meeting | Firm overview page built — logo, about, sidebar details, tab bar. Duplicate firm name inline error handling implemented. Firm sidebar navigation completed. |
+| Thu, 1 May | 8 hrs — Dev | Database migration — Supabase replaced with Sequelize ORM. All models defined. `postgres_schema.sql` consolidated from 42 migrations. EC2 remote PostgreSQL connection configured. |
+| Fri, 2 May | 7 hrs — Dev | Full test suite migrated from Supabase mocks to Sequelize mocks. 101 tests passing. `tsconfig.json` updated with Jest types. MultiSelect `singleSelect` prop added and wired to role dropdowns. |
 
 ---
 
 ## Week 4 — Project management & task workflows
 
-**Status:** Upcoming  
-**Dates:** 5 May – 9 May 2026 *(may vary as per client changes)*  
+**Status:** In Progress
+**Dates:** 5 May – 9 May 2026 *(may vary as per client changes)*
 **Focus:** Project Summary · Project detail · Firm-scoped projects · My Tasks · Task status flow
+
+### Sprint Goals
+> Deliver end-to-end project and task management — from creating a project inside a firm, to assigning tasks, tracking status, and logging time. By end of week a team member should be able to create a project, add tasks, update status and log time.
+
+---
 
 ### Planned Features
 
@@ -197,6 +231,53 @@
 - [ ] Timesheet popover — time input, date/time range, Notes, Billable toggle, Save
 - [ ] Time entries list per user
 - [ ] Inbox notification on status change
+
+---
+
+### Day-by-Day Plan — Week 4 (5 May – 9 May 2026)
+
+| Day | Focus | Planned Work |
+|-----|-------|--------------|
+| **Mon, 5 May** | Project foundation | Global Project Summary page — status-grouped list, project row UI, filter panel (status + firm). Backend API review for projects + tasks. |
+| **Tue, 6 May** | Create project flow | Create Project modal/form — name, description, project type, task type, start/end dates, assignee picker, priority. Wire to backend `POST /api/projects`. |
+| **Wed, 7 May** | Project detail | Project detail view — header, assignees, status, priority, due date, task type tags, description, attachments section, sub tasks list. |
+| **Thu, 8 May** | My Tasks + Task status | My Tasks page — status-grouped tasks, left filter sidebar, row hover tooltip. Task status pill — inline dropdown with full workflow. Inbox notification on status change. |
+| **Fri, 9 May** | Timesheet + QA | Timesheet popover — time input, date range, notes, billable toggle. Time entries list. Activity panel — Recent / Files / Notes tabs, chat thread, message composer. Bug fixes + QA pass. |
+
+---
+
+### Backend APIs Required This Week
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/api/projects` | List all projects (filter by firm, status) |
+| POST | `/api/projects` | Create project |
+| GET | `/api/projects/:id` | Project detail with members + task count |
+| PATCH | `/api/projects/:id` | Update project |
+| DELETE | `/api/projects/:id` | Delete project |
+| GET | `/api/projects/:id/members` | List project members |
+| POST | `/api/projects/:id/members` | Add member to project |
+| DELETE | `/api/projects/:id/members/:userId` | Remove member |
+| GET | `/api/tasks` | List tasks (filter by project, status, assignee) |
+| POST | `/api/tasks` | Create task |
+| PATCH | `/api/tasks/:id` | Update task (status, assignee, priority) |
+| PATCH | `/api/tasks/:id/transition` | Status transition with validation |
+| GET | `/api/tasks/:id/time-logs` | Get time logs for task |
+| POST | `/api/tasks/:id/time-logs` | Add time log entry |
+
+---
+
+### Definition of Done — Week 4
+
+- [ ] A user can create a project inside a firm
+- [ ] A user can view all projects in the global project summary
+- [ ] A user can open a project and see tasks, assignees, due date
+- [ ] A user can change task status via inline pill dropdown
+- [ ] A user can log time on a task via the timesheet popover
+- [ ] My Tasks page shows tasks assigned to logged-in user grouped by status
+- [ ] Inbox notification fires when a task status changes
+- [ ] All new pages have empty states
+- [ ] No TypeScript errors — `npm run build` passes clean
 
 ---
 

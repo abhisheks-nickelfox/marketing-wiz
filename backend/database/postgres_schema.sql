@@ -1,8 +1,22 @@
 -- ============================================================
--- MarketingWiz — Clean PostgreSQL Schema
--- Represents the final state after all 42 migrations.
--- No Supabase-specific code (no auth.uid, no RLS, no auth.users FK).
--- Run this on a fresh database, then run postgres_seed.sql for defaults.
+-- MarketingWiz — PostgreSQL Schema
+-- Represents the final state after all migrations.
+--
+-- SETUP INSTRUCTIONS (run in this exact order):
+--
+-- Step 1 — Apply schema (creates all 21 tables):
+--   PGPASSWORD='...' psql -h HOST -p 5432 -U USER -d DB -f postgres_schema.sql
+--
+-- Step 2 — Load real data (Supabase export):
+--   (echo "SET session_replication_role = replica;"; cat data_only.sql; echo "SET session_replication_role = DEFAULT;") \
+--   | PGPASSWORD='...' psql -h HOST -p 5432 -U USER -d DB
+--
+-- Step 3 — Verify:
+--   PGPASSWORD='...' psql -h HOST -p 5432 -U USER -d DB \
+--   -c "SELECT 'users', COUNT(*) FROM users UNION ALL SELECT 'firms', COUNT(*) FROM firms UNION ALL SELECT 'tickets', COUNT(*) FROM tickets;"
+--
+-- NOTE: data_only.sql is the Supabase export — do NOT run full_dump.sql or seed.sql (deleted).
+-- NOTE: The backend applyMissingSchema() handles any missing columns automatically on startup.
 -- ============================================================
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -53,6 +67,7 @@ CREATE TABLE IF NOT EXISTS public.firms (
   contact_phone      TEXT,
   location           TEXT,
   website_url        TEXT,
+  website            TEXT,
   logo_url           TEXT,
   account_manager_id UUID        REFERENCES public.users(id) ON DELETE SET NULL,
   default_prompt_id  UUID,
@@ -68,7 +83,8 @@ CREATE TABLE IF NOT EXISTS public.prompts (
   system_prompt TEXT,
   is_active     BOOLEAN     DEFAULT true,
   firm_id       UUID        REFERENCES public.firms(id) ON DELETE SET NULL,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- FK: firms.default_prompt_id → prompts
@@ -141,6 +157,7 @@ CREATE TABLE IF NOT EXISTS public.tickets (
   regeneration_count  INTEGER     NOT NULL DEFAULT 0,
   last_regenerated_at TIMESTAMPTZ,
   revision_count      INTEGER     NOT NULL DEFAULT 0,
+  parent_task_id      UUID        REFERENCES public.tickets(id) ON DELETE CASCADE,
   created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT tickets_session_ai_check CHECK (
@@ -169,7 +186,8 @@ CREATE TABLE IF NOT EXISTS public.notifications (
   id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id    UUID        NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   ticket_id  UUID        REFERENCES public.tickets(id) ON DELETE CASCADE,
-  type       TEXT        NOT NULL,
+  type       TEXT        NOT NULL DEFAULT 'general',
+  title      TEXT,
   message    TEXT        NOT NULL,
   read       BOOLEAN     NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -211,6 +229,7 @@ CREATE TABLE IF NOT EXISTS public.projects (
   end_date        DATE,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  share_token     TEXT        UNIQUE,
   UNIQUE (firm_id, name),
   CONSTRAINT projects_dates_ordered CHECK (
     start_date IS NULL OR end_date IS NULL OR end_date >= start_date
@@ -230,6 +249,14 @@ CREATE TABLE IF NOT EXISTS public.project_members (
   PRIMARY KEY (project_id, user_id)
 );
 
+-- task_assignees (multi-assignee per ticket)
+CREATE TABLE IF NOT EXISTS public.task_assignees (
+  task_id  UUID NOT NULL REFERENCES public.tickets(id) ON DELETE CASCADE,
+  user_id  UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (task_id, user_id)
+);
+
 -- task_type_members
 CREATE TABLE IF NOT EXISTS public.task_type_members (
   task_type_id UUID NOT NULL REFERENCES public.task_types(id) ON DELETE CASCADE,
@@ -241,7 +268,7 @@ CREATE TABLE IF NOT EXISTS public.task_type_members (
 -- messages
 CREATE TABLE IF NOT EXISTS public.messages (
   id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  scope      TEXT        NOT NULL CHECK (scope IN ('firm', 'project')),
+  scope      TEXT        NOT NULL CHECK (scope IN ('firm', 'project', 'task')),
   scope_id   UUID        NOT NULL,
   user_id    UUID        NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   parent_id  UUID        REFERENCES public.messages(id) ON DELETE CASCADE,
@@ -278,6 +305,18 @@ CREATE TABLE IF NOT EXISTS public.project_attachments (
   file_size   INTEGER     NOT NULL CHECK (file_size > 0),
   file_type   TEXT,
   uploaded_by UUID        REFERENCES public.users(id) ON DELETE SET NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- task_attachments
+CREATE TABLE IF NOT EXISTS public.task_attachments (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  task_id     UUID        NOT NULL REFERENCES public.tickets(id) ON DELETE CASCADE,
+  uploaded_by UUID        NOT NULL REFERENCES public.users(id),
+  file_name   TEXT        NOT NULL,
+  file_size   INTEGER     NOT NULL,
+  mime_type   TEXT        NOT NULL,
+  storage_url TEXT        NOT NULL,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -323,6 +362,9 @@ CREATE INDEX IF NOT EXISTS idx_time_logs_user_id        ON public.time_logs(user
 CREATE INDEX IF NOT EXISTS idx_transcripts_archived     ON public.transcripts(archived);
 CREATE INDEX IF NOT EXISTS idx_notifications_user_id    ON public.notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_project_members_user_id  ON public.project_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_task_assignees_task_id   ON public.task_assignees(task_id);
+CREATE INDEX IF NOT EXISTS idx_task_assignees_user_id   ON public.task_assignees(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON public.notifications(user_id, read) WHERE read = false;
 CREATE INDEX IF NOT EXISTS idx_task_type_members_user   ON public.task_type_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_firms_account_manager    ON public.firms(account_manager_id) WHERE account_manager_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_projects_end_date        ON public.projects(end_date) WHERE end_date IS NOT NULL AND status = 'active';
@@ -333,7 +375,13 @@ CREATE INDEX IF NOT EXISTS idx_messages_user_id         ON public.messages(user_
 CREATE INDEX IF NOT EXISTS idx_message_reactions_msg    ON public.message_reactions(message_id);
 CREATE INDEX IF NOT EXISTS idx_message_attachments_msg  ON public.message_attachments(message_id);
 CREATE INDEX IF NOT EXISTS idx_project_attachments_proj ON public.project_attachments(project_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_active_timers_ticket_id  ON public.active_timers(ticket_id) WHERE ticket_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_active_timers_ticket_id          ON public.active_timers(ticket_id) WHERE ticket_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_project_members_project_id       ON public.project_members(project_id);
+CREATE INDEX IF NOT EXISTS idx_processing_sessions_prompt_id    ON public.processing_sessions(prompt_id);
+CREATE INDEX IF NOT EXISTS idx_processing_sessions_created_by   ON public.processing_sessions(created_by);
+CREATE INDEX IF NOT EXISTS idx_user_skills_skill_id             ON public.user_skills(skill_id);
+CREATE INDEX IF NOT EXISTS idx_tickets_parent_task_id           ON public.tickets(parent_task_id) WHERE parent_task_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_task_attachments_task_id         ON public.task_attachments(task_id);
 
 -- ============================================================
 -- VIEWS
@@ -385,14 +433,22 @@ GROUP BY u.id, u.name, u.email, tl_agg.total_hours;
 
 CREATE OR REPLACE VIEW public.v_firm_ticket_stats AS
 SELECT
-  f.id AS firm_id, f.name,
-  COUNT(t.id)                                          AS total_tickets,
-  COUNT(t.id) FILTER (WHERE t.status = 'to_do')        AS draft_count,
-  COUNT(t.id) FILTER (WHERE t.status = 'completed')    AS approved_count,
-  MAX(t.created_at)                                    AS last_ticket_at
+  f.id                                                                    AS firm_id,
+  f.name                                                                  AS firm_name,
+  f.contact_name,
+  f.contact_email,
+  f.created_at                                                            AS firm_created_at,
+  COUNT(DISTINCT t.id)                                                    AS total_tickets,
+  COUNT(DISTINCT t.id) FILTER (WHERE t.status = 'to_do')                 AS draft_count,
+  COUNT(DISTINCT t.id) FILTER (WHERE t.status = 'completed')             AS approved_count,
+  COUNT(DISTINCT t.id) FILTER (WHERE t.status = 'in_progress')           AS in_progress_count,
+  COUNT(DISTINCT t.id) FILTER (WHERE t.status = 'assigned')              AS assigned_count,
+  COALESCE(SUM(tl.hours), 0)                                             AS total_hours_spent,
+  MAX(t.created_at)                                                       AS last_ticket_at
 FROM public.firms f
-LEFT JOIN public.tickets t ON t.firm_id = f.id AND t.archived = FALSE
-GROUP BY f.id, f.name;
+LEFT JOIN public.tickets    t   ON t.firm_id    = f.id
+LEFT JOIN public.time_logs  tl  ON tl.ticket_id = t.id
+GROUP BY f.id, f.name, f.contact_name, f.contact_email, f.created_at;
 
 -- ============================================================
 -- SEED DATA

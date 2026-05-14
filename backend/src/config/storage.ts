@@ -1,31 +1,35 @@
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import logger from './logger';
 
-const {
-  AWS_REGION = 'us-east-1',
-  AWS_ACCESS_KEY_ID,
-  AWS_SECRET_ACCESS_KEY,
-  AWS_S3_BUCKET,
-} = process.env;
+function env() {
+  return {
+    region:    process.env.AWS_REGION ?? 'us-east-1',
+    accessKey: process.env.AWS_ACCESS_KEY_ID,
+    secretKey: process.env.AWS_SECRET_ACCESS_KEY,
+    bucket:    process.env.AWS_S3_BUCKET,
+  };
+}
 
 /**
  * Returns true when S3 credentials and bucket name are configured.
- * When false, avatar upload falls back to storing the base64 data URL directly.
+ * When false, upload falls back to storing the base64 data URL directly.
  */
 export function isS3Configured(): boolean {
-  return Boolean(AWS_ACCESS_KEY_ID && AWS_SECRET_ACCESS_KEY && AWS_S3_BUCKET);
+  const { accessKey, secretKey, bucket } = env();
+  return Boolean(accessKey && secretKey && bucket);
 }
 
 let _s3Client: S3Client | null = null;
 
 function getS3Client(): S3Client {
+  const { region, accessKey, secretKey } = env();
   if (!_s3Client) {
     _s3Client = new S3Client({
-      region: AWS_REGION,
+      region,
       credentials:
-        AWS_ACCESS_KEY_ID && AWS_SECRET_ACCESS_KEY
-          ? { accessKeyId: AWS_ACCESS_KEY_ID, secretAccessKey: AWS_SECRET_ACCESS_KEY }
-          : undefined, // falls back to instance-profile / env-chain in production
+        accessKey && secretKey
+          ? { accessKeyId: accessKey, secretAccessKey: secretKey }
+          : undefined,
     });
   }
   return _s3Client;
@@ -44,21 +48,19 @@ export interface UploadAvatarOptions {
  * Returns the public URL.  Throws on failure.
  */
 export async function uploadToS3(opts: UploadAvatarOptions): Promise<string> {
-  if (!AWS_S3_BUCKET) throw new Error('AWS_S3_BUCKET is not configured');
+  const { bucket, region } = env();
+  if (!bucket) throw new Error('AWS_S3_BUCKET is not configured');
 
   const command = new PutObjectCommand({
-    Bucket: AWS_S3_BUCKET,
+    Bucket: bucket,
     Key: opts.key,
     Body: opts.body,
     ContentType: opts.contentType,
-    // ACL: 'public-read' — remove if bucket policy handles public access
   });
 
   await getS3Client().send(command);
 
-  // Standard S3 URL format — works for public buckets.
-  // For private buckets you would generate a pre-signed URL here instead.
-  return `https://${AWS_S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${opts.key}`;
+  return `https://${bucket}.s3.${region}.amazonaws.com/${opts.key}`;
 }
 
 /**
@@ -80,4 +82,45 @@ export async function uploadBase64Image(
   const buffer = Buffer.from(base64, 'base64');
 
   return uploadToS3({ key, body: buffer, contentType: mimeType });
+}
+
+/**
+ * Uploads a raw buffer to S3 using the given key and content type.
+ * Falls back to returning a data:<contentType>;base64,<base64> URL when S3 is
+ * not configured (local dev).
+ *
+ * @param key         S3 object key, e.g. "attachments/<taskId>/<uuid>_filename.pdf"
+ * @param buffer      Raw file bytes
+ * @param contentType MIME type, e.g. "application/pdf"
+ */
+export async function uploadFileBuffer(
+  key: string,
+  buffer: Buffer,
+  contentType: string,
+): Promise<string> {
+  if (!isS3Configured()) {
+    logger.warn('[storage] S3 not configured — storing buffer as data URL (local dev fallback)');
+    return `data:${contentType};base64,${buffer.toString('base64')}`;
+  }
+
+  return uploadToS3({ key, body: buffer, contentType });
+}
+
+/**
+ * Deletes an object from S3 by key.
+ * No-op (and logs a warning) when S3 is not configured.
+ */
+export async function deleteFromS3(key: string): Promise<void> {
+  const { bucket } = env();
+  if (!isS3Configured() || !bucket) {
+    logger.warn('[storage] S3 not configured — skipping delete for key:', key);
+    return;
+  }
+
+  const command = new DeleteObjectCommand({
+    Bucket: bucket,
+    Key: key,
+  });
+
+  await getS3Client().send(command);
 }

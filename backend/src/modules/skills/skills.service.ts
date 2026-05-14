@@ -1,5 +1,6 @@
-import { Op } from 'sequelize';
+import { Op, QueryTypes } from 'sequelize';
 import { Skill, UserSkill, User } from '../../models';
+import sequelize from '../../config/database';
 import type { CreateSkillDto } from './dto/create-skill.dto';
 
 export interface SkillMember {
@@ -15,6 +16,7 @@ export interface SkillWithMembers {
   description: string | null;
   color: string | null;
   created_at: string;
+  task_count: number;
   members: SkillMember[];
 }
 
@@ -45,6 +47,25 @@ async function attachMembers(skillIds: string[]): Promise<Record<string, SkillMe
   return map;
 }
 
+// ─── Count tasks per skill (via assignee's skill set) ────────────────────────
+
+async function attachTaskCounts(skillIds: string[]): Promise<Record<string, number>> {
+  if (skillIds.length === 0) return {};
+
+  const rows = await sequelize.query<{ skill_id: string; task_count: number }>(
+    `SELECT us.skill_id, COUNT(DISTINCT t.id)::int AS task_count
+     FROM user_skills us
+     JOIN tickets t ON t.assignee_id = us.user_id
+     WHERE us.skill_id IN (:skillIds)
+     GROUP BY us.skill_id`,
+    { replacements: { skillIds }, type: QueryTypes.SELECT },
+  );
+
+  const map: Record<string, number> = {};
+  for (const row of rows) map[row.skill_id] = row.task_count;
+  return map;
+}
+
 // ─── List all skills ──────────────────────────────────────────────────────────
 
 export async function findAllSkills(): Promise<SkillWithMembers[]> {
@@ -56,10 +77,17 @@ export async function findAllSkills(): Promise<SkillWithMembers[]> {
     raw: true,
   });
 
-  const skills = rows as unknown as Omit<SkillWithMembers, 'members'>[];
-  const membersMap = await attachMembers(skills.map((s) => s.id));
+  const skills = rows as unknown as Omit<SkillWithMembers, 'members' | 'task_count'>[];
+  const [membersMap, taskCountMap] = await Promise.all([
+    attachMembers(skills.map((s) => s.id)),
+    attachTaskCounts(skills.map((s) => s.id)),
+  ]);
 
-  return skills.map((s) => ({ ...s, members: membersMap[s.id] ?? [] }));
+  return skills.map((s) => ({
+    ...s,
+    members: membersMap[s.id] ?? [],
+    task_count: taskCountMap[s.id] ?? 0,
+  }));
 }
 
 // ─── Create a skill ───────────────────────────────────────────────────────────
@@ -73,7 +101,7 @@ export async function createSkill(dto: CreateSkillDto): Promise<SkillWithMembers
       color: dto.color || null,
     });
 
-    return { ...(row.toJSON() as Omit<SkillWithMembers, 'members'>), members: [] };
+    return { ...(row.toJSON() as Omit<SkillWithMembers, 'members' | 'task_count'>), members: [], task_count: 0 };
   } catch (err: unknown) {
     const e = err as { name?: string; parent?: { code?: string } };
     if (e.parent?.code === '23505' || e.name === 'SequelizeUniqueConstraintError') {
@@ -114,8 +142,8 @@ export async function updateSkill(id: string, dto: Partial<CreateSkillDto>): Pro
   const row = await Skill.findByPk(id, { raw: true });
   if (!row) throw Object.assign(new Error('Skill not found'), { statusCode: 404 });
 
-  const membersMap = await attachMembers([id]);
-  return { ...(row as unknown as Omit<SkillWithMembers, 'members'>), members: membersMap[id] ?? [] };
+  const [membersMap, taskCountMap] = await Promise.all([attachMembers([id]), attachTaskCounts([id])]);
+  return { ...(row as unknown as Omit<SkillWithMembers, 'members' | 'task_count'>), members: membersMap[id] ?? [], task_count: taskCountMap[id] ?? 0 };
 }
 
 // ─── Set members for a skill ──────────────────────────────────────────────────

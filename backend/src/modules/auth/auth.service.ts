@@ -1,3 +1,4 @@
+import bcrypt from 'bcrypt';
 import logger from '../../config/logger';
 import { generateToken } from '../../config/auth';
 import { User } from '../../models';
@@ -11,10 +12,11 @@ export interface LoginResult {
 
 // ── Service methods ──────────────────────────────────────────────────────────
 
-export async function loginUser(email: string, _password: string): Promise<LoginResult> {
-  // Find user by email (case-insensitive via iLike)
+export async function loginUser(email: string, password: string): Promise<LoginResult> {
+  // Fetch user including password_hash for verification
   const user = await User.findOne({
     where: { email: email.toLowerCase().trim() },
+    attributes: { include: ['password_hash'] },
     raw: true,
   });
 
@@ -27,6 +29,7 @@ export async function loginUser(email: string, _password: string): Promise<Login
     email: string;
     role: string;
     status: string;
+    password_hash: string | null;
   };
 
   if (userRow.status === 'Disabled') {
@@ -37,9 +40,20 @@ export async function loginUser(email: string, _password: string): Promise<Login
     throw Object.assign(new Error('Account setup not completed. Please complete onboarding.'), { statusCode: 401 });
   }
 
-  const token = generateToken(userRow.id, userRow.email, userRow.role);
+  if (!userRow.password_hash) {
+    throw Object.assign(new Error('Invalid email or password'), { statusCode: 401 });
+  }
 
-  return { user: userRow, token };
+  const passwordMatch = await bcrypt.compare(password, userRow.password_hash);
+  if (!passwordMatch) {
+    throw Object.assign(new Error('Invalid email or password'), { statusCode: 401 });
+  }
+
+  // Strip password_hash before returning
+  const { password_hash: _pw, ...safeUser } = userRow;
+  const token = generateToken(safeUser.id, safeUser.email, safeUser.role);
+
+  return { user: safeUser, token };
 }
 
 export async function updateUserProfile(userId: string, name: string): Promise<unknown> {

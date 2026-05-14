@@ -2,6 +2,7 @@
 export interface CreateFirmDto {
   name: string;
   location?: string;
+  address?: string;
   website?: string;
   logo_url?: string | null;
   description?: string;

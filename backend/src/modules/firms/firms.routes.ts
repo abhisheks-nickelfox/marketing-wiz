@@ -21,6 +21,9 @@ router.get('/:id', requirePermission('manage_firms'), firmsController.getFirm);
 // PATCH /api/firms/:id — requires manage_firms permission
 router.patch('/:id', requirePermission('manage_firms'), updateFirmValidation, firmsController.updateFirm);
 
+// POST /api/firms/:id/logo — upload firm logo to S3
+router.post('/:id/logo', requirePermission('manage_firms'), firmsController.uploadFirmLogo);
+
 // DELETE /api/firms/:id — admin only
 router.delete('/:id', requireAdmin, firmsController.deleteFirm);
 

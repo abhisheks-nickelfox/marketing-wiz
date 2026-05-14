@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { useDebounce } from '../hooks/useDebounce';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Trash01,
@@ -18,7 +19,9 @@ import Avatar from '../components/ui/Avatar';
 import Pagination from '../components/ui/Pagination';
 import Checkbox from '../components/ui/Checkbox';
 import { useUsers, useDeleteUser, useResendInvite, useUpdateUser } from '../hooks/useUsers';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { useClickOutside } from '../hooks/useClickOutside';
+import { useToast } from '../hooks/useToast';
 import type { UserStatus } from '../types';
 import { EXTRA_PERMISSIONS } from '../lib/constants';
 
@@ -73,10 +76,12 @@ function StatusMenu({
   userId,
   status,
   onUpdated,
+  onError,
 }: {
   userId: string;
   status: UserStatus;
   onUpdated: (message: string) => void;
+  onError: (message: string) => void;
 }) {
   const updateUser = useUpdateUser();
   const [open, setOpen] = useState(false);
@@ -101,7 +106,7 @@ function StatusMenu({
       setOpen(false);
       onUpdated(`User status changed to ${nextStatus}`);
     } catch (err) {
-      alert((err as Error).message);
+      onError((err as Error).message || 'Failed to update status');
     }
   }
 
@@ -155,20 +160,26 @@ export default function UsersPage() {
   const [selected,     setSelected]    = useState<Set<string>>(new Set());
   const [currentPage,  setCurrentPage] = useState(1);
   const [search,       setSearch]      = useState('');
+  const { toast, notify, dismiss } = useToast();
   const [toastMessage, setToastMessage] = useState<string | null>(
     (location.state as { toastMessage?: string } | null)?.toastMessage ?? null
   );
   const [userPendingDelete, setUserPendingDelete] = useState<{ id: string; name: string } | null>(null);
   const [permissionsOpenFor, setPermissionsOpenFor] = useState<string | null>(null);
 
+  const debouncedSearch = useDebounce(search);
+
   // ── Search filter ─────────────────────────────────────────────────────────────
-  const needle = search.trim().toLowerCase();
+  const needle = debouncedSearch.trim().toLowerCase();
   const filteredUsers = needle
-    ? users.filter(
-        (u) =>
+    ? users.filter((u) => {
+        const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ').toLowerCase();
+        return (
+          fullName.includes(needle) ||
           u.name.toLowerCase().includes(needle) ||
-          u.email.toLowerCase().includes(needle),
-      )
+          u.email.toLowerCase().includes(needle)
+        );
+      })
     : users;
 
   function handleSearch(value: string) {
@@ -208,9 +219,9 @@ export default function UsersPage() {
   async function handleResendInvite(id: string) {
     try {
       await resendInvite.mutateAsync(id);
-      setToastMessage('Invite resent successfully');
+      notify('Invite resent successfully');
     } catch (err) {
-      alert((err as Error).message);
+      notify((err as Error).message || 'Failed to resend invite', 'error');
     }
   }
 
@@ -230,8 +241,10 @@ export default function UsersPage() {
         return n;
       });
       setUserPendingDelete(null);
+      notify('Team member deleted');
     } catch (err) {
-      alert((err as Error).message);
+      setUserPendingDelete(null);
+      notify((err as Error).message || 'Failed to delete user', 'error');
     }
   }
 
@@ -284,7 +297,7 @@ export default function UsersPage() {
 
         {/* Loading / error / table */}
         {loading ? (
-          <div className="px-6 py-12 text-center text-sm text-[#717680]">Loading…</div>
+          <LoadingSpinner />
         ) : fetchError ? (
           <AccessDenied message={fetchError} />
         ) : (
@@ -317,17 +330,16 @@ export default function UsersPage() {
                 {pageMembers.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-6 py-12 text-center text-sm text-[#717680]">
-                      {needle ? `No members match "${search}".` : 'No team members yet.'}
+                      {needle ? `No members match "${debouncedSearch}".` : 'No team members yet.'}
                     </td>
                   </tr>
                 ) : (
                   pageMembers.map((user, idx) => {
                     const isEven    = idx % 2 === 0;
                     const isChecked = selected.has(user.id);
-                    // For invited users the name is the email until onboarding is done
-                    const displayName = (user.name && user.name !== user.email)
-                      ? user.name
-                      : user.email;
+                    // Prefer first+last name if set, fall back to name, then email
+                    const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ');
+                    const displayName = fullName || (user.name && user.name !== user.email ? user.name : user.email);
                     const displayRole = user.role.replace(/_/g, ' ');
                     const SKILL_PREVIEW = 3;
                     const visibleSkills = user.skills.slice(0, SKILL_PREVIEW);
@@ -341,21 +353,24 @@ export default function UsersPage() {
                         key={user.id}
                         className={`border-b border-[#E9EAEB] ${isEven ? 'bg-[#FDFDFD]' : 'bg-white'}`}
                       >
-                        {/* Name */}
+                        {/* Name — clicking opens the edit/settings page */}
                         <td className="px-6 py-4 h-[72px]">
                           <div className="flex items-center gap-3">
                             <Checkbox checked={isChecked} onChange={() => toggleOne(user.id)} />
-                            <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => navigate(`/users/${user.id}/settings`)}
+                              className="flex items-center gap-3 text-left hover:opacity-80 transition-opacity"
+                            >
                               <Avatar src={user.avatar_url ?? undefined} name={displayName} />
                               <div>
-                                <p className="text-sm font-medium text-[#181D27] whitespace-nowrap">
+                                <p className="text-sm font-medium text-[#181D27] whitespace-nowrap hover:text-[#7F56D9] transition-colors">
                                   {displayName}
                                 </p>
                                 <p className="text-sm text-[#535862] whitespace-nowrap">
                                   {rateDisplay}
                                 </p>
                               </div>
-                            </div>
+                            </button>
                           </div>
                         </td>
 
@@ -364,7 +379,8 @@ export default function UsersPage() {
                           <StatusMenu
                             userId={user.id}
                             status={user.status}
-                            onUpdated={setToastMessage}
+                            onUpdated={(msg) => notify(msg)}
+                            onError={(msg) => notify(msg, 'error')}
                           />
                         </td>
 
@@ -476,8 +492,13 @@ export default function UsersPage() {
         )}
       </div>
 
-      {/* Success toast */}
-      {toastMessage && (
+      {/* Action toast */}
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={dismiss} />
+      )}
+
+      {/* Navigation toast (from AddUserPage redirect) */}
+      {toastMessage && !toast && (
         <Toast
           message={toastMessage}
           subtitle="The team member has been notified by email."

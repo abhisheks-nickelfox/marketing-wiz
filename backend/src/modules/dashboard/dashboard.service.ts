@@ -74,32 +74,23 @@ export async function getAdminDashboard(): Promise<AdminDashboardData> {
     }),
   ]);
 
-  // Team workload: count of in_progress tasks per assignee
-  const inProgressRows = await Ticket.findAll({
-    where: { status: 'in_progress', assignee_id: { [Op.ne]: null } },
-    attributes: ['assignee_id'],
-    raw: true,
-  });
-
-  // Fetch assignee details
-  const assigneeIds = [...new Set(
-    (inProgressRows as unknown as { assignee_id: string }[]).map((r) => r.assignee_id),
-  )];
-
-  const assigneeMap: Record<string, { name: string; email: string; count: number }> = {};
-  if (assigneeIds.length > 0) {
-    const users = await User.findAll({
-      where: { id: { [Op.in]: assigneeIds } },
-      attributes: ['id', 'name', 'email'],
-      raw: true,
-    });
-    for (const u of users as unknown as { id: string; name: string; email: string }[]) {
-      assigneeMap[u.id] = { name: u.name, email: u.email, count: 0 };
-    }
-    for (const r of inProgressRows as unknown as { assignee_id: string }[]) {
-      if (assigneeMap[r.assignee_id]) assigneeMap[r.assignee_id].count++;
-    }
-  }
+  // Team workload: DB-side GROUP BY aggregation instead of fetching all rows
+  // and counting in application memory. Joins users table in the same query
+  // to avoid a second round-trip for assignee details.
+  const workloadAgg = await sequelize.query<{
+    assignee_id: string;
+    name:        string;
+    email:       string;
+    count:       string; // Sequelize returns COUNT as string
+  }>(
+    `SELECT t.assignee_id, u.name, u.email, COUNT(*) AS count
+       FROM tickets t
+       JOIN users   u ON u.id = t.assignee_id
+      WHERE t.status = 'in_progress'
+        AND t.assignee_id IS NOT NULL
+      GROUP BY t.assignee_id, u.name, u.email`,
+    { type: QueryTypes.SELECT },
+  );
 
   return {
     total_firms:        totalFirms,
@@ -108,7 +99,12 @@ export async function getAdminDashboard(): Promise<AdminDashboardData> {
     assigned_tickets:   assignedTickets,
     team_members:       teamMembers,
     recent_transcripts: recentTranscripts,
-    team_workload:      Object.entries(assigneeMap).map(([id, v]) => ({ id, ...v })),
+    team_workload:      workloadAgg.map((r) => ({
+      id:    r.assignee_id,
+      name:  r.name,
+      email: r.email,
+      count: Number(r.count),
+    })),
   };
 }
 

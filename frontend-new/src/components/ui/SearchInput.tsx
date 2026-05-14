@@ -21,11 +21,8 @@ export default function SearchInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="flex-1 text-sm text-[#181D27] placeholder-[#A4A7AE] bg-transparent outline-none"
+        className="flex-1 min-w-0 text-sm text-[#181D27] placeholder-[#A4A7AE] bg-transparent outline-none"
       />
-      <kbd className="border border-[#E9EAEB] rounded px-1.5 py-0.5 text-[11px] text-[#A4A7AE] font-medium leading-none shrink-0">
-        ⌘K
-      </kbd>
     </div>
   );
 }

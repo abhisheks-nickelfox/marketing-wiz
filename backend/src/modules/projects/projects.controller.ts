@@ -1,5 +1,5 @@
 import logger from '../../config/logger';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { validationResult } from 'express-validator';
 import { AuthenticatedRequest } from '../../types';
 import * as projectsService from './projects.service';
@@ -83,6 +83,7 @@ export async function createProject(req: AuthenticatedRequest, res: Response): P
   } catch (err) {
     const e = err as Error & { statusCode?: number };
     if (e.statusCode === 404) { res.status(404).json({ error: e.message }); return; }
+    if (e.statusCode === 409) { res.status(409).json({ error: e.message }); return; }
     logger.error('[projects.controller] createProject error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -100,7 +101,7 @@ export async function updateProject(req: AuthenticatedRequest, res: Response): P
   const { id } = req.params;
   if (!validateId(id, res, 'project ID')) return;
 
-  const ALLOWED: (keyof UpdateProjectDto)[] = ['name', 'description', 'status', 'workflow_status', 'member_ids'];
+  const ALLOWED: (keyof UpdateProjectDto)[] = ['name', 'description', 'status', 'workflow_status', 'member_ids', 'start_date', 'end_date', 'priority'];
   const updates: Partial<UpdateProjectDto> = {};
 
   for (const key of ALLOWED) {
@@ -195,21 +196,68 @@ export async function removeMember(req: AuthenticatedRequest, res: Response): Pr
 
 // ─── DELETE /api/projects/:id ─────────────────────────────────────────────────
 
-export async function deleteProject(req: AuthenticatedRequest, res: Response): Promise<void> {
+export async function getProjectTasks(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const { id } = req.params;
+  if (!validateId(id, res, 'project ID')) return;
+  try {
+    const tasks = await projectsService.getProjectTasks(id);
+    res.status(200).json({ data: tasks });
+  } catch (err) {
+    logger.error('[projects.controller] getProjectTasks error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+// ─── POST /api/projects/:id/share ────────────────────────────────────────────
+
+export async function generateShareLink(req: AuthenticatedRequest, res: Response): Promise<void> {
   const { id } = req.params;
   if (!validateId(id, res, 'project ID')) return;
 
   try {
-    const result = await projectsService.deleteProject(id);
+    const result = await projectsService.generateShareToken(id);
+    if (!result) { res.status(404).json({ error: 'Project not found' }); return; }
+    res.json({ data: result });
+  } catch (err) {
+    logger.error('[projects.controller] generateShareLink error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
 
-    if (!result.deleted && result.hasTickets) {
-      res.status(400).json({ error: 'Cannot delete a project that has tasks. Archive it instead.' });
+// ─── GET /api/projects/shared/:token — public, no auth ───────────────────────
+
+export async function getSharedProject(req: Request, res: Response): Promise<void> {
+  const { token } = req.params;
+
+  try {
+    const project = await projectsService.getPublicProjectView(token);
+    if (!project) { res.status(404).json({ error: 'Project not found' }); return; }
+    res.json({ data: project });
+  } catch (err) {
+    logger.error('[projects.controller] getSharedProject error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+export async function deleteProject(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const { id } = req.params;
+  if (!validateId(id, res, 'project ID')) return;
+
+  const taskIds: string[] = Array.isArray(req.body?.task_ids) ? req.body.task_ids : [];
+
+  try {
+    const result = await projectsService.deleteProject(id, taskIds);
+
+    if (!result.deleted) {
+      res.status(404).json({ error: 'Project not found' });
       return;
     }
 
-    if (!result.deleted) { res.status(404).json({ error: 'Project not found' }); return; }
-
-    res.status(204).send();
+    res.status(200).json({
+      deleted:        result.deleted,
+      hasTickets:     result.hasTickets,
+      projectDeleted: result.projectDeleted,
+    });
   } catch (err) {
     logger.error('[projects.controller] deleteProject error:', err);
     res.status(500).json({ error: 'Internal server error' });

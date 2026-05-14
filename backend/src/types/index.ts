@@ -15,7 +15,7 @@ export type TaskStatus =
   | 'client_review'
   | 'completed'
   | 'blocked';
-export type LogType = 'estimate' | 'partial' | 'final' | 'revision';
+export type LogType = 'estimate' | 'partial' | 'final' | 'revision' | 'transition';
 
 // ─── Domain Models ────────────────────────────────────────────────────────────
 

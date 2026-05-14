@@ -7,6 +7,12 @@ import {
   updateProjectValidation,
 } from './projects.validation';
 import * as ctrl from './projects.controller';
+import * as attachCtrl from './project-attachments.controller';
+import {
+  listAttachmentsValidation,
+  uploadAttachmentValidation,
+  deleteAttachmentValidation,
+} from './project-attachments.validation';
 
 const router = Router();
 
@@ -15,11 +21,20 @@ const router = Router();
 // GET /api/projects?firm_id=X  — all authenticated users can list projects
 router.get('/',     authenticate, requireMember, listProjectsValidation, ctrl.listProjects);
 
+// GET /api/projects/shared/:token — public, no auth (must be before /:id)
+router.get('/shared/:token', ctrl.getSharedProject);
+
+// POST /api/projects/:id/share — generate / get share token (admin)
+router.post('/:id/share', authenticate, requireAdmin, ctrl.generateShareLink);
+
 // GET /api/projects/:id        — project detail with members + task count
 router.get('/:id',  authenticate, requireMember, ctrl.getProject);
 
 // GET /api/projects/:id/overview  — full overview: tasks grouped by status + members
 router.get('/:id/overview', authenticate, requireMember, ctrl.getProjectOverview);
+
+// GET /api/projects/:id/tasks     — flat task list for this project (used by delete modal)
+router.get('/:id/tasks', authenticate, requireAdmin, ctrl.getProjectTasks);
 
 // POST /api/projects            — admin creates project (optional members + workflow_status)
 router.post('/',    authenticate, requireAdmin, createProjectValidation, ctrl.createProject);
@@ -43,5 +58,16 @@ router.post('/:id/members',          authenticate, requireAdmin,  ctrl.addMember
 
 // DELETE /api/projects/:id/members/:userId   — remove a member
 router.delete('/:id/members/:userId', authenticate, requireAdmin, ctrl.removeMember);
+
+// ── Project Attachments ───────────────────────────────────────────────────────
+
+// GET    /api/projects/:id/attachments          — list all attachments for the project
+router.get('/:id/attachments',           authenticate, requireMember, listAttachmentsValidation,  attachCtrl.listProjectAttachments);
+
+// POST   /api/projects/:id/attachments          — upload an attachment
+router.post('/:id/attachments',          authenticate, requireMember, uploadAttachmentValidation, attachCtrl.uploadProjectAttachment);
+
+// DELETE /api/projects/:id/attachments/:attId   — delete an attachment
+router.delete('/:id/attachments/:attId', authenticate, requireMember, deleteAttachmentValidation, attachCtrl.deleteProjectAttachment);
 
 export default router;

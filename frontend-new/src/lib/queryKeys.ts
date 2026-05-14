@@ -3,8 +3,9 @@
 
 export const queryKeys = {
   users: {
-    all:    ['users'] as const,
-    detail: (id: string) => ['users', id] as const,
+    all:        ['users'] as const,
+    detail:     (id: string) => ['users', id] as const,
+    mentionable: ['users', 'mentionable'] as const,
   },
   skills: {
     all: ['skills'] as const,
@@ -16,8 +17,14 @@ export const queryKeys = {
     all:    ['firms'] as const,
     detail: (id: string) => ['firms', id] as const,
   },
+  projects: {
+    all:    ['projects'] as const,
+    byFirm: (firmId: string) => ['projects', 'firm', firmId] as const,
+    detail: (id: string) => ['projects', id] as const,
+  },
   tasks: {
     all:    ['tasks'] as const,
+    detail: (id: string) => ['tasks', 'detail', id] as const,
     byFirm: (firmId: string) => ['tasks', 'firm', firmId] as const,
   },
   transcripts: {
@@ -25,5 +32,14 @@ export const queryKeys = {
   },
   prompts: {
     all: ['prompts'] as const,
+  },
+  messages: {
+    byScope: (scope: string, scopeId: string) => ['messages', scope, scopeId] as const,
+  },
+  attachments: {
+    byTask: (taskId: string) => ['attachments', 'task', taskId] as const,
+  },
+  projectAttachments: {
+    byProject: (projectId: string) => ['projectAttachments', projectId] as const,
   },
 };

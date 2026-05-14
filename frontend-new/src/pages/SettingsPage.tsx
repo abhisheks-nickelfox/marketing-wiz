@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { yupResolver } from '@hookform/resolvers/yup';
+import { useState, useEffect, useRef } from 'react';
+import { Formik, Form } from 'formik';
 import {
   Mail01,
   Trash01,
@@ -10,7 +9,7 @@ import {
   Eye,
   EyeOff,
 } from '@untitled-ui/icons-react';
-import { changePasswordSchema } from '../lib/validation/auth.schemas';
+import { changePasswordSchema } from '../validations/auth.validations';
 import Avatar from '../components/ui/Avatar';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
@@ -22,13 +21,15 @@ import DeleteConfirmModal from '../components/ui/DeleteConfirmModal';
 import SettingsRow from '../components/ui/SettingsRow';
 import SlideOver from '../components/ui/SlideOver';
 import { useAuth } from '../context/AuthContext';
+import { useClickOutside } from '../hooks/useClickOutside';
 import { profileApi, authApi } from '../lib/api';
 import { useSkills, useCreateSkill, useUpdateSkill, useDeleteSkill, useSetSkillMembers } from '../hooks/useSkills';
 import { useOrgSettings, useUploadOrgLogo } from '../hooks/useOrgSettings';
-import { useUsers } from '../hooks/useUsers';
+import { useUsers, useActiveUsers } from '../hooks/useUsers';
 import { useTaskTypes, useCreateTaskType, useUpdateTaskType, useDeleteTaskType } from '../hooks/useTaskTypes';
 import type { User, Skill, TaskType } from '../lib/api';
 import AddSkillsModal from '../components/users/AddSkillsModal';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
 import type { LocalSkill } from '../components/users/AddSkillsModal';
 
 // ── Tab types ─────────────────────────────────────────────────────────────────
@@ -446,6 +447,93 @@ function MemberAvatarStack({ members, max = 5 }: { members: { id: string; name: 
   );
 }
 
+// ── Inline member picker for skill/task-type rows ────────────────────────────
+
+interface MemberPickerCellProps {
+  members: { id: string; name: string; avatar_url: string | null }[];
+  allUsers: { id: string; name: string; avatar_url: string | null; status?: string }[];
+  onSave: (userIds: string[]) => void;
+  isPending?: boolean;
+}
+
+function MemberPickerCell({ members, allUsers, onSave, isPending }: MemberPickerCellProps) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useClickOutside(ref, () => setOpen(false));
+
+  const memberSet = new Set(members.map((m) => m.id));
+  const activeUsers = allUsers.filter((u) => u.status === 'Active' || !u.status);
+
+  function toggle(userId: string) {
+    const next = memberSet.has(userId)
+      ? [...memberSet].filter((id) => id !== userId)
+      : [...memberSet, userId];
+    onSave(next);
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        disabled={isPending}
+        className="flex items-center gap-1.5 group"
+        title="Manage members"
+      >
+        <div className="flex -space-x-2">
+          {members.length > 0
+            ? members.slice(0, 3).map((m) => (
+                <div key={m.id} className="w-7 h-7 rounded-full border-2 border-white overflow-hidden shrink-0">
+                  <Avatar src={m.avatar_url ?? undefined} name={m.name} size="xs" />
+                </div>
+              ))
+            : null}
+        </div>
+        {members.length > 3 && (
+          <span className="text-xs text-[#535862]">+{members.length - 3}</span>
+        )}
+        <span className={`w-6 h-6 rounded-full border border-dashed flex items-center justify-center transition-colors shrink-0
+          ${open ? 'border-[#7F56D9] text-[#7F56D9]' : 'border-gray-300 text-gray-400 group-hover:border-[#7F56D9] group-hover:text-[#7F56D9]'}`}>
+          <Plus width={10} height={10} />
+        </span>
+      </button>
+
+      {open && (
+        <div className="absolute top-full left-0 z-50 mt-1 bg-white border border-[#E9EAEB] rounded-lg shadow-lg py-1 min-w-[220px] max-h-56 overflow-y-auto">
+          {activeUsers.length === 0 ? (
+            <p className="px-3 py-2 text-xs text-[#717680]">No active users</p>
+          ) : (
+            activeUsers.map((u) => {
+              const checked = memberSet.has(u.id);
+              return (
+                <button
+                  key={u.id}
+                  type="button"
+                  onClick={() => toggle(u.id)}
+                  className="flex items-center gap-2.5 w-full px-3 py-2 text-left hover:bg-[#F9FAFB] transition-colors"
+                >
+                  <div className="w-6 h-6 rounded-full overflow-hidden shrink-0">
+                    <Avatar src={u.avatar_url ?? undefined} name={u.name} size="xs" />
+                  </div>
+                  <span className="flex-1 text-[13px] text-[#181D27] truncate">{u.name}</span>
+                  <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors
+                    ${checked ? 'bg-[#7F56D9] border-[#7F56D9]' : 'border-[#D0D5DD]'}`}>
+                    {checked && (
+                      <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
+                        <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    )}
+                  </span>
+                </button>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Shared: pagination ────────────────────────────────────────────────────────
 
 function pageNumbers(_page: number, totalPages: number): (number | '...')[] {
@@ -667,6 +755,8 @@ function TaskTypePanel({ taskType, open, onClose, onSaved }: TaskTypePanelProps)
 function TaskTypeManagement() {
   const { data: taskTypes = [], isLoading, refetch } = useTaskTypes();
   const deleteTaskType = useDeleteTaskType();
+  const updateTaskType = useUpdateTaskType();
+  const { data: allUsers = [] } = useActiveUsers();
 
   const [panelOpen,     setPanelOpen]     = useState(false);
   const [editingType,   setEditingType]   = useState<TaskType | null>(null);
@@ -713,7 +803,7 @@ function TaskTypeManagement() {
         </div>
 
         {isLoading ? (
-          <div className="px-4 py-8 text-sm text-[#717680] text-center">Loading…</div>
+          <LoadingSpinner />
         ) : taskTypes.length === 0 ? (
           <div className="px-4 py-8 text-sm text-[#717680] text-center">
             No task types yet. Click "Create A Task Type" to get started.
@@ -726,13 +816,21 @@ function TaskTypeManagement() {
                 key={tt.id}
                 className="grid grid-cols-[200px_1fr_180px_160px_72px] items-center px-4 py-4 border-b border-[#E9EAEB] last:border-b-0 bg-white hover:bg-gray-50/50 transition-colors"
               >
-                <div>
+                <button
+                  onClick={() => openEdit(tt)}
+                  className="text-left hover:opacity-80 transition-opacity"
+                >
                   <TagPreview name={tt.name} color={color} />
-                </div>
+                </button>
                 <p className="text-sm text-[#535862] pr-4 line-clamp-1">
                   {tt.description || 'No description available.'}
                 </p>
-                <MemberAvatarStack members={tt.members} max={3} />
+                <MemberPickerCell
+                  members={tt.members}
+                  allUsers={allUsers}
+                  isPending={updateTaskType.isPending}
+                  onSave={(userIds) => updateTaskType.mutate({ id: tt.id, payload: { member_ids: userIds } })}
+                />
                 <span className="text-sm font-semibold text-[#6941C6]">
                   {String(tt.task_count).padStart(2, '0')} Tasks
                 </span>
@@ -795,6 +893,8 @@ const SKILLS_PER_PAGE = 6;
 function SkillManagement() {
   const { data: skills = [], isLoading, refetch } = useSkills();
   const deleteSkill = useDeleteSkill();
+  const setSkillMembers = useSetSkillMembers();
+  const { data: allUsers = [] } = useActiveUsers();
   const [showAdd,          setShowAdd]          = useState(false);
   const [editingSkill,     setEditingSkill]     = useState<Skill | null>(null);
   const [page,             setPage]             = useState(1);
@@ -838,7 +938,7 @@ function SkillManagement() {
 
         {/* Rows */}
         {isLoading ? (
-          <div className="px-4 py-8 text-sm text-[#717680] text-center">Loading…</div>
+          <LoadingSpinner />
         ) : skills.length === 0 ? (
           <div className="px-4 py-8 text-sm text-[#717680] text-center">
             No skills yet. Click "Add a skill" to get started.
@@ -852,9 +952,12 @@ function SkillManagement() {
                 className="grid grid-cols-[200px_1fr_180px_160px_72px] items-center px-4 py-4 border-b border-[#E9EAEB] last:border-b-0 bg-white hover:bg-gray-50/50 transition-colors"
               >
                 {/* Skill badge */}
-                <div>
+                <button
+                  onClick={() => setEditingSkill(skill)}
+                  className="text-left hover:opacity-80 transition-opacity"
+                >
                   <TagPreview name={skill.name} color={color} />
-                </div>
+                </button>
 
                 {/* Description */}
                 <p className="text-sm text-[#535862] pr-4 line-clamp-1">
@@ -862,13 +965,16 @@ function SkillManagement() {
                 </p>
 
                 {/* Members with skill */}
-                <div>
-                  <MemberAvatarStack members={skill.members ?? []} max={3} />
-                </div>
+                <MemberPickerCell
+                  members={skill.members ?? []}
+                  allUsers={allUsers}
+                  isPending={setSkillMembers.isPending}
+                  onSave={(userIds) => setSkillMembers.mutate({ id: skill.id, user_ids: userIds })}
+                />
 
                 {/* On going usage */}
                 <span className="text-sm font-semibold text-[#6941C6]">
-                  — Tasks
+                  {String(skill.task_count ?? 0).padStart(2, '0')} Tasks
                 </span>
 
                 {/* Actions */}
@@ -980,25 +1086,6 @@ export default function SettingsPage() {
   const [showNewPwd,         setShowNewPwd]         = useState(false);
   const [showConfirmPwd,     setShowConfirmPwd]     = useState(false);
 
-  const {
-    register:     registerPwd,
-    handleSubmit: handlePwdSubmit,
-    reset:        resetPwd,
-    setError:     setPwdError,
-    formState:    { errors: pwdErrors, isSubmitting: changingPwd },
-  } = useForm({ resolver: yupResolver(changePasswordSchema) });
-
-  const onChangePwd = async (data: { currentPassword: string; newPassword: string; confirmPassword: string }) => {
-    try {
-      await authApi.changePassword(data.currentPassword, data.newPassword);
-      setShowChangePassword(false);
-      resetPwd();
-      notify('Password changed successfully');
-    } catch (err) {
-      setPwdError('root', { message: (err as Error).message });
-    }
-  };
-
 
   // ── Load profile ─────────────────────────────────────────────────────────────
 
@@ -1087,6 +1174,15 @@ export default function SettingsPage() {
 
   async function handleSave() {
     if (!authUser) return;
+    const invalidExp = selectedSkills.filter((s) => {
+      if (!s.experience) return false;
+      const n = Number(s.experience);
+      return isNaN(n) || n < 1 || n > 50;
+    });
+    if (invalidExp.length > 0) {
+      notify('Invalid experience — must be a number between 1 and 50.', 'error');
+      return;
+    }
     setSaving(true);
     try {
       const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
@@ -1119,7 +1215,7 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <main className="flex-1 min-w-0 overflow-y-auto bg-gray-50 flex items-center justify-center">
-        <p className="text-sm text-[#717680]">Loading…</p>
+        <LoadingSpinner />
       </main>
     );
   }
@@ -1151,7 +1247,7 @@ export default function SettingsPage() {
               <p className="text-sm text-[#535862] mt-0.5">Update your photo and personal details here.</p>
             </div>
             <button
-              onClick={() => { setShowChangePassword(true); resetPwd(); }}
+              onClick={() => setShowChangePassword(true)}
               className="px-4 py-2 text-sm font-semibold text-[#414651] border border-[#D5D7DA] rounded-lg bg-white hover:bg-gray-50 transition-colors shrink-0"
             >
               Change Password
@@ -1262,37 +1358,47 @@ export default function SettingsPage() {
                         {editingSkillId === id ? (
                           <>
                             <p className="text-base font-semibold text-[#414651]">{name}</p>
-                            <div className="flex items-center gap-1 mt-0.5">
-                              <input
-                                type="text"
-                                value={editExp}
-                                onChange={(e) => setEditExp(e.target.value.slice(0, 70))}
-                                placeholder="e.g. 2-5 years"
-                                autoFocus
-                                maxLength={70}
-                                className="text-xs border border-[#D5D7DA] rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-[#9E77ED] w-28"
-                              />
-                              <button
-                                onClick={() => {
-                                  setSelectedSkills((prev) =>
-                                    prev.map((s) => s.id === id ? { ...s, experience: editExp || null } : s),
-                                  );
-                                  setEditingSkillId(null);
-                                }}
-                                className="text-xs text-[#7F56D9] font-medium hover:underline"
-                              >
-                                Save
-                              </button>
-                              <button onClick={() => setEditingSkillId(null)} className="text-xs text-[#717680] hover:underline">
-                                Cancel
-                              </button>
+                            <div className="flex flex-col gap-0.5 mt-0.5">
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={50}
+                                  value={editExp}
+                                  onChange={(e) => setEditExp(e.target.value.replace(/[^0-9]/g, '').slice(0, 2))}
+                                  placeholder="Years (1–50)"
+                                  autoFocus
+                                  className={`text-xs border rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-[#9E77ED] w-28 ${
+                                    editExp && Number(editExp) > 50 ? 'border-red-400 text-red-600' : 'border-[#D5D7DA]'
+                                  }`}
+                                />
+                                <button
+                                  onClick={() => {
+                                    const n = Number(editExp);
+                                    if (!editExp || isNaN(n) || n < 1 || n > 50) return;
+                                    setSelectedSkills((prev) =>
+                                      prev.map((s) => s.id === id ? { ...s, experience: editExp } : s),
+                                    );
+                                    setEditingSkillId(null);
+                                  }}
+                                  className="text-xs text-[#7F56D9] font-medium hover:underline"
+                                >
+                                  Save
+                                </button>
+                                <button onClick={() => setEditingSkillId(null)} className="text-xs text-[#717680] hover:underline">
+                                  Cancel
+                                </button>
+                              </div>
+                              {editExp && Number(editExp) > 50 && (
+                                <p className="text-[10px] text-red-500">Invalid, max 50 years</p>
+                              )}
                             </div>
                           </>
                         ) : (
                           <>
                             <p className="text-base font-semibold text-[#414651] whitespace-nowrap">{name}</p>
                             <p className="text-sm text-[#535862] whitespace-nowrap">
-                              {experience ? `${experience} experience` : 'Add experience'}
+                              {experience ? `${experience} yr${Number(experience) === 1 ? '' : 's'} experience` : 'Add experience'}
                             </p>
                           </>
                         )}
@@ -1369,77 +1475,102 @@ export default function SettingsPage() {
 
       {/* ── Change Password Slide-Over ─────────────────────────────────────────── */}
       {showChangePassword && (
-        <SlideOver
-          open
-          onClose={() => setShowChangePassword(false)}
-          title="Change Password"
-          subtitle="Choose a new password for your account."
-          width="max-w-md"
-          footer={
-            <div className="flex items-center justify-end gap-3">
-              <button
-                onClick={() => setShowChangePassword(false)}
-                className="px-4 py-2.5 text-sm font-semibold text-[#414651] border border-[#D5D7DA] rounded-lg bg-white hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <Button onClick={() => handlePwdSubmit(onChangePwd)()} loading={changingPwd} size="md">
-                Update password
-              </Button>
-            </div>
-          }
+        <Formik
+          initialValues={{ currentPassword: '', newPassword: '', confirmPassword: '' }}
+          validationSchema={changePasswordSchema}
+          onSubmit={async (values, { setFieldError, setSubmitting, resetForm }) => {
+            try {
+              await authApi.changePassword(values.currentPassword, values.newPassword);
+              setShowChangePassword(false);
+              resetForm();
+              notify('Password changed successfully');
+            } catch (err) {
+              setFieldError('currentPassword', (err as Error).message);
+            } finally {
+              setSubmitting(false);
+            }
+          }}
         >
-          <form onSubmit={handlePwdSubmit(onChangePwd)} className="flex flex-col gap-5">
-            <div>
-              <label className="block text-sm font-medium text-[#414651] mb-1.5">Current password</label>
-              <div className="relative">
-                <Input
-                  type={showCurrentPwd ? 'text' : 'password'}
-                  placeholder="Enter current password"
-                  error={pwdErrors.currentPassword?.message}
-                  {...registerPwd('currentPassword')}
-                />
-                <button type="button" onClick={() => setShowCurrentPwd((p) => !p)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#717680] hover:text-[#414651] transition-colors">
-                  {showCurrentPwd ? <EyeOff width={16} height={16} /> : <Eye width={16} height={16} />}
-                </button>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[#414651] mb-1.5">New password</label>
-              <div className="relative">
-                <Input
-                  type={showNewPwd ? 'text' : 'password'}
-                  placeholder="Min. 8 characters"
-                  error={pwdErrors.newPassword?.message}
-                  {...registerPwd('newPassword')}
-                />
-                <button type="button" onClick={() => setShowNewPwd((p) => !p)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#717680] hover:text-[#414651] transition-colors">
-                  {showNewPwd ? <EyeOff width={16} height={16} /> : <Eye width={16} height={16} />}
-                </button>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[#414651] mb-1.5">Confirm new password</label>
-              <div className="relative">
-                <Input
-                  type={showConfirmPwd ? 'text' : 'password'}
-                  placeholder="Re-enter new password"
-                  error={pwdErrors.confirmPassword?.message}
-                  {...registerPwd('confirmPassword')}
-                />
-                <button type="button" onClick={() => setShowConfirmPwd((p) => !p)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#717680] hover:text-[#414651] transition-colors">
-                  {showConfirmPwd ? <EyeOff width={16} height={16} /> : <Eye width={16} height={16} />}
-                </button>
-              </div>
-            </div>
-            {pwdErrors.root && (
-              <p className="text-sm text-red-600">{pwdErrors.root.message}</p>
-            )}
-          </form>
-        </SlideOver>
+          {({ values, errors, touched, handleChange, handleBlur, isSubmitting, submitForm }) => (
+            <SlideOver
+              open
+              onClose={() => setShowChangePassword(false)}
+              title="Change Password"
+              subtitle="Choose a new password for your account."
+              width="max-w-md"
+              footer={
+                <div className="flex items-center justify-end gap-3">
+                  <button
+                    onClick={() => setShowChangePassword(false)}
+                    className="px-4 py-2.5 text-sm font-semibold text-[#414651] border border-[#D5D7DA] rounded-lg bg-white hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <Button onClick={() => submitForm()} loading={isSubmitting} size="md">
+                    Update password
+                  </Button>
+                </div>
+              }
+            >
+              <Form className="flex flex-col gap-5">
+                <div>
+                  <label className="block text-sm font-medium text-[#414651] mb-1.5">Current password</label>
+                  <div className="relative">
+                    <Input
+                      type={showCurrentPwd ? 'text' : 'password'}
+                      name="currentPassword"
+                      placeholder="Enter current password"
+                      value={values.currentPassword}
+                      onChange={handleChange}
+                      onBlur={handleBlur}
+                      error={touched.currentPassword && errors.currentPassword ? errors.currentPassword : undefined}
+                    />
+                    <button type="button" onClick={() => setShowCurrentPwd((p) => !p)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#717680] hover:text-[#414651] transition-colors">
+                      {showCurrentPwd ? <EyeOff width={16} height={16} /> : <Eye width={16} height={16} />}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#414651] mb-1.5">New password</label>
+                  <div className="relative">
+                    <Input
+                      type={showNewPwd ? 'text' : 'password'}
+                      name="newPassword"
+                      placeholder="Min. 8 characters"
+                      value={values.newPassword}
+                      onChange={handleChange}
+                      onBlur={handleBlur}
+                      error={touched.newPassword && errors.newPassword ? errors.newPassword : undefined}
+                    />
+                    <button type="button" onClick={() => setShowNewPwd((p) => !p)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#717680] hover:text-[#414651] transition-colors">
+                      {showNewPwd ? <EyeOff width={16} height={16} /> : <Eye width={16} height={16} />}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#414651] mb-1.5">Confirm new password</label>
+                  <div className="relative">
+                    <Input
+                      type={showConfirmPwd ? 'text' : 'password'}
+                      name="confirmPassword"
+                      placeholder="Re-enter new password"
+                      value={values.confirmPassword}
+                      onChange={handleChange}
+                      onBlur={handleBlur}
+                      error={touched.confirmPassword && errors.confirmPassword ? errors.confirmPassword : undefined}
+                    />
+                    <button type="button" onClick={() => setShowConfirmPwd((p) => !p)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#717680] hover:text-[#414651] transition-colors">
+                      {showConfirmPwd ? <EyeOff width={16} height={16} /> : <Eye width={16} height={16} />}
+                    </button>
+                  </div>
+                </div>
+              </Form>
+            </SlideOver>
+          )}
+        </Formik>
       )}
 
       {/* ── Organization Info ─────────────────────────────────────────────────── */}

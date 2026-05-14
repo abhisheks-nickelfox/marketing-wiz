@@ -5,16 +5,27 @@ import { queryKeys } from '../lib/queryKeys';
 
 export function useUsers() {
   return useQuery({
-    queryKey: queryKeys.users.all,
-    queryFn:  () => usersApi.list(),
+    queryKey:  queryKeys.users.all,
+    queryFn:   () => usersApi.list(),
+    staleTime: 300_000,
   });
+}
+
+/** Same cache as useUsers but data is pre-filtered to Active members only. Use this for all assignee pickers. */
+export function useActiveUsers() {
+  const query = useUsers();
+  return {
+    ...query,
+    data: query.data?.filter((u) => u.status === 'Active') ?? [],
+  };
 }
 
 export function useUser(id: string) {
   return useQuery({
-    queryKey: queryKeys.users.detail(id),
-    queryFn:  () => usersApi.get(id),
-    enabled:  !!id,
+    queryKey:  queryKeys.users.detail(id),
+    queryFn:   () => usersApi.get(id),
+    enabled:   !!id,
+    staleTime: 300_000,
   });
 }
 
@@ -31,8 +42,7 @@ export function useUpdateUser() {
   return useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: UpdateUserPayload }) =>
       usersApi.update(id, payload),
-    onSuccess: (updatedUser, { id }) => {
-      qc.setQueryData(queryKeys.users.detail(id), updatedUser);
+    onSuccess: (_updatedUser, { id }) => {
       qc.invalidateQueries({ queryKey: queryKeys.users.all });
       qc.invalidateQueries({ queryKey: queryKeys.users.detail(id) });
     },

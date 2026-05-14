@@ -60,6 +60,7 @@ export interface Skill {
   description?: string | null;
   color?: string | null;
   created_at: string;
+  task_count: number;
   members: SkillMember[];
 }
 
@@ -251,6 +252,7 @@ export interface Firm {
   id: string;
   name: string;
   location: string | null;
+  address: string | null;
   website: string | null;
   logo_url: string | null;
   description: string | null;
@@ -270,25 +272,126 @@ export interface Prompt {
   content?: string;
 }
 
-export interface Task {
+export interface ProjectMember {
   id: string;
-  session_id: string | null;
-  firm_id: string;
-  project_id: string | null;
-  assignee_id: string | null;
-  title: string;
-  description: string | null;
-  type: string;
-  priority: 'low' | 'normal' | 'high' | 'urgent';
-  status: 'to_do' | 'assigned' | 'in_progress' | 'revisions' | 'internal_review' | 'client_review' | 'completed' | 'blocked';
-  deadline: string | null;
+  name: string;
+  email: string;
+  avatar_url: string | null;
+}
+
+export interface Project {
+  id:              string;
+  firm_id:         string;
+  name:            string;
+  description:     string | null;
+  status:          'active' | 'archived';
+  workflow_status: 'todo' | 'in_progress' | 'in_review' | 'approved' | 'completed';
+  start_date:      string | null;
+  end_date:        string | null;
+  priority:        'high' | 'medium' | 'low';
+  share_token:     string | null;
+  created_at:      string;
+  updated_at:      string;
+  firm_name:       string | null;
+  ticket_count:    number;
+  members:         ProjectMember[];
+}
+
+export interface SharedProjectView {
+  id:              string;
+  name:            string;
+  description:     string | null;
+  workflow_status: 'todo' | 'in_progress' | 'in_review' | 'approved' | 'completed';
+  firm_name:       string | null;
+  members:         { id: string; name: string; avatar_url: string | null }[];
+  task_totals:     { total: number; todo: number; in_progress: number; in_review: number; completed: number };
+}
+
+export interface CreateProjectPayload {
+  firm_id:         string;
+  name:            string;
+  description?:    string;
+  workflow_status?: Project['workflow_status'];
+  member_ids?:     string[];
+  start_date?:     string;
+  end_date?:       string;
+  priority?:       Project['priority'];
+}
+
+export interface UpdateProjectPayload {
+  name?:            string;
+  description?:     string;
+  status?:          'active' | 'archived';
+  workflow_status?: Project['workflow_status'];
+  member_ids?:      string[];
+  start_date?:      string | null;
+  end_date?:        string | null;
+  priority?:        Project['priority'];
+}
+
+export const projectsApi = {
+  list: (firm_id?: string) => {
+    const qs = firm_id ? `?firm_id=${firm_id}` : '';
+    return request<{ data: Project[] }>('GET', `/projects${qs}`).then((r) => r.data);
+  },
+  get: (id: string) =>
+    request<{ data: Project }>('GET', `/projects/${id}`).then((r) => r.data),
+  create: (payload: CreateProjectPayload) =>
+    request<{ data: Project }>('POST', '/projects', payload).then((r) => r.data),
+  update: (id: string, payload: UpdateProjectPayload) =>
+    request<{ data: Project }>('PATCH', `/projects/${id}`, payload).then((r) => r.data),
+  archive: (id: string) =>
+    request<{ data: Project }>('PATCH', `/projects/${id}/archive`).then((r) => r.data),
+  getTasks: (id: string) =>
+    request<{ data: { id: string; title: string; status: string; priority: string; parent_task_id: string | null }[] }>('GET', `/projects/${id}/tasks`)
+      .then((r) => r.data),
+  delete: (id: string, task_ids: string[] = []) =>
+    request<{ deleted: boolean; hasTickets: boolean; projectDeleted: boolean }>(
+      'DELETE', `/projects/${id}`, { task_ids },
+    ),
+  generateShareLink: (id: string) =>
+    request<{ data: { share_token: string } }>('POST', `/projects/${id}/share`).then((r) => r.data),
+  getSharedProject: (token: string) =>
+    request<{ data: SharedProjectView }>('GET', `/projects/shared/${token}`).then((r) => r.data),
+  getOverview: (id: string) =>
+    request<{ data: unknown }>('GET', `/projects/${id}/overview`).then((r) => r.data),
+  listMembers: (id: string) =>
+    request<{ data: User[] }>('GET', `/projects/${id}/members`).then((r) => r.data),
+  addMember: (id: string, user_id: string) =>
+    request<{ data: User[] }>('POST', `/projects/${id}/members`, { user_id }).then((r) => r.data),
+  removeMember: (id: string, userId: string) =>
+    request<{ data: User[] }>('DELETE', `/projects/${id}/members/${userId}`).then((r) => r.data),
+};
+
+export interface TaskAssignee {
+  id:         string;
+  name:       string;
+  email:      string;
+  avatar_url: string | null;
+}
+
+export interface Task {
+  id:              string;
+  session_id:      string | null;
+  firm_id:         string;
+  project_id:      string | null;
+  parent_task_id:  string | null;
+  assignee_id:     string | null;
+  title:           string;
+  description:     string | null;
+  type:            string;
+  priority:        'low' | 'normal' | 'high' | 'urgent';
+  status:          'to_do' | 'assigned' | 'in_progress' | 'revisions' | 'internal_review' | 'client_review' | 'completed' | 'blocked';
+  deadline:        string | null;
   estimated_hours: number | null;
-  ai_generated: boolean;
-  edited: boolean;
-  archived: boolean;
-  created_at: string;
-  firms?: { name: string };
-  assignee?: { name: string; email: string } | null;
+  ai_generated:    boolean;
+  edited:          boolean;
+  archived:        boolean;
+  created_at:      string;
+  firms?:          { name: string };
+  assignee?:       { name: string; email: string } | null;
+  assignees?:      TaskAssignee[];
+  subtasks?:       Task[];
 }
 
 export const transcriptsApi = {
@@ -316,6 +419,8 @@ export const firmsApi = {
     request<{ data: Firm }>('POST', '/firms', payload).then((r) => r.data),
   update: (id: string, payload: Partial<Firm>) =>
     request<{ data: Firm }>('PATCH', `/firms/${id}`, payload).then((r) => r.data),
+  uploadLogo: (id: string, image: string) =>
+    request<{ data: { logo_url: string } }>('POST', `/firms/${id}/logo`, { image }).then((r) => r.data),
   delete: (id: string) => request<void>('DELETE', `/firms/${id}`),
 };
 
@@ -336,16 +441,38 @@ export const VALID_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
   blocked:         ['to_do', 'in_progress'],
 };
 
+export interface CreateTaskPayload {
+  firm_id:         string;
+  title:           string;
+  type:            'task' | 'design' | 'development' | 'account_management';
+  priority?:       'low' | 'normal' | 'high' | 'urgent';
+  description?:    string;
+  project_id?:     string;
+  assignee_id?:    string;
+  assignee_ids?:   string[];
+  deadline?:       string;
+  estimated_hours?: number;
+  initial_status?: string;
+  parent_task_id?: string;
+}
+
 export const tasksApi = {
-  list: (params?: { firm_id?: string; session_id?: string; status?: string }) => {
+  get: (id: string) =>
+    request<{ data: Task }>('GET', `/tasks/${id}`).then((r) => r.data),
+  create: (payload: CreateTaskPayload) =>
+    request<{ data: Task }>('POST', '/tasks', payload).then((r) => r.data),
+  list: (params?: { firm_id?: string; session_id?: string; status?: string; assignee_id?: string; overdue?: string; project_id?: string }) => {
     const q = new URLSearchParams();
-    if (params?.firm_id) q.set('firm_id', params.firm_id);
+    if (params?.firm_id)    q.set('firm_id',    params.firm_id);
     if (params?.session_id) q.set('session_id', params.session_id);
-    if (params?.status) q.set('status', params.status);
+    if (params?.status)     q.set('status',     params.status);
+    if (params?.assignee_id) q.set('assignee_id', params.assignee_id);
+    if (params?.overdue)    q.set('overdue',    params.overdue);
+    if (params?.project_id) q.set('project_id', params.project_id);
     const qs = q.toString() ? `?${q.toString()}` : '';
     return request<{ data: Task[] }>('GET', `/tasks${qs}`).then((r) => r.data);
   },
-  update: (id: string, payload: Partial<Pick<Task, 'title' | 'description' | 'priority' | 'deadline'>>) =>
+  update: (id: string, payload: Partial<Pick<Task, 'title' | 'description' | 'priority' | 'deadline'>> & { assignee_id?: string | null; assignee_ids?: string[]; project_id?: string | null }) =>
     request<{ data: Task }>('PATCH', `/tasks/${id}`, payload).then((r) => r.data),
   assignApprove: (id: string, payload: { assignee_id: string; priority?: string; deadline?: string }) =>
     request<{ data: Task }>('PATCH', `/tasks/${id}/assign-approve`, payload).then((r) => r.data),
@@ -353,8 +480,101 @@ export const tasksApi = {
     request<{ data: Task }>('PATCH', `/tasks/${id}/transition`, { status, change_note }).then((r) => r.data),
   discard: (id: string) =>
     request<{ data: Task }>('PATCH', `/tasks/${id}/discard`).then((r) => r.data),
+  resolve: (id: string) =>
+    request<{ data: Task }>('PATCH', `/tasks/${id}/resolve`, {}).then((r) => r.data),
   archive: (id: string, archived: boolean) =>
     request<{ data: Task }>('PATCH', `/tasks/${id}/archive`, { archived }).then((r) => r.data),
+  delete: (id: string) =>
+    request<{ message: string }>('DELETE', `/tasks/${id}`),
+  listSubTasks: (parentId: string) =>
+    request<{ data: Task[] }>('GET', `/tasks/${parentId}/subtasks`).then((r) => r.data),
+  regenerate: (id: string, payload?: { prompt_id?: string }) =>
+    request<{ data: Task }>('POST', `/tasks/${id}/regenerate`, payload).then((r) => r.data),
+};
+
+// ── Attachments API ───────────────────────────────────────────────────────────
+
+export interface TaskAttachment {
+  id:          string;
+  task_id:     string;
+  uploaded_by: string;
+  file_name:   string;
+  file_size:   number;
+  mime_type:   string;
+  storage_url: string;
+  created_at:  string;
+}
+
+export const attachmentsApi = {
+  list: (taskId: string) =>
+    request<{ data: TaskAttachment[] }>('GET', `/tasks/${taskId}/attachments`).then((r) => r.data),
+
+  upload: (taskId: string, file: File): Promise<TaskAttachment> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const dataUrl = reader.result as string;
+        // Strip the data:<type>;base64, prefix — send raw base64
+        const base64 = dataUrl.split(',')[1];
+        try {
+          const result = await request<{ data: TaskAttachment }>('POST', `/tasks/${taskId}/attachments`, {
+            file_name: file.name,
+            file_size: file.size,
+            mime_type: file.type || 'application/octet-stream',
+            data:      base64,
+          });
+          resolve(result.data);
+        } catch (err) {
+          reject(err);
+        }
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    }),
+
+  delete: (taskId: string, attId: string) =>
+    request<{ deleted: boolean }>('DELETE', `/tasks/${taskId}/attachments/${attId}`),
+};
+
+// ── Project Attachments API ───────────────────────────────────────────────────
+
+export interface ProjectAttachment {
+  id:              string;
+  project_id:      string;
+  file_url:        string;
+  file_name:       string;
+  file_size:       number;
+  file_type:       string;
+  uploaded_by:     string;
+  uploader_name:   string | null;
+  uploader_avatar: string | null;
+  created_at:      string;
+}
+
+function uploadFileAsBase64(projectId: string, file: File): Promise<ProjectAttachment> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64 = (reader.result as string).split(',')[1];
+      try {
+        const result = await request<{ data: ProjectAttachment }>(
+          'POST', `/projects/${projectId}/attachments`,
+          { file_name: file.name, file_size: file.size, mime_type: file.type || 'application/octet-stream', data: base64 },
+        );
+        resolve(result.data);
+      } catch (err) { reject(err); }
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+export const projectAttachmentsApi = {
+  list:   (projectId: string) =>
+    request<{ data: ProjectAttachment[] }>('GET', `/projects/${projectId}/attachments`).then((r) => r.data),
+  upload: (projectId: string, file: File) => uploadFileAsBase64(projectId, file),
+  delete: (projectId: string, attId: string) =>
+    request<{ deleted: boolean }>('DELETE', `/projects/${projectId}/attachments/${attId}`),
 };
 
 // ── Org Settings API ──────────────────────────────────────────────────────────
@@ -370,14 +590,24 @@ export const orgSettingsApi = {
 
 // ── Notifications API ─────────────────────────────────────────────────────────
 
+export interface NotificationActor {
+  id:         string;
+  name:       string;
+  avatar_url: string | null;
+}
+
 export interface AppNotification {
-  id: string;
-  user_id: string;
-  ticket_id: string | null;
-  title: string;
-  message: string;
-  read: boolean;
+  id:         string;
+  user_id:    string;
+  ticket_id:  string | null;
+  scope:      string;
+  scope_id:   string | null;
+  actor_id:   string | null;
+  title:      string;
+  message:    string;
+  read:       boolean;
   created_at: string;
+  actor:      NotificationActor | null;
 }
 
 export const notificationsApi = {
@@ -387,6 +617,71 @@ export const notificationsApi = {
     request<void>('PATCH', `/notifications/${id}/read`),
   markAllRead: () =>
     request<void>('PATCH', '/notifications/read-all'),
+  unreadCount: () =>
+    request<{ data: { count: number } }>('GET', '/notifications/unread-count').then((r) => r.data.count),
+};
+
+// ── Time Logs API ─────────────────────────────────────────────────────────────
+
+export interface TimeLog {
+  id:             string;
+  ticket_id:      string;
+  user_id:        string;
+  hours:          number;
+  comment:        string | null;
+  log_type:       'estimate' | 'partial' | 'final' | 'revision' | 'transition';
+  revision_cycle: number;
+  created_at:     string;
+  updated_at:     string;
+  users?:         { name: string; email: string; avatar_url?: string | null } | null;
+}
+
+export const timeLogsApi = {
+  list: (taskId: string) =>
+    request<{ data: TimeLog[] }>('GET', `/tasks/${taskId}/time-logs`).then((r) => r.data),
+  create: (taskId: string, payload: { hours: number; comment?: string; log_type?: string }) =>
+    request<{ data: TimeLog }>('POST', `/tasks/${taskId}/time-logs`, payload).then((r) => r.data),
+  update: (taskId: string, logId: string, payload: { hours?: number; comment?: string }) =>
+    request<{ data: TimeLog }>('PATCH', `/tasks/${taskId}/time-logs/${logId}`, payload).then((r) => r.data),
+  delete: (taskId: string, logId: string) =>
+    request<void>('DELETE', `/tasks/${taskId}/time-logs/${logId}`),
+};
+
+// ── Dashboard API ─────────────────────────────────────────────────────────────
+
+export const dashboardApi = {
+  admin: () =>
+    request<{ data: {
+      total_firms: number;
+      total_tickets: number;
+      to_do_tickets: number;
+      assigned_tickets: number;
+      team_members: number;
+      recent_transcripts: unknown[];
+      team_workload: Array<{ id: string; name: string; email: string; count: number }>;
+    } }>('GET', '/dashboard/admin').then((r) => r.data),
+  teamWorkload: () =>
+    request<{ data: Array<{
+      user: { id: string; name: string; email: string };
+      assigned: number;
+      pending: number;
+      resolved: number;
+      total_hours: number;
+    }> }>('GET', '/dashboard/team-workload').then((r) => r.data),
+  overdueTickets: () =>
+    request<{ data: Array<{
+      id: string; title: string; priority: string; status: string;
+      firm_id: string; project_id: string | null; assignee_id: string | null;
+      created_at: string; updated_at: string; deadline: string | null;
+      overdue_type: 'past_deadline' | 'stale_approved';
+    }> }>('GET', '/dashboard/overdue-tickets').then((r) => r.data),
+  member: () =>
+    request<{ data: {
+      total_assigned: number;
+      assigned_tickets: number;
+      total_hours_logged: number;
+      recent_tickets: unknown[];
+    } }>('GET', '/dashboard/member').then((r) => r.data),
 };
 
 // ── Task Types API ────────────────────────────────────────────────────────────
@@ -430,4 +725,72 @@ export const taskTypesApi = {
     request<{ data: TaskType }>('PATCH', `/task-types/${id}`, payload).then((r) => r.data),
   delete: (id: string) =>
     request<void>('DELETE', `/task-types/${id}`),
+};
+
+// ── Mentionable Users API ─────────────────────────────────────────────────────
+
+export interface MentionUser {
+  id:         string;
+  name:       string;
+  first_name: string | null;
+  last_name:  string | null;
+  avatar_url: string | null;
+  status:     string;
+}
+
+export const mentionableUsersApi = {
+  list: () =>
+    request<{ data: MentionUser[] }>('GET', '/users/mentions').then((r) => r.data),
+};
+
+// ── Messages API ──────────────────────────────────────────────────────────────
+
+export interface MessageAuthor {
+  id:         string;
+  name:       string;
+  avatar_url: string | null;
+}
+
+export interface MessageReaction {
+  emoji: string;
+  count: number;
+  users: string[];
+}
+
+export interface Message {
+  id:         string;
+  scope:      string;
+  scope_id:   string;
+  user_id:    string;
+  parent_id:  string | null;
+  body:       string;
+  created_at: string;
+  updated_at: string;
+  author:     MessageAuthor;
+  reactions:  MessageReaction[];
+  /** IDs of users who have read this message */
+  read_by:    string[];
+}
+
+export const messagesApi = {
+  list: (scope: string, scopeId: string) =>
+    request<{ data: Message[] }>('GET', `/messages?scope=${scope}&scope_id=${scopeId}`)
+      .then((r) => r.data),
+
+  create: (payload: { scope: string; scope_id: string; body: string; parent_id?: string }) =>
+    request<{ data: Message }>('POST', '/messages', payload).then((r) => r.data),
+
+  markRead: (scope: string, scopeId: string) =>
+    request<{ marked: number }>('POST', '/messages/read', { scope, scope_id: scopeId }),
+
+  addReaction: (messageId: string, emoji: string) =>
+    request<{ data: MessageReaction[] }>('POST', `/messages/${messageId}/reactions`, { emoji })
+      .then((r) => r.data),
+
+  removeReaction: (messageId: string, emoji: string) =>
+    request<{ data: MessageReaction[] }>('DELETE', `/messages/${messageId}/reactions`, { emoji })
+      .then((r) => r.data),
+
+  delete: (messageId: string) =>
+    request<void>('DELETE', `/messages/${messageId}`),
 };

@@ -8,16 +8,20 @@ import type { CreateUserDto } from './dto/create-user.dto';
 import type { UpdateUserDto } from './dto/update-user.dto';
 import { sendAccountDisabledEmail, sendProfileUpdateEmail, sendInviteEmail } from '../../services/email.service';
 import { generateInviteToken } from '../../services/invite.service';
+import { User } from '../../models';
 import { FRONTEND_URL } from '../../config/constants';
 import { uploadBase64Image } from '../../config/storage';
 import { notifyAdmins } from '../notifications/notifications.service';
 
 // ─── GET /api/users ───────────────────────────────────────────────────────────
 
-export async function listUsers(_req: AuthenticatedRequest, res: Response): Promise<void> {
+export async function listUsers(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const page  = Math.max(1, parseInt((req.query.page  as string) ?? '1',  10) || 1);
+  const limit = Math.max(1, parseInt((req.query.limit as string) ?? '50', 10) || 50);
+
   try {
-    const users = await usersService.findAllUsers();
-    res.json({ data: users });
+    const result = await usersService.findAllUsers(page, limit);
+    res.json(result);
   } catch (err) {
     logger.error('[users.controller] listUsers error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -106,6 +110,7 @@ export async function updateUser(req: AuthenticatedRequest, res: Response): Prom
     dto.member_role !== undefined ||
     dto.permissions !== undefined ||
     dto.skill_ids !== undefined ||
+    dto.skills_with_experience !== undefined ||
     dto.status !== undefined ||
     dto.rate_amount !== undefined ||
     dto.rate_frequency !== undefined;
@@ -135,9 +140,11 @@ export async function updateUser(req: AuthenticatedRequest, res: Response): Prom
     if (dto.role        !== undefined && dto.role        !== before.role)        changes.role        = dto.role;
     if (dto.member_role !== undefined && dto.member_role !== before.member_role) changes.member_role = dto.member_role;
     if (dto.status      !== undefined && dto.status      !== before.status)      changes.status      = dto.status;
-    if (dto.skill_ids   !== undefined) {
+    if (dto.skill_ids !== undefined || dto.skills_with_experience !== undefined) {
       const beforeIds = (before.skills ?? []).map((s) => s.id).sort().join(',');
-      const afterIds  = (dto.skill_ids ?? []).slice().sort().join(',');
+      const afterIds  = dto.skill_ids
+        ? dto.skill_ids.slice().sort().join(',')
+        : (dto.skills_with_experience ?? []).map((e) => e.skill_id).sort().join(',');
       if (beforeIds !== afterIds) changes.skills = user.skills.map((s) => s.name);
     }
 
@@ -252,6 +259,25 @@ export async function deleteUser(req: AuthenticatedRequest, res: Response): Prom
       return;
     }
     logger.error('[users.controller] deleteUser error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+// ─── GET /api/users/mentions ──────────────────────────────────────────────────
+// Lightweight endpoint accessible to all authenticated users.
+// Returns minimal fields needed to populate the @mention picker in chat.
+
+export async function getMentionableUsers(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const users = await User.findAll({
+      where: { status: 'Active' },
+      attributes: ['id', 'name', 'first_name', 'last_name', 'avatar_url', 'status'],
+      order: [['name', 'ASC']],
+      raw: true,
+    });
+    res.json({ data: users });
+  } catch (err) {
+    logger.error('[users.controller] getMentionableUsers error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

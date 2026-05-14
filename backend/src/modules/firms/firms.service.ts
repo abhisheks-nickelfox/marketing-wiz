@@ -11,6 +11,7 @@ export interface FirmRow {
   id: string;
   name: string;
   location: string | null;
+  address: string | null;
   website: string | null;
   logo_url: string | null;
   description: string | null;
@@ -55,38 +56,73 @@ export interface FirmDetail extends FirmRow {
   };
 }
 
+// ── Pagination constants ──────────────────────────────────────────────────────
+
+const DEFAULT_FIRM_LIST_LIMIT = 50;
+const MAX_FIRM_LIST_LIMIT     = 200;
+
+export interface PaginatedFirmsResult {
+  data:  FirmWithStats[];
+  total: number;
+  page:  number;
+  limit: number;
+}
+
 // ── Service methods ──────────────────────────────────────────────────────────
 
-export async function findAllFirms(): Promise<FirmWithStats[]> {
-  const firms = await Firm.findAll({
-    order: [['name', 'ASC']],
-    raw: true,
-  });
+export async function findAllFirms(
+  page: number  = 1,
+  limit: number = DEFAULT_FIRM_LIST_LIMIT,
+): Promise<PaginatedFirmsResult> {
+  // Clamp inputs
+  const safePage  = Math.max(1, page);
+  const safeLimit = Math.min(MAX_FIRM_LIST_LIMIT, Math.max(1, limit));
+  const offset    = (safePage - 1) * safeLimit;
 
-  if (firms.length === 0) return [];
+  // Fetch count and current page concurrently
+  const [total, firms] = await Promise.all([
+    Firm.count(),
+    Firm.findAll({
+      order:  [['name', 'ASC']],
+      limit:  safeLimit,
+      offset,
+      raw:    true,
+    }),
+  ]);
 
-  // Single view query for ticket stats
+  if (firms.length === 0) {
+    return { data: [], total, page: safePage, limit: safeLimit };
+  }
+
+  // Enrich only the current page's firms with stats — not the entire table
+  const pageIds = (firms as unknown as FirmRow[]).map((f) => f.id);
+
   const statsRows = await sequelize.query<{
     firm_id: string;
     total_tickets: number;
     draft_count: number;
     approved_count: number;
     last_ticket_at: string | null;
-  }>('SELECT * FROM v_firm_ticket_stats', { type: QueryTypes.SELECT });
+  }>(
+    `SELECT * FROM v_firm_ticket_stats WHERE firm_id IN (:ids)`,
+    { replacements: { ids: pageIds }, type: QueryTypes.SELECT },
+  );
 
   const statsMap: Record<string, typeof statsRows[0]> = {};
   for (const row of statsRows) statsMap[row.firm_id] = row;
 
-  return (firms as unknown as FirmRow[]).map((f) => {
+  const data = (firms as unknown as FirmRow[]).map((f) => {
     const s = statsMap[f.id];
     return {
       ...f,
-      ticket_count: s?.total_tickets ?? 0,
+      ticket_count:  s?.total_tickets  ?? 0,
       pending_count: s?.approved_count ?? 0,
-      draft_count: s?.draft_count ?? 0,
+      draft_count:   s?.draft_count    ?? 0,
       last_activity: s?.last_ticket_at ?? null,
     };
   });
+
+  return { data, total, page: safePage, limit: safeLimit };
 }
 
 export async function findFirmById(id: string): Promise<FirmDetail | null> {
@@ -143,6 +179,7 @@ export async function createFirm(dto: CreateFirmDto): Promise<FirmRow> {
     const row = await Firm.create({
       name:               dto.name,
       location:           dto.location ?? null,
+      address:            dto.address ?? null,
       website:            dto.website ?? null,
       logo_url:           dto.logo_url ?? null,
       description:        dto.description ?? null,

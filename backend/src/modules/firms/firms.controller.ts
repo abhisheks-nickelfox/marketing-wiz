@@ -4,16 +4,20 @@ import { validationResult } from 'express-validator';
 import { AuthenticatedRequest } from '../../types';
 import * as firmsService from './firms.service';
 import type { CreateFirmDto, UpdateFirmDto } from './firms.service';
+import { uploadBase64Image } from '../../config/storage';
 
 // UUID format guard
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // ─── GET /api/firms ───────────────────────────────────────────────────────────
 
-export async function listFirms(_req: AuthenticatedRequest, res: Response): Promise<void> {
+export async function listFirms(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const page  = Math.max(1, parseInt((req.query.page  as string) ?? '1',  10) || 1);
+  const limit = Math.max(1, parseInt((req.query.limit as string) ?? '50', 10) || 50);
+
   try {
-    const firms = await firmsService.findAllFirms();
-    res.json({ data: firms });
+    const result = await firmsService.findAllFirms(page, limit);
+    res.json(result);
   } catch (err) {
     logger.error('[firms.controller] listFirms error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -44,6 +48,12 @@ export async function createFirm(req: AuthenticatedRequest, res: Response): Prom
 
 export async function getFirm(req: AuthenticatedRequest, res: Response): Promise<void> {
   const { id } = req.params;
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  if (!UUID_RE.test(id)) {
+    res.status(404).json({ error: 'Firm not found' });
+    return;
+  }
 
   try {
     const firm = await firmsService.findFirmById(id);
@@ -107,6 +117,45 @@ export async function updateFirm(req: AuthenticatedRequest, res: Response): Prom
     res.json({ data: firm });
   } catch (err) {
     logger.error('[firms.controller] updateFirm error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+// ─── POST /api/firms/:id/logo ─────────────────────────────────────────────────
+
+export async function uploadFirmLogo(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const { id } = req.params;
+  const { image } = req.body as { image?: string };
+
+  if (!image) {
+    res.status(400).json({ error: 'image is required' });
+    return;
+  }
+
+  if (!UUID_RE.test(id)) {
+    res.status(404).json({ error: 'Firm not found' });
+    return;
+  }
+
+  try {
+    const firm = await firmsService.findFirmById(id);
+    if (!firm) {
+      res.status(404).json({ error: 'Firm not found' });
+      return;
+    }
+
+    const mimeMatch = image.match(/^data:(image\/\w+);base64,/);
+    const mimeType  = mimeMatch?.[1] ?? 'image/jpeg';
+    const ext       = mimeType.split('/')[1];
+    const key       = `firms/${id}/logo.${ext}`;
+
+    const logoUrl = await uploadBase64Image(key, image);
+
+    await firmsService.updateFirm(id, { logo_url: logoUrl });
+
+    res.json({ data: { logo_url: logoUrl } });
+  } catch (err) {
+    logger.error('[firms.controller] uploadFirmLogo error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

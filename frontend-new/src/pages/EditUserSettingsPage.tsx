@@ -13,6 +13,7 @@ import Select from '../components/ui/Select';
 import FileUpload from '../components/ui/FileUpload';
 import ImageCropModal from '../components/ui/ImageCropModal';
 import Button from '../components/ui/Button';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
 import Input from '../components/ui/Input';
 import Checkbox from '../components/ui/Checkbox';
 import Badge from '../components/ui/Badge';
@@ -76,7 +77,12 @@ function UserSettingsForm({ userId, user }: { userId: string; user: User }) {
   }
 
   function saveEditSkill(skillId: string) {
-    setLocalSkills((p) => p.map((s) => s.id === skillId ? { ...s, experience: editSkillExp || null } : s));
+    const n = Number(editSkillExp);
+    if (!editSkillExp || isNaN(n) || n < 1 || n > 50) {
+      setToast({ message: 'Invalid experience — must be a number between 1 and 50.', isError: true });
+      return;
+    }
+    setLocalSkills((p) => p.map((s) => s.id === skillId ? { ...s, experience: editSkillExp } : s));
     setEditingSkillId(null);
   }
 
@@ -94,27 +100,46 @@ function UserSettingsForm({ userId, user }: { userId: string; user: User }) {
       return;
     }
 
-    // Block save if any skill is missing an experience level
+    // Block save if any skill is missing or has invalid experience (must be 1–50 years)
     const missingExp = localSkills.filter((s) => !s.experience);
     if (missingExp.length > 0) {
       const names = missingExp.map((s) => s.name).join(', ');
       setToast({
-        message: `Experience level required for: ${names}. Click the edit icon on the skill card to set it.`,
+        message: `Experience required for: ${names}. Click the edit icon to set years (1–50).`,
+        isError: true,
+      });
+      return;
+    }
+    const invalidExp = localSkills.filter((s) => {
+      const n = Number(s.experience);
+      return isNaN(n) || n < 1 || n > 50;
+    });
+    if (invalidExp.length > 0) {
+      const names = invalidExp.map((s) => s.name).join(', ');
+      setToast({
+        message: `Invalid experience for: ${names}. Must be a number between 1 and 50.`,
         isError: true,
       });
       return;
     }
     let finalAvatarUrl = avatarUrl;
     if (croppedUrl?.startsWith('data:')) {
-      try { finalAvatarUrl = (await profileApi.uploadAvatar(userId, croppedUrl)).avatar_url; } catch { /* local dev fallback */ }
+      try {
+        finalAvatarUrl = (await profileApi.uploadAvatar(userId, croppedUrl)).avatar_url;
+      } catch (uploadErr) {
+        setToast({ message: (uploadErr as Error).message || 'Failed to upload avatar. Please try a smaller image.', isError: true });
+        return;
+      }
     }
     const skills_with_experience = localSkills
       .filter((s) => !s.id.startsWith('temp-'))
       .map((s) => ({ skill_id: s.id, experience: s.experience ?? null }));
     try {
+      const fullName = [firstName, lastName].filter(Boolean).join(' ') || user.name;
       await updateUser.mutateAsync({
         id: userId,
         payload: {
+          name:           fullName,
           first_name:     firstName,
           last_name:      lastName,
           role,
@@ -137,9 +162,10 @@ function UserSettingsForm({ userId, user }: { userId: string; user: User }) {
     }
   }
 
-  const displayAvatar = croppedUrl ?? avatarUrl ?? undefined;
-  const displayTitle  = role.replace(/_/g, ' ');
-  const photoLabel    = firstName || user.first_name || user.name.split(' ')[0];
+  const displayAvatar   = croppedUrl ?? avatarUrl ?? undefined;
+  const displayTitle    = role.replace(/_/g, ' ');
+  const displayFullName = [firstName || user.first_name, lastName || user.last_name].filter(Boolean).join(' ') || user.name;
+  const photoLabel      = firstName || user.first_name || user.name.split(' ')[0];
   const statusOptions = isInvitedUser
     ? [{ value: 'invited', label: 'Invited' as const }]
     : [
@@ -156,7 +182,7 @@ function UserSettingsForm({ userId, user }: { userId: string; user: User }) {
 
           {/* Left: name + subtitle */}
           <div>
-            <h1 className="text-2xl font-bold text-[#181D27]">{user.name}</h1>
+            <h1 className="text-2xl font-bold text-[#181D27]">{displayFullName}</h1>
             <p className="text-sm text-gray-500 mt-0.5 capitalize">{displayTitle}</p>
           </div>
 
@@ -306,12 +332,21 @@ function UserSettingsForm({ userId, user }: { userId: string; user: User }) {
                         className="flex flex-col gap-2 bg-white border border-[#D5D7DA] rounded-lg p-3">
                         <span className="text-sm font-medium text-[#181D27]">{skill.name}</span>
                         <input
-                          type="text"
+                          type="number"
+                          min={1}
+                          max={50}
                           value={editSkillExp}
-                          onChange={(e) => setEditSkillExp(e.target.value)}
-                          placeholder="e.g. 2-5 years"
-                          className="text-sm border border-[#D5D7DA] rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#9E77ED] w-full"
+                          onChange={(e) => setEditSkillExp(e.target.value.replace(/[^0-9]/g, '').slice(0, 2))}
+                          placeholder="Years (1–50)"
+                          className={`text-sm border rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#9E77ED] w-full ${
+                            editSkillExp && Number(editSkillExp) > 50
+                              ? 'border-red-400 text-red-600'
+                              : 'border-[#D5D7DA]'
+                          }`}
                         />
+                        {editSkillExp && Number(editSkillExp) > 50 && (
+                          <p className="text-[10px] text-red-500">Invalid, max 50 years</p>
+                        )}
                         <div className="flex gap-2">
                           <Button size="sm" variant="primary" onClick={() => saveEditSkill(skill.id)}
                             className="flex-1">
@@ -328,7 +363,7 @@ function UserSettingsForm({ userId, user }: { userId: string; user: User }) {
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-[#181D27] truncate">{skill.name}</p>
                           <p className="text-sm text-gray-500 mt-0.5">
-                            {skill.experience ?? '—'} experience
+                            {skill.experience ? `${skill.experience} yr${Number(skill.experience) === 1 ? '' : 's'} experience` : '— experience'}
                           </p>
                         </div>
                         <div className="flex items-center gap-1 ml-2 shrink-0">
@@ -424,7 +459,7 @@ export default function EditUserSettingsPage() {
   if (isLoading) {
     return (
       <main className="flex-1 min-w-0 overflow-y-auto bg-white flex items-center justify-center">
-        <p className="text-sm text-gray-400">Loading…</p>
+        <LoadingSpinner />
       </main>
     );
   }

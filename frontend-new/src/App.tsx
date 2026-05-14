@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
+import NetworkErrorToast from './components/ui/NetworkErrorToast';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import AppLayout from './components/layout/AppLayout';
 import Dashboard from './pages/Dashboard';
@@ -20,6 +21,11 @@ import FirmDetailPage from './pages/FirmDetailPage';
 import AddFirmPage from './pages/AddFirmPage';
 import EditFirmPage from './pages/EditFirmPage';
 import EditUserSettingsPage from './pages/EditUserSettingsPage';
+import SharedProjectPage from './pages/SharedProjectPage';
+import TaskDetailPage from './pages/TaskDetailPage';
+import ProjectFullPage from './pages/ProjectFullPage';
+import MyTasksPage from './pages/MyTasksPage';
+import ProjectsSummaryPage from './pages/ProjectsSummaryPage';
 
 // ── Redirects to /login when no token is present ─────────────────────────────
 
@@ -51,7 +57,8 @@ function GuestRoute() {
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 60_000,       // 1 min before data is considered stale
+      staleTime: 30_000,       // 30s default for most data
+      gcTime:    600_000,      // 10 min — keep cache longer before GC
       retry:     1,
       refetchOnWindowFocus: false,
     },
@@ -75,8 +82,9 @@ export default function App() {
           </Route>
 
           {/* Public onboarding — accessible without auth (invite link) */}
-          <Route path="/onboarding"       element={<OnboardingPage />} />
-          <Route path="/reset-password"   element={<ResetPasswordPage />} />
+          <Route path="/onboarding"                    element={<OnboardingPage />} />
+          <Route path="/reset-password"                element={<ResetPasswordPage />} />
+          <Route path="/shared/project/:token"         element={<SharedProjectPage />} />
 
           {/* Protected app shell */}
           <Route element={<ProtectedRoute />}>
@@ -91,6 +99,10 @@ export default function App() {
               <Route path="/transcripts/:id/tasks"       element={<TranscriptTasksPage />} />
               <Route path="/firms/new"                   element={<AddFirmPage />} />
               <Route path="/firms/:id/edit"              element={<EditFirmPage />} />
+              <Route path="/my-tasks"                            element={<MyTasksPage />} />
+              <Route path="/projects"                            element={<ProjectsSummaryPage />} />
+              <Route path="/firms/:firmId/tasks/:taskId"          element={<TaskDetailPage />} />
+              <Route path="/firms/:firmId/projects/:projectId" element={<ProjectFullPage />} />
               <Route path="/firms/:id"                   element={<FirmDetailPage />} />
             </Route>
           </Route>
@@ -100,6 +112,7 @@ export default function App() {
         </Routes>
         </AuthProvider>
       </BrowserRouter>
+      <NetworkErrorToast />
       <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>
   );

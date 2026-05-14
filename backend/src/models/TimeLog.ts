@@ -6,7 +6,7 @@ export interface TimeLogAttributes {
   ticket_id: string;
   user_id: string;
   hours: number;
-  comment: string;
+  comment: string | null;
   log_type: string;
   revision_cycle: number;
   created_at: string;
@@ -23,7 +23,7 @@ class TimeLog extends Model<TimeLogAttributes, TimeLogCreationAttributes>
   declare ticket_id: string;
   declare user_id: string;
   declare hours: number;
-  declare comment: string;
+  declare comment: string | null;
   declare log_type: string;
   declare revision_cycle: number;
   declare created_at: string;
@@ -40,7 +40,7 @@ TimeLog.init(
     ticket_id: { type: DataTypes.UUID, allowNull: false },
     user_id: { type: DataTypes.UUID, allowNull: false },
     hours: { type: DataTypes.DECIMAL(5, 2), allowNull: false },
-    comment: { type: DataTypes.TEXT, allowNull: false, defaultValue: '' },
+    comment: { type: DataTypes.TEXT, allowNull: true, defaultValue: '' },
     log_type: { type: DataTypes.TEXT, allowNull: false },
     revision_cycle: {
       type: DataTypes.INTEGER,

@@ -1,5 +1,6 @@
+import { randomUUID } from 'crypto';
 import logger from '../../config/logger';
-import { Op } from 'sequelize';
+import { Op, UniqueConstraintError } from 'sequelize';
 import sequelize from '../../config/database';
 import { Project, Firm, Ticket, TimeLog, ProjectMember, User } from '../../models';
 import type { CreateProjectDto } from './dto/create-project.dto';
@@ -16,12 +17,16 @@ export interface ProjectRow {
   description:     string | null;
   status:          'active' | 'archived';
   workflow_status: WorkflowStatus;
+  start_date:      string | null;
+  end_date:        string | null;
+  priority:        'high' | 'medium' | 'low';
+  share_token:     string | null;
   created_at:      string;
   updated_at:      string;
 }
 
 export interface ProjectMemberRow {
-  user_id:    string;
+  id:         string;
   name:       string;
   email:      string;
   avatar_url: string | null;
@@ -78,7 +83,7 @@ async function fetchMembers(projectId: string): Promise<ProjectMemberRow[]> {
   return rows.map((row) => {
     const r = row as unknown as { user_id: string; added_at: string; user: { name: string; email: string; avatar_url: string | null } };
     return {
-      user_id:    r.user_id,
+      id:         r.user_id,
       name:       r.user?.name  ?? '',
       email:      r.user?.email ?? '',
       avatar_url: r.user?.avatar_url ?? null,
@@ -152,7 +157,7 @@ export async function findAllProjects(firmId?: string): Promise<ProjectWithStats
     const r = row as unknown as { project_id: string; user_id: string; added_at: string; user: { name: string; email: string; avatar_url: string | null } };
     if (!memberMap[r.project_id]) memberMap[r.project_id] = [];
     memberMap[r.project_id].push({
-      user_id:    r.user_id,
+      id:         r.user_id,
       name:       r.user?.name  ?? '',
       email:      r.user?.email ?? '',
       avatar_url: r.user?.avatar_url ?? null,
@@ -192,29 +197,37 @@ export async function getProjectOverview(id: string): Promise<ProjectOverview | 
   const base = await findProjectById(id);
   if (!base) return null;
 
-  const projectTasks = await Ticket.findAll({
-    where: { project_id: id, archived: false },
-    attributes: ['id', 'title', 'status', 'priority', 'assignee_id', 'deadline', 'project_id'],
-    order: [['updated_at', 'DESC']],
-    raw: true,
-  });
-
-  const taskList = projectTasks as unknown as Record<string, unknown>[];
-  const taskIds  = taskList.map((t) => t.id as string);
-  const timeMap: Record<string, number> = {};
-
-  if (taskIds.length > 0) {
-    const logs = await TimeLog.findAll({
+  // Fetch tasks and time logs concurrently — they are independent of each other.
+  // Time logs are fetched for the entire project in a single query keyed by ticket_id,
+  // so we don't need the task list first. Both queries run in parallel.
+  const [projectTasks, allProjectLogs] = await Promise.all([
+    Ticket.findAll({
+      where: { project_id: id, archived: false },
+      attributes: ['id', 'title', 'status', 'priority', 'assignee_id', 'deadline', 'project_id'],
+      order: [['updated_at', 'DESC']],
+      raw: true,
+    }),
+    TimeLog.findAll({
       where: {
-        ticket_id: { [Op.in]: taskIds },
-        log_type:  { [Op.notIn]: ['final', 'revision', 'transition'] },
+        // Use a sub-select via sequelize.literal to filter by project in one shot
+        // rather than waiting for the task list first.
+        ticket_id: {
+          [Op.in]: sequelize.literal(
+            `(SELECT id FROM tickets WHERE project_id = '${id}' AND archived = false)`,
+          ),
+        },
+        log_type: { [Op.notIn]: ['final', 'revision', 'transition'] },
       },
       attributes: ['ticket_id', 'hours'],
       raw: true,
-    });
-    for (const l of logs as unknown as { ticket_id: string; hours: number }[]) {
-      timeMap[l.ticket_id] = (timeMap[l.ticket_id] ?? 0) + Number(l.hours ?? 0);
-    }
+    }),
+  ]);
+
+  const taskList = projectTasks as unknown as Record<string, unknown>[];
+  const timeMap: Record<string, number> = {};
+
+  for (const l of allProjectLogs as unknown as { ticket_id: string; hours: number }[]) {
+    timeMap[l.ticket_id] = (timeMap[l.ticket_id] ?? 0) + Number(l.hours ?? 0);
   }
 
   const STATUS_GROUP: Record<string, string> = {
@@ -264,20 +277,31 @@ export async function getProjectOverview(id: string): Promise<ProjectOverview | 
 }
 
 export async function createProject(dto: CreateProjectDto): Promise<ProjectWithStats> {
-  const { firm_id, name, description, workflow_status = 'todo', member_ids = [] } = dto;
+  const { firm_id, name, description, workflow_status = 'todo', member_ids = [], start_date, end_date, priority } = dto;
 
   const firm = await Firm.findByPk(firm_id, { attributes: ['id'], raw: true });
   if (!firm) {
     throw Object.assign(new Error('Firm not found'), { statusCode: 404 });
   }
 
-  const project = await Project.create({
-    firm_id,
-    name:            name.trim(),
-    description:     description?.trim() ?? null,
-    status:          'active',
-    workflow_status: workflow_status as WorkflowStatus,
-  });
+  let project;
+  try {
+    project = await Project.create({
+      firm_id,
+      name:            name.trim(),
+      description:     description?.trim() ?? null,
+      status:          'active',
+      workflow_status: workflow_status as WorkflowStatus,
+      start_date:      start_date ?? null,
+      end_date:        end_date   ?? null,
+      priority:        priority   ?? 'medium',
+    });
+  } catch (err) {
+    if (err instanceof UniqueConstraintError) {
+      throw Object.assign(new Error('A project with this name already exists for this firm'), { statusCode: 409 });
+    }
+    throw err;
+  }
 
   if (member_ids.length > 0) {
     await syncMembers(project.id, member_ids);
@@ -333,13 +357,104 @@ export async function toggleProjectArchive(id: string): Promise<ProjectRow | nul
   return updated ? (updated as unknown as ProjectRow) : null;
 }
 
-export async function deleteProject(id: string): Promise<{ deleted: boolean; hasTickets: boolean }> {
+const ACTIVE_TASK_STATUSES = ['to_do'];
+
+export async function getProjectTasks(id: string): Promise<{ id: string; title: string; status: string; priority: string; parent_task_id: string | null }[]> {
+  const rows = await Ticket.findAll({
+    where: {
+      project_id: id,
+      status: { [Op.in]: ACTIVE_TASK_STATUSES },
+    },
+    attributes: ['id', 'title', 'status', 'priority', 'parent_task_id'],
+    order: [['created_at', 'ASC']],
+    raw: true,
+  });
+  return rows as unknown as { id: string; title: string; status: string; priority: string; parent_task_id: string | null }[];
+}
+
+// ── Share token ───────────────────────────────────────────────────────────────
+
+export async function generateShareToken(projectId: string): Promise<{ share_token: string } | null> {
+  const project = await Project.findByPk(projectId, { attributes: ['id', 'share_token'], raw: true });
+  if (!project) return null;
+
+  const p = project as unknown as { id: string; share_token: string | null };
+  if (p.share_token) return { share_token: p.share_token };
+
+  const token = randomUUID();
+  await Project.update({ share_token: token }, { where: { id: projectId } });
+  return { share_token: token };
+}
+
+export interface PublicProjectView {
+  id:              string;
+  name:            string;
+  description:     string | null;
+  workflow_status: WorkflowStatus;
+  firm_name:       string | null;
+  members:         { id: string; name: string; avatar_url: string | null }[];
+  task_totals:     { total: number; todo: number; in_progress: number; in_review: number; completed: number };
+}
+
+export async function getPublicProjectView(shareToken: string): Promise<PublicProjectView | null> {
+  const project = await Project.findOne({ where: { share_token: shareToken }, raw: true });
+  if (!project) return null;
+
+  const p = project as unknown as ProjectRow;
+
+  const [firmRow, members, tasks] = await Promise.all([
+    Firm.findByPk(p.firm_id, { attributes: ['name'], raw: true }),
+    fetchMembers(p.id),
+    Ticket.findAll({ where: { project_id: p.id, archived: false }, attributes: ['status'], raw: true }),
+  ]);
+
+  const STATUS_GROUP: Record<string, string> = {
+    draft: 'todo', in_progress: 'in_progress', revisions: 'in_progress',
+    internal_review: 'in_review', client_review: 'in_review', compliance_review: 'in_review',
+    approved: 'completed', closed: 'completed', discarded: 'completed',
+  };
+
+  const totals = { total: 0, todo: 0, in_progress: 0, in_review: 0, completed: 0 };
+  for (const t of tasks as unknown as { status: string }[]) {
+    totals.total++;
+    const g = STATUS_GROUP[t.status] as keyof typeof totals | undefined;
+    if (g && g !== 'total') totals[g]++;
+  }
+
+  return {
+    id:              p.id,
+    name:            p.name,
+    description:     p.description,
+    workflow_status: p.workflow_status,
+    firm_name:       (firmRow as unknown as { name: string } | null)?.name ?? null,
+    members:         members.map((m) => ({ id: m.id, name: m.name, avatar_url: m.avatar_url })),
+    task_totals:     totals,
+  };
+}
+
+export async function deleteProject(
+  id: string,
+  taskIdsToDelete: string[] = [],
+): Promise<{ deleted: boolean; hasTickets: boolean; projectDeleted: boolean }> {
   const existing = await Project.findByPk(id, { attributes: ['id'], raw: true });
-  if (!existing) return { deleted: false, hasTickets: false };
+  if (!existing) return { deleted: false, hasTickets: false, projectDeleted: false };
 
-  const ticketCount = await Ticket.count({ where: { project_id: id } });
-  if (ticketCount > 0) return { deleted: false, hasTickets: true };
+  // Delete the selected tasks (and their assignees)
+  if (taskIdsToDelete.length > 0) {
+    const { TaskAssignee } = await import('../../models');
+    await TaskAssignee.destroy({ where: { task_id: { [Op.in]: taskIdsToDelete } } });
+    await Ticket.destroy({ where: { id: { [Op.in]: taskIdsToDelete }, project_id: id } });
+  }
 
+  // Check if any tasks remain
+  const remainingCount = await Ticket.count({ where: { project_id: id } });
+
+  if (remainingCount > 0) {
+    // Tasks remain — project stays, only selected tasks were deleted
+    return { deleted: true, hasTickets: true, projectDeleted: false };
+  }
+
+  // No tasks remain — delete the project
   await Project.destroy({ where: { id } });
-  return { deleted: true, hasTickets: false };
+  return { deleted: true, hasTickets: false, projectDeleted: true };
 }

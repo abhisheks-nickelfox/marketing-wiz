@@ -4,14 +4,24 @@ import { Op } from 'sequelize';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
+export interface NotificationActor {
+  id:         string;
+  name:       string;
+  avatar_url: string | null;
+}
+
 export interface NotificationRow {
-  id: string;
-  user_id: string;
-  ticket_id: string | null;
-  title: string;
-  message: string;
-  read: boolean;
+  id:         string;
+  user_id:    string;
+  ticket_id:  string | null;
+  scope:      string;
+  scope_id:   string | null;
+  actor_id:   string | null;
+  title:      string;
+  message:    string;
+  read:       boolean;
   created_at: string;
+  actor:      NotificationActor | null;
 }
 
 // ── Service methods ──────────────────────────────────────────────────────────
@@ -19,12 +29,36 @@ export interface NotificationRow {
 export async function findNotificationsByUser(userId: string): Promise<NotificationRow[]> {
   const rows = await Notification.findAll({
     where: { user_id: userId },
+    include: [
+      {
+        model: User,
+        as: 'actor',
+        attributes: ['id', 'name', 'avatar_url'],
+        required: false,
+      },
+    ],
     order: [['created_at', 'DESC']],
     limit: 30,
-    raw: true,
+    raw: false,
   });
 
-  return rows as unknown as NotificationRow[];
+  return rows.map((r) => {
+    const json = r.toJSON() as unknown as Record<string, unknown>;
+    const actor = json['actor'] as NotificationActor | null;
+    return {
+      id:         r.id,
+      user_id:    r.user_id,
+      ticket_id:  r.ticket_id,
+      scope:      r.scope ?? 'task',
+      scope_id:   r.scope_id ?? null,
+      actor_id:   r.actor_id,
+      title:      r.title ?? '',
+      message:    r.message,
+      read:       r.read,
+      created_at: r.created_at,
+      actor:      actor ?? null,
+    };
+  });
 }
 
 export async function countUnreadByUser(userId: string): Promise<number> {
@@ -53,7 +87,7 @@ export async function markAllNotificationsRead(userId: string): Promise<void> {
  */
 export async function notifyAdmins(message: string, type: string): Promise<void> {
   const admins = await User.findAll({
-    where: { role: { [Op.in]: ['admin', 'super_admin'] } },
+    where: { role: 'admin' },
     attributes: ['id'],
     raw: true,
   });
@@ -83,9 +117,26 @@ export async function notifyAdmins(message: string, type: string): Promise<void>
  * Creates an inbox notification for a single user.
  * Fire-and-forget safe — errors are logged but not re-thrown.
  */
-export async function notifyUser(userId: string, title: string, message: string): Promise<void> {
+export async function notifyUser(
+  userId:   string,
+  title:    string,
+  message:  string,
+  actorId?: string,
+  type     = 'general',
+  scope    = 'task',
+  scopeId?: string,
+): Promise<void> {
   try {
-    await Notification.create({ user_id: userId, title, message, read: false });
+    await Notification.create({
+      user_id:  userId,
+      actor_id: actorId ?? null,
+      title,
+      message,
+      read:     false,
+      type,
+      scope,
+      scope_id: scopeId ?? null,
+    });
   } catch (err) {
     logger.error('[notifications.service] notifyUser error:', err);
   }

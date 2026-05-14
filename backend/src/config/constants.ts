@@ -16,7 +16,7 @@ export const VALID_ROLES = ['admin', 'member', 'project_manager'] as const;
 export type UserRole = typeof VALID_ROLES[number];
 
 /** Roles that count as elevated/admin for RBAC purposes. */
-export const ADMIN_ROLES: UserRole[] = ['admin'];
+export const ADMIN_ROLES: UserRole[] = ['admin', 'project_manager'];
 
 /** Roles that count as members (any authenticated user). */
 export const MEMBER_ROLES: UserRole[] = ['admin', 'member', 'project_manager'];

@@ -14,6 +14,11 @@ export { default as UserSkill } from './UserSkill';
 export { default as Project } from './Project';
 export { default as ProjectMember } from './ProjectMember';
 export { default as OrgSettings } from './OrgSettings';
+export { default as TaskAssignee } from './TaskAssignee';
+export { default as Message } from './Message';
+export { default as MessageReaction } from './MessageReaction';
+export { default as MessageRead } from './MessageRead';
+export { default as TaskAttachment } from './TaskAttachment';
 
 // ── Associations ─────────────────────────────────────────────────────────────
 // Define once here so models can be imported in any order without circular-ref issues.
@@ -24,6 +29,11 @@ import UserSkill from './UserSkill';
 import Project from './Project';
 import Firm from './Firm';
 import ProjectMember from './ProjectMember';
+import TaskAssignee from './TaskAssignee';
+import Ticket from './Ticket';
+import Message from './Message';
+import MessageReaction from './MessageReaction';
+import MessageRead from './MessageRead';
 
 // user_skills join: UserSkill belongs to User and Skill
 UserSkill.belongsTo(Skill, { foreignKey: 'skill_id', as: 'skill' });
@@ -40,3 +50,23 @@ User.hasMany(ProjectMember, { foreignKey: 'user_id', as: 'project_memberships' }
 // firm → projects
 Project.belongsTo(Firm, { foreignKey: 'firm_id', as: 'firm' });
 Firm.hasMany(Project, { foreignKey: 'firm_id', as: 'projects' });
+
+// task_assignees join
+TaskAssignee.belongsTo(Ticket, { foreignKey: 'task_id', as: 'task' });
+TaskAssignee.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+Ticket.hasMany(TaskAssignee, { foreignKey: 'task_id', as: 'task_assignees' });
+User.hasMany(TaskAssignee, { foreignKey: 'user_id', as: 'task_assignments' });
+
+// messages: author join, reactions join
+Message.belongsTo(User, { foreignKey: 'user_id', as: 'author' });
+User.hasMany(Message, { foreignKey: 'user_id', as: 'messages' });
+MessageReaction.belongsTo(Message, { foreignKey: 'message_id', as: 'message' });
+Message.hasMany(MessageReaction, { foreignKey: 'message_id', as: 'reactions' });
+MessageReaction.belongsTo(User, { foreignKey: 'user_id', as: 'reactor' });
+User.hasMany(MessageReaction, { foreignKey: 'user_id', as: 'message_reactions' });
+
+// message_reads: read receipts
+MessageRead.belongsTo(Message, { foreignKey: 'message_id', as: 'message' });
+Message.hasMany(MessageRead, { foreignKey: 'message_id', as: 'reads' });
+MessageRead.belongsTo(User, { foreignKey: 'user_id', as: 'reader' });
+User.hasMany(MessageRead, { foreignKey: 'user_id', as: 'message_reads' });

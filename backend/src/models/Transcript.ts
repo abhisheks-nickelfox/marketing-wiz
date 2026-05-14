@@ -3,12 +3,12 @@ import sequelize from '../config/database';
 
 export interface TranscriptAttributes {
   id: string;
-  fireflies_id: string;
+  fireflies_id: string | null;
   title: string;
-  call_date: string;
-  duration_sec: number;
-  participants: string[];
-  raw_transcript: string;
+  call_date: string | null;
+  duration_sec: number | null;
+  participants: string[] | null;
+  raw_transcript: string | null;
   firm_id: string | null;
   archived: boolean;
   fetched_at: string | null;
@@ -17,19 +17,19 @@ export interface TranscriptAttributes {
 }
 
 export interface TranscriptCreationAttributes extends Optional<TranscriptAttributes,
-  'id' | 'duration_sec' | 'participants' | 'firm_id' | 'archived' |
-  'fetched_at' | 'source' | 'created_at'
+  'id' | 'call_date' | 'duration_sec' | 'participants' | 'raw_transcript' |
+  'firm_id' | 'archived' | 'fetched_at' | 'source' | 'created_at'
 > {}
 
 class Transcript extends Model<TranscriptAttributes, TranscriptCreationAttributes>
   implements TranscriptAttributes {
   declare id: string;
-  declare fireflies_id: string;
+  declare fireflies_id: string | null;
   declare title: string;
-  declare call_date: string;
-  declare duration_sec: number;
-  declare participants: string[];
-  declare raw_transcript: string;
+  declare call_date: string | null;
+  declare duration_sec: number | null;
+  declare participants: string[] | null;
+  declare raw_transcript: string | null;
   declare firm_id: string | null;
   declare archived: boolean;
   declare fetched_at: string | null;
@@ -44,20 +44,14 @@ Transcript.init(
       primaryKey: true,
       defaultValue: DataTypes.UUIDV4,
     },
-    fireflies_id: { type: DataTypes.TEXT, allowNull: false, unique: true },
+    // allowNull: true — manual transcripts have no Fireflies ID; unique constraint
+    // still prevents two Fireflies syncs from creating duplicate rows.
+    fireflies_id: { type: DataTypes.TEXT, allowNull: true, unique: true },
     title: { type: DataTypes.TEXT, allowNull: false },
-    call_date: { type: DataTypes.DATE, allowNull: false },
-    duration_sec: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      defaultValue: 0,
-    },
-    participants: {
-      type: DataTypes.ARRAY(DataTypes.TEXT),
-      allowNull: false,
-      defaultValue: [],
-    },
-    raw_transcript: { type: DataTypes.TEXT, allowNull: false, defaultValue: '' },
+    call_date: { type: DataTypes.DATE, allowNull: true },
+    duration_sec: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 0 },
+    participants: { type: DataTypes.JSONB, allowNull: true, defaultValue: [] },
+    raw_transcript: { type: DataTypes.TEXT, allowNull: true, defaultValue: '' },
     firm_id: { type: DataTypes.UUID, allowNull: true },
     archived: {
       type: DataTypes.BOOLEAN,

@@ -456,3 +456,70 @@ export async function sendSkillRequestEmail(
     html:    baseTemplate(content),
   });
 }
+
+/** Urgent-priority alert sent to every assignee of a task. */
+export async function sendUrgentTaskEmail(
+  userEmail: string,
+  userName:  string,
+  taskTitle: string,
+  taskId:    string,
+): Promise<void> {
+  const firstName = userName.trim().split(/\s+/)[0] ?? 'there';
+  const taskUrl   = `${APP_URL}/tasks/${taskId}`;
+
+  const content = `
+    <!-- Red alert banner -->
+    <div style="background:#FFF1F3;border:1px solid #FEA3B4;border-radius:8px;
+                padding:14px 18px;margin-bottom:28px;display:flex;align-items:center;gap:10px;">
+      <span style="font-size:20px;line-height:1;">🚨</span>
+      <span style="font-size:13px;font-weight:700;color:#C01048;letter-spacing:0.2px;">
+        URGENT PRIORITY — IMMEDIATE ACTION REQUIRED
+      </span>
+    </div>
+
+    <h2 style="font-size:22px;font-weight:700;color:#181D27;margin:0 0 8px;">
+      Task marked as Urgent
+    </h2>
+    <p style="font-size:15px;color:#535862;margin:0 0 24px;line-height:1.6;">
+      Hi <strong>${firstName}</strong>, a task assigned to you has been escalated to
+      <strong style="color:#C01048;">Urgent</strong> priority and requires your immediate attention.
+    </p>
+
+    <!-- Task card -->
+    <table width="100%" cellpadding="0" cellspacing="0"
+      style="border-collapse:collapse;border-radius:8px;overflow:hidden;
+             border:2px solid #FEA3B4;margin-bottom:28px;">
+      <tbody>
+        <tr style="background:#FFF1F3;">
+          <td style="padding:6px 16px;">
+            <span style="display:inline-block;background:#C01048;color:#fff;font-size:10px;
+                         font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+                         padding:3px 8px;border-radius:4px;">Urgent</span>
+          </td>
+        </tr>
+        <tr style="background:#ffffff;">
+          <td style="padding:16px;">
+            <p style="margin:0;font-size:15px;font-weight:600;color:#181D27;">${taskTitle}</p>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <a href="${taskUrl}"
+      style="display:inline-block;background:#C01048;color:#ffffff;text-decoration:none;
+             font-weight:600;font-size:14px;padding:13px 28px;border-radius:8px;
+             letter-spacing:0.1px;">
+      View Task →
+    </a>
+
+    <p style="font-size:13px;color:#A4A7AE;margin:28px 0 0;line-height:1.6;">
+      Please review this task as soon as possible. If you have questions, contact your project manager.
+    </p>
+  `;
+
+  await sendEmail({
+    to:      userEmail,
+    subject: `🚨 Urgent task: "${taskTitle}"`,
+    html:    baseTemplate(content),
+  });
+}

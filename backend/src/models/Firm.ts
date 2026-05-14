@@ -5,6 +5,7 @@ export interface FirmAttributes {
   id: string;
   name: string;
   location: string | null;
+  address: string | null;
   website: string | null;
   logo_url: string | null;
   description: string | null;
@@ -18,7 +19,7 @@ export interface FirmAttributes {
 }
 
 export interface FirmCreationAttributes extends Optional<FirmAttributes,
-  'id' | 'location' | 'website' | 'logo_url' | 'description' |
+  'id' | 'location' | 'address' | 'website' | 'logo_url' | 'description' |
   'contact_name' | 'contact_email' | 'contact_role' | 'contact_phone' |
   'account_manager_id' | 'default_prompt_id' | 'created_at'
 > {}
@@ -28,6 +29,7 @@ class Firm extends Model<FirmAttributes, FirmCreationAttributes>
   declare id: string;
   declare name: string;
   declare location: string | null;
+  declare address: string | null;
   declare website: string | null;
   declare logo_url: string | null;
   declare description: string | null;
@@ -49,6 +51,7 @@ Firm.init(
     },
     name: { type: DataTypes.TEXT, allowNull: false, unique: true },
     location: { type: DataTypes.TEXT, allowNull: true },
+    address: { type: DataTypes.TEXT, allowNull: true },
     website: { type: DataTypes.TEXT, allowNull: true },
     logo_url: { type: DataTypes.TEXT, allowNull: true },
     description: { type: DataTypes.TEXT, allowNull: true },

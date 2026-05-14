@@ -1,8 +1,11 @@
 import { body, param } from 'express-validator';
 import { VALID_ROLES, VALID_USER_STATUSES } from '../../config/constants';
 
+const nameLetterCheck = (field: string) =>
+  body(field).optional().trim().notEmpty().matches(/[a-zA-Z]/).withMessage(`${field} must contain at least one letter`);
+
 export const createUserValidation = [
-  body('name').optional().trim().notEmpty().withMessage('Name cannot be blank'),
+  body('name').optional().trim().notEmpty().matches(/[a-zA-Z]/).withMessage('Name must contain at least one letter'),
   body('email').isEmail().withMessage('Valid email is required'),
   body('password')
     .optional()
@@ -43,9 +46,9 @@ export const createUserValidation = [
 ];
 
 export const updateUserValidation = [
-  body('name').optional().trim().notEmpty().withMessage('Name cannot be blank'),
-  body('first_name').optional().trim().isString().withMessage('first_name must be a string'),
-  body('last_name').optional().trim().isString().withMessage('last_name must be a string'),
+  body('name').optional().trim().notEmpty().matches(/[a-zA-Z]/).withMessage('Name must contain at least one letter'),
+  nameLetterCheck('first_name'),
+  nameLetterCheck('last_name'),
   body('phone_number')
     .optional({ nullable: true, checkFalsy: true })
     .trim()
@@ -97,8 +100,12 @@ export const updateUserValidation = [
     .withMessage('Each skill_id must be a valid UUID'),
   body('skills_with_experience.*.experience')
     .optional({ nullable: true })
-    .isString()
-    .withMessage('experience must be a string or null'),
+    .custom((val) => {
+      if (val === null || val === undefined || val === '') return true;
+      const n = Number(val);
+      if (isNaN(n) || n < 1 || n > 50) throw new Error('Experience must be a number between 1 and 50');
+      return true;
+    }),
 ];
 
 export const uploadAvatarValidation = [

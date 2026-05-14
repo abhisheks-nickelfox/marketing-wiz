@@ -12,6 +12,7 @@ import {
 import type { Step1State, Step2State } from '../components/firms/FirmStepForms';
 import { useCreateFirm } from '../hooks/useFirms';
 import { useUsers } from '../hooks/useUsers';
+import { firmsApi } from '../lib/api';
 
 type StepId = 1 | 2 | 3;
 
@@ -20,13 +21,15 @@ export default function AddFirmPage() {
   const createFirm   = useCreateFirm();
   const { data: users = [] } = useUsers();
 
-  const [step, setStep]         = useState<StepId>(1);
-  const [apiError, setApiError] = useState('');
-  const [showToast, setShowToast] = useState(false);
+  const [step, setStep]             = useState<StepId>(1);
+  const [apiError, setApiError]     = useState('');
+  const [nameApiError, setNameApiError] = useState('');
+  const [showToast, setShowToast]   = useState(false);
 
   const [step1, setStep1] = useState<Step1State>({
     name:        '',
     location:    '',
+    address:     '',
     website:     '',
     logoFile:    null,
     logoPreview: null,
@@ -55,6 +58,7 @@ export default function AddFirmPage() {
 
   async function handleStep3Submit() {
     setApiError('');
+    setNameApiError('');
     try {
       const e164 = step2.contactPhone
         ? buildE164Phone(step2.contactPhone, step2.contactCountry)
@@ -63,9 +67,9 @@ export default function AddFirmPage() {
       const firm = await createFirm.mutateAsync({
         name:               step1.name.trim(),
         location:           step1.location.trim()    || null,
+        address:            step1.address.trim()     || null,
         website:            step1.website.trim()     || null,
         description:        step1.description.trim() || null,
-        logo_url:           step1.logoPreview        ?? null,
         contact_name:       step2.contactName.trim()  || null,
         contact_role:       step2.contactRole.trim()  || null,
         contact_email:      step2.contactEmail.trim() || null,
@@ -73,10 +77,21 @@ export default function AddFirmPage() {
         account_manager_id: selectedManagerId         || null,
       });
 
+      // Upload logo to S3 after firm is created so we have the firm ID for the key
+      if (step1.logoPreview) {
+        await firmsApi.uploadLogo(firm.id, step1.logoPreview);
+      }
+
       setShowToast(true);
       setTimeout(() => navigate(`/firms/${firm.id}`), 1500);
     } catch (err) {
-      setApiError((err as Error).message);
+      const msg = (err as Error).message;
+      if (msg.toLowerCase().includes('already exists')) {
+        setNameApiError(msg);
+        setStep(1);
+      } else {
+        setApiError(msg);
+      }
     }
   }
 
@@ -123,10 +138,14 @@ export default function AddFirmPage() {
               {step === 1 && (
                 <Step1Form
                   state={step1}
-                  onChange={(patch) => setStep1((s) => ({ ...s, ...patch }))}
+                  onChange={(patch) => {
+                    if (patch.name !== undefined) setNameApiError('');
+                    setStep1((s) => ({ ...s, ...patch }));
+                  }}
                   onSubmit={handleStep1Submit}
                   isPending={isPending}
                   error={apiError}
+                  apiNameError={nameApiError}
                 />
               )}
 

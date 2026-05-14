@@ -18,6 +18,7 @@ import {
 } from './time-logs.validation';
 import * as tasksController from './tasks.controller';
 import * as timeLogsController from './time-logs.controller';
+import * as attachmentsController from './attachments.controller';
 
 const router = Router();
 
@@ -32,6 +33,9 @@ router.get('/', requireMember, tasksController.listTasks);
 
 // GET  /api/tasks/:id
 router.get('/:id', requireMember, tasksController.getTask);
+
+// GET  /api/tasks/:id/subtasks — list direct sub-tasks for a parent task
+router.get('/:id/subtasks', requireMember, tasksController.listSubTasks);
 
 // PATCH /api/tasks/:id — admin: full edit; member: estimated_hours only
 router.patch('/:id', requireMember, updateTaskValidation, tasksController.updateTask);
@@ -56,6 +60,17 @@ router.patch('/:id/archive', requireAdmin, archiveTaskValidation, tasksControlle
 
 // PATCH /api/tasks/:id/transition — admin only
 router.patch('/:id/transition', requireAdmin, transitionTaskValidation, tasksController.transitionTask);
+
+// ─── Attachment sub-resource ──────────────────────────────────────────────────
+
+// GET    /api/tasks/:id/attachments — list attachments for a task
+router.get('/:id/attachments', requireMember, attachmentsController.listAttachments);
+
+// POST   /api/tasks/:id/attachments — upload an attachment
+router.post('/:id/attachments', requireMember, attachmentsController.uploadAttachment);
+
+// DELETE /api/tasks/:id/attachments/:attId — delete an attachment
+router.delete('/:id/attachments/:attId', requireMember, attachmentsController.deleteAttachment);
 
 // ─── Time-log sub-resource ────────────────────────────────────────────────────
 

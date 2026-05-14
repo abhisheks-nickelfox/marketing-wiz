@@ -27,6 +27,10 @@ export async function createTask(req: AuthenticatedRequest, res: Response): Prom
       res.status(404).json({ error: e.message });
       return;
     }
+    if (e.statusCode === 400) {
+      res.status(400).json({ error: e.message });
+      return;
+    }
     logger.error('[tasks.controller] createTask error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -36,13 +40,20 @@ export async function createTask(req: AuthenticatedRequest, res: Response): Prom
 
 export async function listTasks(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const enriched = await tasksService.findAllTasks({
-      userId: req.user!.id,
-      userRole: req.user!.role,
+    const result = await tasksService.findAllTasks({
+      userId:          req.user!.id,
+      userRole:        req.user!.role,
       userPermissions: req.user!.permissions ?? [],
-      filters: req.query as Record<string, string>,
+      filters:         req.query as Record<string, string>,
     });
-    res.json({ data: enriched });
+    // Return data + pagination metadata at the top level so clients can read
+    // total/page/limit without unwrapping a nested object.
+    res.json({
+      data:  result.data,
+      total: result.total,
+      page:  result.page,
+      limit: result.limit,
+    });
   } catch (err) {
     logger.error('[tasks.controller] listTasks error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -79,6 +90,26 @@ export async function getTask(req: AuthenticatedRequest, res: Response): Promise
   }
 }
 
+// ─── GET /api/tasks/:id/subtasks ─────────────────────────────────────────────
+
+export async function listSubTasks(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const { id } = req.params;
+
+  try {
+    const subtasks = await tasksService.getSubTasks(id);
+
+    if (subtasks === null) {
+      res.status(404).json({ error: 'Parent task not found' });
+      return;
+    }
+
+    res.json({ data: subtasks });
+  } catch (err) {
+    logger.error('[tasks.controller] listSubTasks error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
 // ─── PATCH /api/tasks/:id ─────────────────────────────────────────────────────
 
 export async function updateTask(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -102,14 +133,7 @@ export async function updateTask(req: AuthenticatedRequest, res: Response): Prom
     const updates: Record<string, unknown> = {};
 
     if (ADMIN_ROLES.includes(req.user!.role as 'admin')) {
-      if (
-        existing.status === 'completed' ||
-        existing.status === 'blocked'
-      ) {
-        res.status(400).json({ error: 'Cannot edit a completed or blocked task' });
-        return;
-      }
-      const adminFields = ['title', 'description', 'type', 'priority', 'change_note'];
+      const adminFields = ['title', 'description', 'type', 'priority', 'change_note', 'assignee_id', 'assignee_ids', 'deadline', 'project_id', 'status'];
       for (const f of adminFields) {
         if (f in req.body) updates[f] = (req.body as Record<string, unknown>)[f];
       }
@@ -330,11 +354,6 @@ export async function deleteTask(req: AuthenticatedRequest, res: Response): Prom
 
     if (!task) {
       res.status(404).json({ error: 'Task not found' });
-      return;
-    }
-
-    if (task.status !== 'blocked') {
-      res.status(400).json({ error: 'Only blocked tasks can be permanently deleted' });
       return;
     }
 

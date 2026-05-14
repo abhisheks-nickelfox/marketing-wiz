@@ -4,13 +4,11 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import cron from 'node-cron';
-import bcrypt from 'bcrypt';
 import routes from './routes/index';
 import { syncTranscripts } from './services/fireflies.service';
 import { connectDB } from './config/database';
 // Import models index to register all models and associations
 import './models/index';
-import { User } from './models';
 
 dotenv.config();
 
@@ -26,6 +24,7 @@ const allowedOrigins = [
   'http://3.27.124.90',
   'http://app.aiwealthconnections.com',
   'https://app.aiwealthconnections.com',
+  'https://app.dev.aiwealthconnections.foxlabs.in',
   process.env.FRONTEND_URL,
 ].filter(Boolean) as string[];
 
@@ -40,8 +39,8 @@ const corsOptions: cors.CorsOptions = {
 app.options('*', cors(corsOptions));
 app.use(cors(corsOptions));
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
@@ -59,45 +58,6 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   logger.error('[server] Unhandled error:', err);
   res.status(500).json({ error: 'Internal server error' });
 });
-
-// ─── Admin seed ───────────────────────────────────────────────────────────────
-//
-// On startup, if no user exists for the configured email, create the bootstrap
-// admin account with a bcrypt-hashed password.
-// Safe to run on every restart — short-circuits if the email already exists.
-
-async function seedAdmin(): Promise<void> {
-  const email    = process.env.SUPER_ADMIN_EMAIL?.trim();
-  const password = process.env.SUPER_ADMIN_PASSWORD?.trim();
-  const name     = process.env.SUPER_ADMIN_NAME?.trim() ?? 'Admin';
-
-  if (!email || !password) return; // not configured — skip
-
-  try {
-    const existing = await User.findOne({
-      where: { email: email.toLowerCase() },
-      attributes: ['id'],
-      raw: true,
-    });
-
-    if (existing) {
-      logger.info('[seed] Admin already exists — skipping admin seed.');
-      return;
-    }
-
-    await User.create({
-      email: email.toLowerCase(),
-      name,
-      role:         'admin',
-      permissions:  [],
-      status:       'Active',
-    });
-
-    logger.info(`[seed] Admin created — email: ${email}`);
-  } catch (err) {
-    logger.error('[seed] seedAdmin threw unexpectedly:', err);
-  }
-}
 
 // ─── Fireflies sync cron (every 15 minutes) ──────────────────────────────────
 
@@ -125,7 +85,6 @@ if (process.env.NODE_ENV !== 'test') {
     .then(() => {
       app.listen(PORT, '0.0.0.0', () => {
         logger.info(`MarketingWiz API running on port ${PORT}`);
-        void seedAdmin();
         void runFirefliesSync();
       });
     })

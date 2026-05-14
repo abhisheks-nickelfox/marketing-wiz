@@ -119,7 +119,9 @@ export async function resetPassword(req: Request, res: Response): Promise<void> 
       return;
     }
 
-    // Password is managed by Supabase Auth — no local hash stored
+    const password_hash = await bcrypt.hash(password, 12);
+    await User.update({ password_hash }, { where: { id: user.id } });
+
     sendPasswordChangedEmail(user.email, user.name ?? '').catch((err) =>
       logger.error('[auth.controller] sendPasswordChangedEmail error:', err),
     );
@@ -149,8 +151,27 @@ export async function changePassword(req: AuthenticatedRequest, res: Response): 
   try {
     const user = req.user!;
 
-    // Password is managed by Supabase Auth — no local hash stored
-    sendPasswordChangedEmail(user.email, user.name ?? '').catch((err) =>
+    // Fetch current password_hash from DB
+    const dbUser = await User.findByPk(user.id, {
+      attributes: ['id', 'email', 'name', 'password_hash'],
+      raw: true,
+    }) as { id: string; email: string; name: string; password_hash: string | null } | null;
+
+    if (!dbUser?.password_hash) {
+      res.status(400).json({ error: 'No password set on this account' });
+      return;
+    }
+
+    const match = await bcrypt.compare(current_password, dbUser.password_hash);
+    if (!match) {
+      res.status(401).json({ error: 'Current password is incorrect' });
+      return;
+    }
+
+    const password_hash = await bcrypt.hash(new_password, 12);
+    await User.update({ password_hash }, { where: { id: user.id } });
+
+    sendPasswordChangedEmail(dbUser.email, dbUser.name ?? '').catch((err) =>
       logger.error('[auth.controller] sendPasswordChangedEmail error:', err),
     );
 

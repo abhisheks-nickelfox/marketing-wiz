@@ -8,7 +8,7 @@ export const loginValidation = [
 
 // Validation for PATCH /api/auth/profile
 export const updateProfileValidation = [
-  body('name').notEmpty().withMessage('Name is required').isString(),
+  body('name').trim().notEmpty().matches(/[a-zA-Z]/).withMessage('Name must contain at least one letter'),
 ];
 
 // Validation for POST /api/auth/forgot-password

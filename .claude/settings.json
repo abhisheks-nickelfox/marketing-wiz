@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(PGPASSWORD=Lop3wUI2HUu1igW psql -h 3.7.156.53 -p 5432 -U nfx_db_admin -d aiwealth_develop -c \"SELECT id, user_id, ticket_id, scope, scope_id, title, LEFT\\(message,60\\) as msg, read FROM notifications ORDER BY created_at DESC LIMIT 10;\")",
+      "Bash(PGPASSWORD=Lop3wUI2HUu1igW psql -h 3.7.156.53 -p 5432 -U nfx_db_admin -d aiwealth_develop -c ' *)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(node -e \"require\\('./dist/index.js'\\)\")",
+      "Bash(wait)",
+      "Bash(nc -zv 3.7.156.53 5432)"
+    ]
+  }
+}

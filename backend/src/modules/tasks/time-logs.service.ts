@@ -60,16 +60,16 @@ export async function listTimeLogsForTicket(ticketId: string): Promise<unknown[]
   if (rows.length === 0) return [];
 
   const userIds = [...new Set(rows.map((r) => (r as unknown as TimeLogRow).user_id).filter(Boolean))];
-  const userMap: Record<string, { name: string; email: string }> = {};
+  const userMap: Record<string, { name: string; email: string; avatar_url: string | null }> = {};
 
   if (userIds.length > 0) {
     const users = await User.findAll({
       where: { id: { [require('sequelize').Op.in]: userIds } },
-      attributes: ['id', 'name', 'email'],
+      attributes: ['id', 'name', 'email', 'avatar_url'],
       raw: true,
     });
-    for (const u of users as unknown as { id: string; name: string; email: string }[]) {
-      userMap[u.id] = { name: u.name, email: u.email };
+    for (const u of users as unknown as { id: string; name: string; email: string; avatar_url: string | null }[]) {
+      userMap[u.id] = { name: u.name, email: u.email, avatar_url: u.avatar_url ?? null };
     }
   }
 

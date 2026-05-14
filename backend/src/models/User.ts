@@ -9,6 +9,7 @@ export interface UserAttributes {
   phone_number: string | null;
   avatar_url: string | null;
   email: string;
+  password_hash: string | null;
   role: 'admin' | 'member' | 'project_manager';
   member_role: string | null;
   status: 'Active' | 'invited' | 'Disabled';
@@ -22,7 +23,7 @@ export interface UserAttributes {
 
 // Fields that have DB-level defaults and need not be supplied on create
 export interface UserCreationAttributes extends Optional<UserAttributes,
-  'id' | 'first_name' | 'last_name' | 'phone_number' | 'avatar_url' |
+  'id' | 'first_name' | 'last_name' | 'phone_number' | 'avatar_url' | 'password_hash' |
   'member_role' | 'invite_nonce' | 'rate_amount' | 'rate_frequency' | 'created_at' | 'updated_at'
 > {}
 
@@ -35,6 +36,7 @@ class User extends Model<UserAttributes, UserCreationAttributes>
   declare phone_number: string | null;
   declare avatar_url: string | null;
   declare email: string;
+  declare password_hash: string | null;
   declare role: 'admin' | 'member' | 'project_manager';
   declare member_role: string | null;
   declare status: 'Active' | 'invited' | 'Disabled';
@@ -59,6 +61,7 @@ User.init(
     phone_number: { type: DataTypes.TEXT, allowNull: true },
     avatar_url: { type: DataTypes.TEXT, allowNull: true },
     email: { type: DataTypes.TEXT, allowNull: false, unique: true },
+    password_hash: { type: DataTypes.TEXT, allowNull: true },
     role: {
       type: DataTypes.TEXT,
       allowNull: false,
