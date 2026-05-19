@@ -7,17 +7,19 @@ export interface NotificationAttributes {
   user_id: string;
   ticket_id: string | null;
   actor_id: string | null;
+  message_id: string | null;
   type: string;
   title: string | null;
   message: string;
   read: boolean;
   created_at: string;
+  updated_at: string | null;
   scope: string;
   scope_id: string | null;
 }
 
 export interface NotificationCreationAttributes extends Optional<NotificationAttributes,
-  'id' | 'ticket_id' | 'actor_id' | 'type' | 'title' | 'read' | 'created_at' | 'scope' | 'scope_id'
+  'id' | 'ticket_id' | 'actor_id' | 'message_id' | 'type' | 'title' | 'read' | 'created_at' | 'updated_at' | 'scope' | 'scope_id'
 > {}
 
 class Notification extends Model<NotificationAttributes, NotificationCreationAttributes>
@@ -26,11 +28,13 @@ class Notification extends Model<NotificationAttributes, NotificationCreationAtt
   declare user_id: string;
   declare ticket_id: string | null;
   declare actor_id: string | null;
+  declare message_id: string | null;
   declare type: string;
   declare title: string | null;
   declare message: string;
   declare read: boolean;
   declare created_at: string;
+  declare updated_at: string | null;
   declare scope: string;
   declare scope_id: string | null;
 }
@@ -58,8 +62,14 @@ Notification.init(
       allowNull: false,
       defaultValue: DataTypes.NOW,
     },
-    scope:    { type: DataTypes.TEXT, allowNull: false, defaultValue: 'task' },
-    scope_id: { type: DataTypes.UUID, allowNull: true },
+    updated_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      defaultValue: DataTypes.NOW,
+    },
+    scope:      { type: DataTypes.TEXT, allowNull: false, defaultValue: 'task' },
+    scope_id:   { type: DataTypes.UUID, allowNull: true },
+    message_id: { type: DataTypes.UUID, allowNull: true },
   },
   {
     sequelize,

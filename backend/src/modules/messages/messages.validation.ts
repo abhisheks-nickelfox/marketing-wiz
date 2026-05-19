@@ -32,6 +32,10 @@ export const createMessageValidation = [
     .optional({ nullable: true })
     .isUUID('loose')
     .withMessage('parent_id must be a valid UUID'),
+  body('is_system')
+    .optional({ nullable: true })
+    .isBoolean()
+    .withMessage('is_system must be a boolean'),
 ];
 
 // ── POST /api/messages/:id/reactions ─────────────────────────────────────────

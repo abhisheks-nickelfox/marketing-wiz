@@ -18,7 +18,9 @@ export { default as TaskAssignee } from './TaskAssignee';
 export { default as Message } from './Message';
 export { default as MessageReaction } from './MessageReaction';
 export { default as MessageRead } from './MessageRead';
+export { default as MessageScopeParticipant } from './MessageScopeParticipant';
 export { default as TaskAttachment } from './TaskAttachment';
+export { default as TimeEntry } from './TimeEntry';
 
 // ── Associations ─────────────────────────────────────────────────────────────
 // Define once here so models can be imported in any order without circular-ref issues.

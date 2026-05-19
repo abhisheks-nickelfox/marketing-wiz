@@ -1,6 +1,6 @@
 import bcrypt from 'bcrypt';
 import logger from '../../config/logger';
-import { User, Ticket, TimeLog } from '../../models';
+import { User, Ticket, TimeEntry } from '../../models';
 import { Op, QueryTypes } from 'sequelize';
 
 const BCRYPT_ROUNDS = 12;
@@ -100,16 +100,16 @@ export async function findAllTeamMembers(roleFilter?: string): Promise<TeamMembe
     if (t.status === 'resolved') resolvedMap[t.assignee_id] = (resolvedMap[t.assignee_id] ?? 0) + 1;
   }
 
-  // Batch: hours
-  const logRows = await TimeLog.findAll({
-    where: { user_id: { [Op.in]: memberIds } },
-    attributes: ['user_id', 'hours'],
+  // Batch: hours from time_entries (completed entries only, not running timers)
+  const entryRows = await TimeEntry.findAll({
+    where: { user_id: { [Op.in]: memberIds }, is_running: false },
+    attributes: ['user_id', 'duration_seconds'],
     raw: true,
   });
 
   const hoursMap: Record<string, number> = {};
-  for (const l of logRows as unknown as { user_id: string; hours: number }[]) {
-    hoursMap[l.user_id] = (hoursMap[l.user_id] ?? 0) + (Number(l.hours) ?? 0);
+  for (const e of entryRows as unknown as { user_id: string; duration_seconds: number | null }[]) {
+    hoursMap[e.user_id] = (hoursMap[e.user_id] ?? 0) + ((e.duration_seconds ?? 0) / 3600);
   }
 
   return memberList.map((m) => ({
@@ -147,17 +147,17 @@ export async function findTeamMemberById(id: string): Promise<TeamMemberDetail |
     for (const f of firms) firmMap[f.id] = f.name;
   }
 
-  // Batch time logs
+  // Batch time entries for per-ticket hours (completed entries only)
   const ticketIds = ticketList.map((t) => t.id);
   const timeMap: Record<string, number> = {};
   if (ticketIds.length > 0) {
-    const logs = await TimeLog.findAll({
-      where: { ticket_id: { [Op.in]: ticketIds } },
-      attributes: ['ticket_id', 'hours'],
+    const entries = await TimeEntry.findAll({
+      where: { task_id: { [Op.in]: ticketIds }, is_running: false },
+      attributes: ['task_id', 'duration_seconds'],
       raw: true,
     });
-    for (const l of logs as unknown as { ticket_id: string; hours: number }[]) {
-      timeMap[l.ticket_id] = (timeMap[l.ticket_id] ?? 0) + Number(l.hours ?? 0);
+    for (const e of entries as unknown as { task_id: string; duration_seconds: number | null }[]) {
+      timeMap[e.task_id] = (timeMap[e.task_id] ?? 0) + ((e.duration_seconds ?? 0) / 3600);
     }
   }
 

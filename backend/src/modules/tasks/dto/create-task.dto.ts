@@ -5,6 +5,8 @@ export interface CreateTaskDto {
   firm_id: string;
   title: string;
   type: TaskType;
+  /** UUID of the task_types catalog entry. When set, saves to tickets.task_type_id. */
+  task_type_id?: string;
   priority?: TaskPriority;
   description?: string;
   project_id: string;

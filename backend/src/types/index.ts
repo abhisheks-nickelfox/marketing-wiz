@@ -118,6 +118,76 @@ export interface TimeLog {
   created_at: string;
 }
 
+export interface TimeEntry {
+  id:               string;
+  task_id:          string | null;
+  project_id:       string | null;
+  user_id:          string;
+  started_at:       string;
+  ended_at:         string | null;
+  duration_seconds: number | null;
+  description:      string | null;
+  is_billable:      boolean;
+  is_running:       boolean;
+  created_at:       string;
+  updated_at:       string;
+  user?:            { id: string; name: string; email: string; avatar_url: string | null };
+}
+
+export interface TimeEntryWithUser extends TimeEntry {
+  user: { id: string; name: string; email: string; avatar_url: string | null };
+}
+
+export interface SubtaskTimeSummary {
+  task_id:       string;
+  title:         string;
+  total_seconds: number;
+  entries:       TimeEntryWithUser[];
+}
+
+export interface TaskDirectTimeSummary {
+  task_id:       string;
+  title:         string;
+  total_seconds: number;
+  own_seconds:   number;
+  entries:       TimeEntryWithUser[];
+  subtasks:      SubtaskTimeSummary[];
+}
+
+export interface TaskTimeEntrySummary {
+  own_entries:       TimeEntryWithUser[];
+  subtask_summary:   SubtaskTimeSummary[];
+  own_total_seconds: number;
+  total_seconds:     number;
+}
+
+export interface ProjectTaskTimeSummary {
+  task_id:       string;
+  title:         string;
+  total_seconds: number;
+  own_seconds:   number;
+  entries:       TimeEntryWithUser[];
+  subtasks:      { task_id: string; title: string; total_seconds: number }[];
+}
+
+export interface ProjectTimeEntrySummary {
+  project_id:    string;
+  total_seconds: number;
+  tasks:         ProjectTaskTimeSummary[];
+}
+
+/** Summary returned by the project-level direct time-entry endpoints. */
+export interface ProjectDirectTimeEntrySummary {
+  /** Time entries logged directly on the project (task_id IS NULL). */
+  project_entries:   TimeEntryWithUser[];
+  /** Per-task rollup of time logged on tasks belonging to this project (includes subtask entries). */
+  task_summary:      TaskDirectTimeSummary[];
+  /** Sum of duration_seconds for direct project entries only (excludes running). */
+  own_total_seconds: number;
+  /** own_total_seconds + sum of all task_summary totals. */
+  total_seconds:     number;
+}
+
 // ─── AI / Service types ───────────────────────────────────────────────────────
 
 export interface TaskDraft {

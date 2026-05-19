@@ -1,6 +1,6 @@
 import * as Yup from 'yup';
 
-export const TASK_PRIORITIES = ['Urgent', 'High', 'Medium', 'Low'] as const;
+export const TASK_PRIORITIES = ['Urgent', 'High', 'Normal', 'Low'] as const;
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];
 
 /**
@@ -68,7 +68,7 @@ export const taskInitialValues = (
   description: '',
   projectId:   defaultProjectId,
   priority:    defaultPriority,
-  startDate:   '',
+  startDate:   new Date().toISOString().slice(0, 10),
   endDate:     '',
   assigneeIds: [],
 });

@@ -5,7 +5,7 @@ export const createTaskTypeValidation = [
   body('description').optional({ nullable: true, checkFalsy: true }).isString().trim(),
   body('color').optional({ nullable: true, checkFalsy: true }).isString().trim(),
   body('member_ids').optional().isArray().withMessage('member_ids must be an array'),
-  body('member_ids.*').optional().isUUID().withMessage('Each member_id must be a valid UUID'),
+  body('member_ids.*').optional().isUUID('loose').withMessage('Each member_id must be a valid UUID'),
 ];
 
 export const updateTaskTypeValidation = [
@@ -13,5 +13,5 @@ export const updateTaskTypeValidation = [
   body('description').optional({ nullable: true, checkFalsy: true }).isString().trim(),
   body('color').optional({ nullable: true, checkFalsy: true }).isString().trim(),
   body('member_ids').optional().isArray().withMessage('member_ids must be an array'),
-  body('member_ids.*').optional().isUUID().withMessage('Each member_id must be a valid UUID'),
+  body('member_ids.*').optional().isUUID('loose').withMessage('Each member_id must be a valid UUID'),
 ];

@@ -29,7 +29,7 @@ export const createUserValidation = [
     .withMessage('skill_ids must be an array'),
   body('skill_ids.*')
     .optional()
-    .isUUID()
+    .isUUID('loose')
     .withMessage('Each skill_id must be a valid UUID'),
   body('status')
     .optional()
@@ -76,7 +76,7 @@ export const updateUserValidation = [
     .withMessage('skill_ids must be an array'),
   body('skill_ids.*')
     .optional()
-    .isUUID()
+    .isUUID('loose')
     .withMessage('Each skill_id must be a valid UUID'),
   body('status')
     .optional()
@@ -96,7 +96,7 @@ export const updateUserValidation = [
     .withMessage('skills_with_experience must be an array'),
   body('skills_with_experience.*.skill_id')
     .optional()
-    .isUUID()
+    .isUUID('loose')
     .withMessage('Each skill_id must be a valid UUID'),
   body('skills_with_experience.*.experience')
     .optional({ nullable: true })

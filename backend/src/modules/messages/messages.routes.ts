@@ -28,6 +28,9 @@ router.post('/', requireMember, createMessageValidation, messagesController.crea
 // POST /api/messages/read — mark all messages in a scope as read
 router.post('/read', requireMember, messagesController.markRead);
 
+// POST /api/messages/typing — broadcast typing indicator (no DB write)
+router.post('/typing', requireMember, messagesController.sendTyping);
+
 // POST /api/messages/:id/reactions — add (or no-op if duplicate) a reaction
 router.post('/:id/reactions', requireMember, addReactionValidation, messagesController.addReaction);
 

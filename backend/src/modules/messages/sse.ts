@@ -13,6 +13,14 @@ import logger from '../../config/logger';
 type Channel = Set<Response>;
 const registry = new Map<string, Channel>();
 
+// ── Typing Timer Registry ─────────────────────────────────────────────────────
+//
+// Tracks per-user typing timers. Key = "scope:scopeId:userId".
+// Each typing heartbeat from the client (re)starts a 4-second timer.
+// When the timer fires we auto-broadcast typing_stop — no client cleanup needed.
+
+const typingTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
 export function channelKey(scope: string, scopeId: string): string {
   return `${scope}:${scopeId}`;
 }
@@ -39,6 +47,12 @@ export function subscribe(scope: string, scopeId: string, res: Response): () => 
   };
 }
 
+// Push a notification_update event to all SSE clients for a specific user.
+// Used by the notifications module to push real-time inbox updates.
+export function broadcastToUser(userId: string, payload: unknown): void {
+  broadcast('user', userId, payload);
+}
+
 // Push a JSON payload to every client listening on the given channel.
 export function broadcast(scope: string, scopeId: string, payload: unknown): void {
   const key = channelKey(scope, scopeId);
@@ -58,4 +72,27 @@ export function broadcast(scope: string, scopeId: string, payload: unknown): voi
       ch.delete(res);
     }
   }
+}
+
+// Broadcast typing_start and (re)start the 4-second auto-expire timer.
+// Called on each typing heartbeat from the frontend (debounced to ~300 ms).
+export function broadcastTypingStart(
+  scope: string,
+  scopeId: string,
+  user: { id: string; name: string; avatar_url: string | null },
+): void {
+  const timerKey = `${channelKey(scope, scopeId)}:${user.id}`;
+
+  // Clear any existing timer so the expiry window resets on each heartbeat
+  const existing = typingTimers.get(timerKey);
+  if (existing) clearTimeout(existing);
+
+  broadcast(scope, scopeId, { type: 'typing_start', user });
+
+  const timer = setTimeout(() => {
+    typingTimers.delete(timerKey);
+    broadcast(scope, scopeId, { type: 'typing_stop', user_id: user.id });
+  }, 4_000);
+
+  typingTimers.set(timerKey, timer);
 }

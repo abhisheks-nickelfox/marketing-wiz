@@ -1,6 +1,7 @@
 import bcrypt from 'bcrypt';
 import logger from '../../config/logger';
-import { User, UserSkill, Skill, ProcessingSession } from '../../models';
+import { User, UserSkill, Skill, ProcessingSession, ProjectMember, TaskAssignee } from '../../models';
+import sequelize from '../../config/database';
 import { Op } from 'sequelize';
 import type { CreateUserDto } from './dto/create-user.dto';
 import type { UpdateUserDto } from './dto/update-user.dto';
@@ -299,6 +300,32 @@ export async function deleteUser(id: string, requesterId: string): Promise<void>
       { statusCode: 409 },
     );
   }
+
+  // Clean up all user-referencing rows before deleting the user.
+  // message_reads_message_id_fkey is NO ACTION, so we must pre-delete reads for
+  // the user's messages AND all replies to those messages (parent_id CASCADE chain).
+  await sequelize.query(`
+    WITH RECURSIVE msg_tree AS (
+      SELECT id FROM messages WHERE user_id = :userId
+      UNION ALL
+      SELECT m.id FROM messages m JOIN msg_tree mt ON m.parent_id = mt.id
+    )
+    DELETE FROM message_reads WHERE message_id IN (SELECT id FROM msg_tree)
+  `, { replacements: { userId: id } });
+  await sequelize.query(`
+    WITH RECURSIVE msg_tree AS (
+      SELECT id FROM messages WHERE user_id = :userId
+      UNION ALL
+      SELECT m.id FROM messages m JOIN msg_tree mt ON m.parent_id = mt.id
+    )
+    DELETE FROM message_reactions WHERE message_id IN (SELECT id FROM msg_tree)
+  `, { replacements: { userId: id } });
+  await sequelize.query(`DELETE FROM messages WHERE user_id = :userId`, { replacements: { userId: id } });
+  await sequelize.query(`DELETE FROM message_reads WHERE user_id = :userId`, { replacements: { userId: id } });
+  await sequelize.query(`DELETE FROM message_reactions WHERE user_id = :userId`, { replacements: { userId: id } });
+  await ProjectMember.destroy({ where: { user_id: id } });
+  await TaskAssignee.destroy({ where: { user_id: id } });
+  await UserSkill.destroy({ where: { user_id: id } });
 
   const count = await User.destroy({ where: { id } });
   if (count === 0) {

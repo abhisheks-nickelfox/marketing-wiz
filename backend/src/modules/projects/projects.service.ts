@@ -1,10 +1,11 @@
 import { randomUUID } from 'crypto';
 import logger from '../../config/logger';
-import { Op, UniqueConstraintError } from 'sequelize';
+import { Op, QueryTypes, UniqueConstraintError } from 'sequelize';
 import sequelize from '../../config/database';
-import { Project, Firm, Ticket, TimeLog, ProjectMember, User } from '../../models';
+import { Project, Firm, Ticket, TimeEntry, ProjectMember, User } from '../../models';
 import type { CreateProjectDto } from './dto/create-project.dto';
 import type { UpdateProjectDto } from './dto/update-project.dto';
+import { postSystemMessage } from '../messages/messages.service';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -53,13 +54,12 @@ export interface TaskSummary {
 export interface ProjectOverview extends ProjectWithStats {
   tasks_by_status: Record<string, TaskSummary[]>;
   task_totals: {
-    total:       number;
-    todo:        number;
-    in_progress: number;
-    in_review:   number;
-    approved:    number;
-    completed:   number;
-    discarded:   number;
+    total:     number;
+    todo:      number;
+    progress:  number;
+    review:    number;
+    completed: number;
+    blocked:   number;
   };
 }
 
@@ -197,53 +197,54 @@ export async function getProjectOverview(id: string): Promise<ProjectOverview | 
   const base = await findProjectById(id);
   if (!base) return null;
 
-  // Fetch tasks and time logs concurrently — they are independent of each other.
-  // Time logs are fetched for the entire project in a single query keyed by ticket_id,
+  // Fetch tasks and time entries concurrently — they are independent of each other.
+  // Time entries are fetched for the entire project in a single query keyed by task_id,
   // so we don't need the task list first. Both queries run in parallel.
-  const [projectTasks, allProjectLogs] = await Promise.all([
+  // Fetch task IDs for the parameterized time-entry sub-query.
+  // Using a separate query avoids string interpolation inside a SQL literal.
+  const taskIdRows = await sequelize.query<{ id: string }>(
+    'SELECT id FROM tickets WHERE project_id = :projectId AND archived = false',
+    { replacements: { projectId: id }, type: QueryTypes.SELECT },
+  );
+  const projectTaskIds = taskIdRows.map((r) => r.id);
+
+  const [projectTasks, allProjectEntries] = await Promise.all([
     Ticket.findAll({
       where: { project_id: id, archived: false },
       attributes: ['id', 'title', 'status', 'priority', 'assignee_id', 'deadline', 'project_id'],
       order: [['updated_at', 'DESC']],
       raw: true,
     }),
-    TimeLog.findAll({
-      where: {
-        // Use a sub-select via sequelize.literal to filter by project in one shot
-        // rather than waiting for the task list first.
-        ticket_id: {
-          [Op.in]: sequelize.literal(
-            `(SELECT id FROM tickets WHERE project_id = '${id}' AND archived = false)`,
-          ),
-        },
-        log_type: { [Op.notIn]: ['final', 'revision', 'transition'] },
-      },
-      attributes: ['ticket_id', 'hours'],
-      raw: true,
-    }),
+    projectTaskIds.length > 0
+      ? TimeEntry.findAll({
+          where: { task_id: { [Op.in]: projectTaskIds }, is_running: false },
+          attributes: ['task_id', 'duration_seconds'],
+          raw: true,
+        })
+      : Promise.resolve([]),
   ]);
 
   const taskList = projectTasks as unknown as Record<string, unknown>[];
   const timeMap: Record<string, number> = {};
 
-  for (const l of allProjectLogs as unknown as { ticket_id: string; hours: number }[]) {
-    timeMap[l.ticket_id] = (timeMap[l.ticket_id] ?? 0) + Number(l.hours ?? 0);
+  for (const e of allProjectEntries as unknown as { task_id: string; duration_seconds: number | null }[]) {
+    // Convert seconds to hours for display consistency
+    timeMap[e.task_id] = (timeMap[e.task_id] ?? 0) + ((e.duration_seconds ?? 0) / 3600);
   }
 
   const STATUS_GROUP: Record<string, string> = {
-    draft:             'todo',
-    in_progress:       'in_progress',
-    revisions:         'in_progress',
-    internal_review:   'in_review',
-    client_review:     'in_review',
-    compliance_review: 'in_review',
-    approved:          'approved',
-    closed:            'completed',
-    discarded:         'discarded',
+    to_do:           'todo',
+    assigned:        'progress',
+    in_progress:     'progress',
+    revisions:       'progress',
+    internal_review: 'review',
+    client_review:   'review',
+    completed:       'completed',
+    blocked:         'blocked',
   };
 
   const tasksByStatus: Record<string, TaskSummary[]> = {
-    todo: [], in_progress: [], in_review: [], approved: [], completed: [], discarded: [],
+    todo: [], progress: [], review: [], completed: [], blocked: [],
   };
 
   for (const t of taskList) {
@@ -266,12 +267,11 @@ export async function getProjectOverview(id: string): Promise<ProjectOverview | 
     tasks_by_status: tasksByStatus,
     task_totals: {
       total,
-      todo:        tasksByStatus.todo.length,
-      in_progress: tasksByStatus.in_progress.length,
-      in_review:   tasksByStatus.in_review.length,
-      approved:    tasksByStatus.approved.length,
-      completed:   tasksByStatus.completed.length,
-      discarded:   tasksByStatus.discarded.length,
+      todo:      tasksByStatus.todo.length,
+      progress:  tasksByStatus.progress.length,
+      review:    tasksByStatus.review.length,
+      completed: tasksByStatus.completed.length,
+      blocked:   tasksByStatus.blocked.length,
     },
   };
 }
@@ -332,12 +332,22 @@ export async function updateProject(id: string, updates: UpdateProjectDto): Prom
   return findProjectById(id);
 }
 
-export async function addProjectMember(projectId: string, userId: string): Promise<void> {
+export async function addProjectMember(projectId: string, userId: string, actorId?: string): Promise<void> {
   await ProjectMember.upsert({ project_id: projectId, user_id: userId });
+  if (actorId) {
+    const member = await User.findByPk(userId, { attributes: ['name'], raw: true }) as unknown as { name: string } | null;
+    postSystemMessage('project', projectId, actorId, `added ${member?.name ?? 'a member'} to this project`).catch(() => {});
+  }
 }
 
-export async function removeProjectMember(projectId: string, userId: string): Promise<void> {
+export async function removeProjectMember(projectId: string, userId: string, actorId?: string): Promise<void> {
+  const member = actorId
+    ? await User.findByPk(userId, { attributes: ['name'], raw: true }) as unknown as { name: string } | null
+    : null;
   await ProjectMember.destroy({ where: { project_id: projectId, user_id: userId } });
+  if (actorId && member) {
+    postSystemMessage('project', projectId, actorId, `removed ${member.name} from this project`).catch(() => {});
+  }
 }
 
 export async function listProjectMembers(projectId: string): Promise<ProjectMemberRow[]> {
@@ -409,9 +419,14 @@ export async function getPublicProjectView(shareToken: string): Promise<PublicPr
   ]);
 
   const STATUS_GROUP: Record<string, string> = {
-    draft: 'todo', in_progress: 'in_progress', revisions: 'in_progress',
-    internal_review: 'in_review', client_review: 'in_review', compliance_review: 'in_review',
-    approved: 'completed', closed: 'completed', discarded: 'completed',
+    to_do:           'todo',
+    assigned:        'in_progress',
+    in_progress:     'in_progress',
+    revisions:       'in_progress',
+    internal_review: 'in_review',
+    client_review:   'in_review',
+    completed:       'completed',
+    blocked:         'completed',
   };
 
   const totals = { total: 0, todo: 0, in_progress: 0, in_review: 0, completed: 0 };

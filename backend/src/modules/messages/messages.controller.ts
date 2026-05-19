@@ -6,7 +6,7 @@ import { ADMIN_ROLES } from '../../config/constants';
 import { User } from '../../models';
 import { verifyToken } from '../../config/auth';
 import * as messagesService from './messages.service';
-import { subscribe, broadcast } from './sse';
+import { subscribe, broadcast, broadcastTypingStart } from './sse';
 import { Message } from '../../models';
 import type { CreateMessageDto } from './dto/create-message.dto';
 
@@ -197,6 +197,26 @@ export async function markRead(req: AuthenticatedRequest, res: Response): Promis
     logger.error('[messages.controller] markRead error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
+}
+
+// ── POST /api/messages/typing ────────────────────────────────────────────────
+//
+// Lightweight heartbeat — no DB write. Broadcasts a typing_start event over
+// the SSE channel so every other connected client sees the indicator.
+// The server auto-broadcasts typing_stop after 4 seconds of silence.
+
+export async function sendTyping(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const { scope, scope_id } = req.body as { scope?: string; scope_id?: string };
+
+  if (!scope || !scope_id) {
+    res.status(400).json({ error: 'scope and scope_id are required' });
+    return;
+  }
+
+  const { id, name, avatar_url } = req.user as { id: string; name: string; avatar_url?: string | null };
+  broadcastTypingStart(scope, scope_id, { id, name, avatar_url: avatar_url ?? null });
+
+  res.status(204).end();
 }
 
 // ── DELETE /api/messages/:id ──────────────────────────────────────────────────

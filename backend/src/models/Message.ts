@@ -8,13 +8,14 @@ export interface MessageAttributes {
   user_id: string;
   parent_id: string | null;
   body: string;
+  is_system: boolean;
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export interface MessageCreationAttributes extends Optional<MessageAttributes,
-  'id' | 'parent_id' | 'deleted_at' | 'created_at' | 'updated_at'
+  'id' | 'parent_id' | 'is_system' | 'deleted_at' | 'created_at' | 'updated_at'
 > {}
 
 class Message extends Model<MessageAttributes, MessageCreationAttributes>
@@ -25,6 +26,7 @@ class Message extends Model<MessageAttributes, MessageCreationAttributes>
   declare user_id: string;
   declare parent_id: string | null;
   declare body: string;
+  declare is_system: boolean;
   declare deleted_at: string | null;
   declare created_at: string;
   declare updated_at: string;
@@ -56,6 +58,11 @@ Message.init(
     body: {
       type: DataTypes.TEXT,
       allowNull: false,
+    },
+    is_system: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
     },
     deleted_at: {
       type: DataTypes.DATE,

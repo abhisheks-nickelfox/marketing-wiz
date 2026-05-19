@@ -1,7 +1,8 @@
 import logger from '../../config/logger';
-import { Op } from 'sequelize';
+import { Op, QueryTypes } from 'sequelize';
+import type { Task } from '../../types';
 import sequelize from '../../config/database';
-import { Ticket, Firm, User, Project, TimeLog, Notification, TaskAssignee, ProjectMember } from '../../models';
+import { Ticket, Firm, User, Project, TimeLog, TimeEntry, Notification, TaskAssignee, ProjectMember } from '../../models';
 import {
   STATUS_PRIORITY,
   VALID_TRANSITIONS,
@@ -9,13 +10,17 @@ import {
   STALE_APPROVED_DAYS,
 } from '../../config/constants';
 import { sendUrgentTaskEmail } from '../../services/email.service';
+import { postSystemMessage } from '../messages/messages.service';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface CreateTaskDto {
   firm_id:         string;
   title:           string;
-  type:            'task' | 'design' | 'development' | 'account_management';
+  /** Legacy column — defaults to 'task'. Use task_type_id for custom types. */
+  type?:           string;
+  /** UUID of the task_types catalog entry. Saved to tickets.task_type_id. */
+  task_type_id?:   string;
   priority?:       'low' | 'normal' | 'high' | 'urgent';
   description?:    string;
   project_id?:     string;
@@ -120,7 +125,7 @@ async function getProjectMemberIds(projectId: string): Promise<string[]> {
 // ── Service methods ──────────────────────────────────────────────────────────
 
 export interface PaginatedTasksResult {
-  data:  unknown[];
+  data:  (Task & Record<string, unknown>)[];
   total: number;
   page:  number;
   limit: number;
@@ -229,16 +234,17 @@ export async function findAllTasks(options: {
     for (const u of assignees as unknown as { id: string; name: string; email: string }[]) assigneeMap[u.id] = { name: u.name, email: u.email };
   }
 
-  // Batch: time logs
+  // Batch: time entries (completed only — running timers have no duration yet)
   const timeMap: Record<string, number> = {};
   if (ticketIds.length > 0) {
-    const logs = await TimeLog.findAll({
-      where: { ticket_id: { [Op.in]: ticketIds }, log_type: { [Op.notIn]: ['final', 'revision'] } },
-      attributes: ['ticket_id', 'hours'],
+    const entries = await TimeEntry.findAll({
+      where: { task_id: { [Op.in]: ticketIds }, is_running: false },
+      attributes: ['task_id', 'duration_seconds'],
       raw: true,
     });
-    for (const l of logs as unknown as { ticket_id: string; hours: number }[]) {
-      timeMap[l.ticket_id] = (timeMap[l.ticket_id] ?? 0) + Number(l.hours ?? 0);
+    for (const e of entries as unknown as { task_id: string; duration_seconds: number | null }[]) {
+      // Convert seconds to hours for display consistency (stored as seconds in time_entries)
+      timeMap[e.task_id] = (timeMap[e.task_id] ?? 0) + ((e.duration_seconds ?? 0) / 3600);
     }
   }
 
@@ -319,10 +325,10 @@ export async function findAllTasks(options: {
     return new Date(b['updated_at'] as string).getTime() - new Date(a['updated_at'] as string).getTime();
   });
 
-  return { data: enriched, total: totalCount, page, limit };
+  return { data: enriched as unknown as (Task & Record<string, unknown>)[], total: totalCount, page, limit };
 }
 
-export async function findTaskById(id: string): Promise<unknown | null> {
+export async function findTaskById(id: string): Promise<(Task & Record<string, unknown>) | null> {
   const task = await Ticket.findByPk(id, { raw: true });
   if (!task) return null;
 
@@ -368,7 +374,7 @@ export async function findTaskById(id: string): Promise<unknown | null> {
     }
   }
 
-  return { ...t, firms, assignee, assignees, subtasks };
+  return { ...t, firms, assignee, assignees, subtasks } as unknown as (Task & Record<string, unknown>);
 }
 
 /**
@@ -416,10 +422,18 @@ export async function getSubTasks(parentId: string): Promise<unknown[] | null> {
   }));
 }
 
+const LEGACY_TYPES = ['task', 'design', 'development', 'account_management'] as const;
+
 export async function createTask(dto: CreateTaskDto): Promise<unknown> {
-  const { firm_id, title, type, priority = 'normal', description,
-          project_id, assignee_id, assignee_ids, deadline, estimated_hours,
-          initial_status, parent_task_id } = dto;
+  const { firm_id, title, priority = 'normal', description,
+          task_type_id, project_id, assignee_id, assignee_ids, deadline,
+          estimated_hours, initial_status, parent_task_id } = dto;
+
+  // Normalize type: use provided value only if it's a legacy DB-valid value,
+  // otherwise default to 'task'. task_type_id carries the real type going forward.
+  const type = (LEGACY_TYPES as readonly string[]).includes(dto.type ?? '')
+    ? dto.type!
+    : 'task';
 
   const firm = await Firm.findByPk(firm_id, { attributes: ['id'], raw: true });
   if (!firm) {
@@ -447,7 +461,7 @@ export async function createTask(dto: CreateTaskDto): Promise<unknown> {
 
   // Resolve primary assignee: first of assignee_ids, or explicit assignee_id
   const effectiveAssigneeIds = assignee_ids?.filter(Boolean) ?? (assignee_id ? [assignee_id] : []);
-  const primaryAssigneeId    = effectiveAssigneeIds[0] ?? null;
+  const primaryAssigneeId: string | null = effectiveAssigneeIds[0] ?? null;
 
   // Auto-set status to 'assigned' when an assignee is provided
   let effectiveStatus = initial_status ?? 'to_do';
@@ -459,6 +473,7 @@ export async function createTask(dto: CreateTaskDto): Promise<unknown> {
     firm_id,
     title:           title.trim(),
     type,
+    task_type_id:    task_type_id ?? null,
     priority,
     description:     description?.trim() ?? '',
     session_id:      null,
@@ -597,6 +612,7 @@ async function notifyUrgentTaskAssignees(taskId: string, taskTitle: string): Pro
 export async function updateTask(
   id: string,
   updates: Record<string, unknown>,
+  actorId?: string,
 ): Promise<unknown | null> {
   const current = await Ticket.findByPk(id, { attributes: ['status', 'project_id', 'priority', 'title'], raw: true });
   const currentStatus    = (current as unknown as { status: string; project_id: string | null; priority: string; title: string } | null)?.status    ?? '';
@@ -621,6 +637,31 @@ export async function updateTask(
     if (newIds.length > 0 && currentStatus === 'to_do') updates.status = 'assigned';
     if (newIds.length === 0 && currentStatus === 'assigned') updates.status = 'to_do';
 
+    // Detect adds/removes for activity log before syncing
+    if (actorId) {
+      const oldAssignees = await fetchTaskAssignees(id);
+      const oldIds = oldAssignees.map((a) => a.id);
+      const added   = newIds.filter((uid) => !oldIds.includes(uid));
+      const removed = oldAssignees.filter((a) => !newIds.includes(a.id));
+
+      if (added.length > 0 || removed.length > 0) {
+        const newUsers = added.length > 0
+          ? await User.findAll({ where: { id: { [Op.in]: added } }, attributes: ['id', 'name'], raw: true }) as unknown as { id: string; name: string }[]
+          : [];
+        const newUserMap: Record<string, string> = {};
+        for (const u of newUsers) newUserMap[u.id] = u.name;
+
+        await Promise.all([
+          ...added.map((uid) =>
+            postSystemMessage('task', id, actorId, `assigned ${newUserMap[uid] ?? 'a member'} to this task`).catch(() => {}),
+          ),
+          ...removed.map((a) =>
+            postSystemMessage('task', id, actorId, `removed ${a.name} from this task`).catch(() => {}),
+          ),
+        ]);
+      }
+    }
+
     await syncTaskAssignees(id, newIds);
     updates.assignee_id = newIds[0] ?? null;
     delete updates.assignee_ids;
@@ -629,6 +670,21 @@ export async function updateTask(
 
     if (newId && currentStatus === 'to_do') updates.status = 'assigned';
     if (!newId && currentStatus === 'assigned') updates.status = 'to_do';
+
+    // Post activity log for single-assignee change
+    if (actorId) {
+      const oldAssignees = await fetchTaskAssignees(id);
+      const oldIds = oldAssignees.map((a) => a.id);
+      if (newId && !oldIds.includes(newId)) {
+        const u = await User.findByPk(newId, { attributes: ['name'], raw: true }) as unknown as { name: string } | null;
+        postSystemMessage('task', id, actorId, `assigned ${u?.name ?? 'a member'} to this task`).catch(() => {});
+      }
+      for (const a of oldAssignees) {
+        if (!newId || a.id !== newId) {
+          postSystemMessage('task', id, actorId, `removed ${a.name} from this task`).catch(() => {});
+        }
+      }
+    }
 
     await syncTaskAssignees(id, newId ? [newId] : []);
   }
@@ -664,10 +720,11 @@ export async function findRawTask(id: string): Promise<Record<string, unknown> |
 export async function assignAndApproveTask(
   id: string,
   dto: AssignApproveDto,
+  actorId?: string,
 ): Promise<unknown | null> {
   const { assignee_id, priority, deadline, project_id } = dto;
 
-  const assignee = await User.findByPk(assignee_id, { attributes: ['id'], raw: true });
+  const assignee = await User.findByPk(assignee_id, { attributes: ['id', 'name'], raw: true }) as unknown as { id: string; name: string } | null;
   if (!assignee) {
     throw Object.assign(new Error('Assignee user not found'), { statusCode: 400 });
   }
@@ -701,6 +758,10 @@ export async function assignAndApproveTask(
     ticket_id: t.id as string,
     read:      false,
   });
+
+  if (actorId) {
+    postSystemMessage('task', id, actorId, `assigned ${assignee.name} to this task`).catch(() => {});
+  }
 
   const assignees = await fetchTaskAssignees(id);
   return { ...t, assignees };
@@ -781,6 +842,8 @@ export async function transitionTask(options: {
       log_type:       'revision',
       revision_cycle: newCycle,
     }).catch((err) => logger.error('[tasks.service] Failed to insert revision marker log:', err));
+    const statusLabel = c.status.replace(/_/g, ' ');
+    postSystemMessage('task', ticketId, userId, `changed status: ${statusLabel} → Revisions`).catch(() => {});
   } else {
     await TimeLog.create({
       ticket_id:      ticketId,
@@ -790,6 +853,9 @@ export async function transitionTask(options: {
       log_type:       'transition',
       revision_cycle: c.revision_count ?? 0,
     }).catch((err) => logger.error('[tasks.service] Failed to insert transition log:', err));
+    const fromLabel = c.status.replace(/_/g, ' ');
+    const toLabel   = targetStatus.replace(/_/g, ' ');
+    postSystemMessage('task', ticketId, userId, `changed status: ${fromLabel} → ${toLabel}`).catch(() => {});
   }
 
   const result = await Ticket.findByPk(ticketId, { raw: true });
@@ -860,3 +926,4 @@ export async function resolveTask(options: {
 
   return resolved;
 }
+

@@ -42,4 +42,14 @@ export const queryKeys = {
   projectAttachments: {
     byProject: (projectId: string) => ['projectAttachments', projectId] as const,
   },
+  timeEntries: {
+    byTask:    (taskId:    string) => ['time-entries', taskId]           as const,
+    byProject: (projectId: string) => ['project-time-entries', projectId] as const,
+  },
+  timeLogs: {
+    byTask: (taskId: string) => ['timeLogs', taskId] as const,
+  },
+  notifications: {
+    all: ['notifications'] as const,
+  },
 };

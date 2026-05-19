@@ -1,7 +1,6 @@
 import { body, param } from 'express-validator';
 import {
   VALID_STATUSES,
-  VALID_TASK_TYPES,
   VALID_TASK_PRIORITIES,
   MAX_TIME_LOG_HOURS,
 } from '../../config/constants';
@@ -13,9 +12,6 @@ export const createTaskValidation = [
     .custom((v) => !v || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v))
     .withMessage('firm_id must be a valid UUID'),
   body('title').trim().notEmpty().withMessage('Title is required'),
-  body('type')
-    .isIn(VALID_TASK_TYPES)
-    .withMessage(`type must be one of: ${VALID_TASK_TYPES.join(', ')}`),
   body('priority')
     .optional()
     .isIn(VALID_TASK_PRIORITIES)
@@ -43,10 +39,6 @@ export const updateTaskValidation = [
   param('id').isUUID('loose').withMessage('Invalid task ID'),
   body('title').optional().notEmpty().withMessage('Title cannot be blank'),
   body('description').optional().isString(),
-  body('type')
-    .optional()
-    .isIn(VALID_TASK_TYPES)
-    .withMessage(`type must be one of: ${VALID_TASK_TYPES.join(', ')}`),
   body('priority')
     .optional()
     .isIn(VALID_TASK_PRIORITIES)

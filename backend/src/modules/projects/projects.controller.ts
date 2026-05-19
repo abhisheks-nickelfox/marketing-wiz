@@ -167,7 +167,7 @@ export async function addMember(req: AuthenticatedRequest, res: Response): Promi
   }
 
   try {
-    await projectsService.addProjectMember(id, user_id);
+    await projectsService.addProjectMember(id, user_id, req.user!.id);
     const members = await projectsService.listProjectMembers(id);
     res.status(201).json({ data: members });
   } catch (err) {
@@ -185,7 +185,7 @@ export async function removeMember(req: AuthenticatedRequest, res: Response): Pr
   if (!validateId(userId, res, 'user ID')) return;
 
   try {
-    await projectsService.removeProjectMember(id, userId);
+    await projectsService.removeProjectMember(id, userId, req.user!.id);
     const members = await projectsService.listProjectMembers(id);
     res.json({ data: members });
   } catch (err) {

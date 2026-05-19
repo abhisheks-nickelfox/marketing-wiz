@@ -1,6 +1,9 @@
-import { Op } from 'sequelize';
-import { Message, MessageReaction, MessageRead, User, Notification, Firm, Project, Ticket } from '../../models';
+import { Op, QueryTypes } from 'sequelize';
+import { Message, MessageReaction, MessageRead, User, Notification, Firm, Project, Ticket, MessageScopeParticipant } from '../../models';
+import sequelize from '../../config/database';
 import type { CreateMessageDto } from './dto/create-message.dto';
+import logger from '../../config/logger';
+import { broadcastToUser } from './sse';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -18,6 +21,7 @@ export interface EnrichedMessage {
   user_id:    string;
   parent_id:  string | null;
   body:       string;
+  is_system:  boolean;
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
@@ -151,6 +155,7 @@ export async function getMessages(
       user_id:    m.user_id,
       parent_id:  m.parent_id,
       body:       m.body,
+      is_system:  m.is_system,
       deleted_at: m.deleted_at,
       created_at: m.created_at,
       updated_at: m.updated_at,
@@ -207,47 +212,153 @@ async function resolveScope(
 }
 
 /**
- * Scan a message body for @mentions, look up users by first_name (case-insensitive),
- * and create a 'mention' notification for each matched user (skipping the sender).
+ * Unified participant-aware notification dispatcher.
+ *
+ * On every non-system message:
+ *  1. Extract @mention targets (case-insensitive first_name match).
+ *  2. Identify the parent message author if this is a thread reply.
+ *  3. Upsert the sender, mentioned users, and reply-target as scope participants.
+ *  4. Fetch the full current participant list for the scope (excluding sender).
+ *  5. Create one notification per recipient, using the highest-priority type
+ *     (mention > reply > thread_reply).
+ *
  * Fire-and-forget — caller wraps in .catch(() => {}).
  */
-async function fireMentionNotifications(
-  senderId:   string,
-  senderName: string,
-  body:       string,
-  scope:      string,
-  scopeId:    string,
+async function fireParticipantNotifications(
+  senderId: string,
+  message:  EnrichedMessage,
 ): Promise<void> {
-  const matches = [...body.matchAll(/@(\w+)/g)].map((m) => m[1]);
-  if (matches.length === 0) return;
+  // System messages (status updates, assignments, etc.) never trigger inbox notifications.
+  if (message.is_system) return;
 
-  const [users, { ticketId, contextName }] = await Promise.all([
-    User.findAll({
-      where: {
-        status: 'Active',
-        [Op.or]: matches.map((m) => ({ first_name: { [Op.iLike]: m } })),
-      },
-      attributes: ['id'],
+  const { scope, scope_id, body, parent_id } = message;
+  const messageId = message.id;
+
+  // ── 1. Resolve @mention targets ───────────────────────────────────────────
+  // Match @Word or @Word_Word (no spaces). iLike against first_name OR the
+  // first word of `name` so users without first_name populated still match.
+  const mentionMatches = [...body.matchAll(/@(\w+)/g)].map((m) => m[1]);
+  let mentionedUserIds: string[] = [];
+  if (mentionMatches.length > 0) {
+    // Fetch all active users and match client-side to handle first_name fallback.
+    const activeUsers = await User.findAll({
+      where: { status: { [Op.notIn]: ['Disabled', 'invited'] } },
+      attributes: ['id', 'first_name', 'name'],
       raw: true,
-    }) as unknown as Promise<{ id: string }[]>,
-    resolveScope(scope, scopeId),
-  ]);
+    }) as unknown as { id: string; first_name: string | null; name: string }[];
 
-  const targets = users.filter((u) => u.id !== senderId);
-  if (targets.length === 0) return;
+    const matchedIds = activeUsers
+      .filter((u) => {
+        const firstName = (u.first_name ?? u.name.split(' ')[0]).toLowerCase();
+        return mentionMatches.some((m) => m.toLowerCase() === firstName);
+      })
+      .map((u) => u.id)
+      .filter((id) => id !== senderId);
 
-  await Notification.bulkCreate(
-    targets.map((u) => ({
-      user_id:   u.id,
-      ticket_id: ticketId,
-      actor_id:  senderId,
-      title:     contextName,
-      message:   body,
-      type:      'mention',
-      read:      false,
-      scope,
-      scope_id:  scopeId,
-    })),
+    mentionedUserIds = [...new Set(matchedIds)];
+  }
+
+  // ── 2. Resolve parent message author (direct reply target) ────────────────
+  let replyTargetUserId: string | null = null;
+  if (parent_id) {
+    const parent = await Message.findByPk(parent_id, {
+      attributes: ['user_id'],
+      raw: true,
+    }) as unknown as { user_id: string } | null;
+    if (parent && parent.user_id !== senderId) {
+      replyTargetUserId = parent.user_id;
+    }
+  }
+
+  // ── 3. Upsert participants: sender + mentioned users + reply target ────────
+  // ignoreDuplicates means a returning participant is a safe no-op.
+  const newParticipants = [
+    ...new Set([
+      senderId,
+      ...mentionedUserIds,
+      ...(replyTargetUserId ? [replyTargetUserId] : []),
+    ]),
+  ];
+  if (newParticipants.length > 0) {
+    await MessageScopeParticipant.bulkCreate(
+      newParticipants.map((uid) => ({ scope, scope_id, user_id: uid })),
+      { ignoreDuplicates: true },
+    );
+  }
+
+  // ── 4. Gmail-style: mark ALL existing scoped notifications as unread ─────────
+  // Any new message (even without @mentions) makes the thread unread for every
+  // participant who already has a notification row for this scope, except the sender.
+  // Fetch the affected user_ids first so we can SSE-push them after the UPDATE.
+  const scopedRecipients = await sequelize.query<{ user_id: string }>(
+    `SELECT user_id FROM notifications WHERE scope_id = :scope_id AND user_id != :sender_id`,
+    { replacements: { scope_id, sender_id: senderId }, type: QueryTypes.SELECT },
+  );
+  if (scopedRecipients.length > 0) {
+    await sequelize.query(
+      `UPDATE notifications SET read = false WHERE scope_id = :scope_id AND user_id != :sender_id`,
+      { replacements: { scope_id, sender_id: senderId }, type: QueryTypes.UPDATE },
+    );
+    for (const { user_id } of scopedRecipients) {
+      broadcastToUser(user_id, { type: 'notification_update' });
+    }
+  }
+
+  // ── 5. @mention / reply targets — create or refresh their notification row ──
+  // Users who are @mentioned or replied to get a fresh row (or an upserted one)
+  // so they definitely appear in the inbox even if they haven't participated before.
+  const toNotify = [
+    ...new Set([
+      ...mentionedUserIds,
+      ...(replyTargetUserId ? [replyTargetUserId] : []),
+    ]),
+  ];
+
+  if (toNotify.length === 0) return;
+
+  // ── 6. Resolve scope context (firm/project/task label + ticket_id) ────────
+  const { ticketId, contextName } = await resolveScope(scope, scope_id);
+
+  // ── 7. Atomic upsert — one row per (user_id, scope_id) ──────────────────────
+  const mentionedSet = new Set(mentionedUserIds);
+
+  await Promise.all(
+    toNotify.map(async (recipientId) => {
+      const type = mentionedSet.has(recipientId) ? 'mention' : 'reply';
+
+      await sequelize.query(
+        `INSERT INTO notifications
+           (id, user_id, scope_id, scope, ticket_id, actor_id, message_id, title, message, type, read, created_at, updated_at)
+         VALUES
+           (gen_random_uuid(), :user_id, :scope_id, :scope, :ticket_id, :actor_id, :message_id, :title, :message, :type, false, NOW(), NOW())
+         ON CONFLICT (user_id, scope_id) WHERE scope_id IS NOT NULL
+         DO UPDATE SET
+           message    = EXCLUDED.message,
+           actor_id   = EXCLUDED.actor_id,
+           message_id = EXCLUDED.message_id,
+           title      = EXCLUDED.title,
+           type       = CASE WHEN notifications.type = 'mention' THEN 'mention' ELSE EXCLUDED.type END,
+           read       = false,
+           updated_at = NOW()`,
+        {
+          replacements: {
+            user_id:    recipientId,
+            scope_id,
+            scope,
+            ticket_id:  ticketId,
+            actor_id:   senderId,
+            message_id: messageId,
+            title:      contextName,
+            message:    body,
+            type,
+          },
+          type: QueryTypes.INSERT,
+        },
+      );
+
+      // Push SSE so this recipient's inbox updates instantly
+      broadcastToUser(recipientId, { type: 'notification_update' });
+    }),
   );
 }
 
@@ -265,6 +376,7 @@ export async function createMessage(
     user_id:   userId,
     body:      dto.body.trim(),
     parent_id: dto.parent_id ?? null,
+    is_system: dto.is_system ?? false,
   });
 
   // Re-fetch with author join to keep the response shape consistent
@@ -283,16 +395,14 @@ export async function createMessage(
   const raw    = full!.toJSON() as unknown as Record<string, unknown>;
   const author = raw['author'] as { id: string; name: string; avatar_url: string | null };
 
-  // Non-blocking: parse @mentions and notify tagged users
-  fireMentionNotifications(userId, author.name, dto.body.trim(), dto.scope, dto.scope_id).catch(() => {});
-
-  return {
+  const enrichedMessage: EnrichedMessage = {
     id:         full!.id,
     scope:      full!.scope,
     scope_id:   full!.scope_id,
     user_id:    full!.user_id,
     parent_id:  full!.parent_id,
     body:       full!.body,
+    is_system:  full!.is_system,
     deleted_at: full!.deleted_at,
     created_at: full!.created_at,
     updated_at: full!.updated_at,
@@ -304,6 +414,13 @@ export async function createMessage(
     reactions: [],
     read_by:   [],
   };
+
+  // Non-blocking: track participants + notify all thread members
+  fireParticipantNotifications(userId, enrichedMessage).catch((err) => {
+    logger.error('[messages] fireParticipantNotifications failed:', err);
+  });
+
+  return enrichedMessage;
 }
 
 /**
@@ -411,4 +528,28 @@ export async function deleteMessage(
   );
 
   return { scope: message.scope, scope_id: message.scope_id };
+}
+
+/**
+ * Insert a system/activity message into the chat for a given scope.
+ * These appear inline with user messages but are styled differently.
+ *
+ * @param scope     'task' | 'project' | 'firm'
+ * @param scopeId   The ID of the task/project/firm
+ * @param actorId   The user who performed the action
+ * @param body      Human-readable description, e.g. "assigned Jane Doe to this task"
+ */
+export async function postSystemMessage(
+  scope:   string,
+  scopeId: string,
+  actorId: string,
+  body:    string,
+): Promise<void> {
+  await Message.create({
+    scope:     scope as 'firm' | 'project' | 'task',
+    scope_id:  scopeId,
+    user_id:   actorId,
+    body,
+    is_system: true,
+  });
 }

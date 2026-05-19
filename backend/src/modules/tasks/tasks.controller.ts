@@ -159,7 +159,7 @@ export async function updateTask(req: AuthenticatedRequest, res: Response): Prom
 
     updates.updated_at = new Date().toISOString();
 
-    const data = await tasksService.updateTask(id, updates);
+    const data = await tasksService.updateTask(id, updates, req.user!.id);
     res.json({ data });
   } catch (err) {
     logger.error('[tasks.controller] updateTask error:', err);
@@ -179,7 +179,7 @@ export async function assignAndApprove(req: AuthenticatedRequest, res: Response)
   const { id } = req.params;
 
   try {
-    const data = await tasksService.assignAndApproveTask(id, req.body as AssignApproveDto);
+    const data = await tasksService.assignAndApproveTask(id, req.body as AssignApproveDto, req.user!.id);
 
     if (!data) {
       res.status(404).json({ error: 'Task not found or not in to_do status' });

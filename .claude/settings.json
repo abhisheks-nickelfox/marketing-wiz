@@ -6,7 +6,9 @@
       "Bash(echo \"EXIT: $?\")",
       "Bash(node -e \"require\\('./dist/index.js'\\)\")",
       "Bash(wait)",
-      "Bash(nc -zv 3.7.156.53 5432)"
+      "Bash(nc -zv 3.7.156.53 5432)",
+      "Bash(node -e \"const v = require\\('/home/shubham/Documents/MarketingWiz/backend/node_modules/validator'\\); console.log\\(v.isUUID\\('00000000-0000-0000-0000-000000000011'\\)\\);\")",
+      "Bash(node -e \"const v = require\\('/home/shubham/Documents/MarketingWiz/backend/node_modules/validator'\\); console.log\\('all:', v.isUUID\\('00000000-0000-0000-0000-000000000011', 'all'\\)\\); console.log\\('real:', v.isUUID\\('f47ac10b-58cc-4372-a567-0e02b2c3d479'\\)\\);\")"
     ]
   }
 }

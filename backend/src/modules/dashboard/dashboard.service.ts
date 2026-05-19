@@ -1,7 +1,7 @@
 import logger from '../../config/logger';
 import { Op, QueryTypes } from 'sequelize';
 import sequelize from '../../config/database';
-import { Firm, Ticket, User, Transcript, TimeLog } from '../../models';
+import { Firm, Ticket, User, Transcript, TimeEntry } from '../../models';
 import {
   PAST_DEADLINE_STATUSES,
   STALE_APPROVED_DAYS,
@@ -192,10 +192,15 @@ export async function getOverdueTickets(): Promise<OverdueTicket[]> {
 }
 
 export async function getMemberDashboard(userId: string): Promise<MemberDashboardData> {
-  const [totalAssigned, pendingCount, timeLogs, recentTickets] = await Promise.all([
+  const [totalAssigned, pendingCount, timeEntries, recentTickets] = await Promise.all([
     Ticket.count({ where: { assignee_id: userId } }),
     Ticket.count({ where: { assignee_id: userId, status: 'assigned' } }),
-    TimeLog.findAll({ where: { user_id: userId }, attributes: ['hours'], raw: true }),
+    // Sum completed (non-running) time entries for this user
+    TimeEntry.findAll({
+      where: { user_id: userId, is_running: false },
+      attributes: ['duration_seconds'],
+      raw: true,
+    }),
     Ticket.findAll({
       where: { assignee_id: userId },
       attributes: ['id', 'title', 'status', 'priority', 'type', 'updated_at', 'firm_id', 'project_id'],
@@ -205,10 +210,11 @@ export async function getMemberDashboard(userId: string): Promise<MemberDashboar
     }),
   ]);
 
-  const totalHours = (timeLogs as unknown as { hours: number }[]).reduce(
-    (sum, l) => sum + (Number(l.hours) ?? 0),
+  const totalSeconds = (timeEntries as unknown as { duration_seconds: number | null }[]).reduce(
+    (sum, e) => sum + (e.duration_seconds ?? 0),
     0,
   );
+  const totalHours = totalSeconds / 3600;
 
   // Enrich recent tickets with firm/project names
   const recentList = recentTickets as unknown as Record<string, unknown>[];

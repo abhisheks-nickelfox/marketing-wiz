@@ -2,6 +2,15 @@ import { Router } from 'express';
 import { authenticate } from '../../middleware/auth';
 import { requireAdmin, requireMember } from '../../middleware/rbac';
 import {
+  listProjectDirectEntries,
+  startProjectTimer,
+  stopProjectTimer,
+  createProjectEntry,
+  updateProjectEntry,
+  deleteProjectEntry,
+} from '../time-entries/time-entries.controller';
+import { createTimeEntryValidation, updateTimeEntryValidation } from '../time-entries/time-entries.validation';
+import {
   listProjectsValidation,
   createProjectValidation,
   updateProjectValidation,
@@ -32,6 +41,26 @@ router.get('/:id',  authenticate, requireMember, ctrl.getProject);
 
 // GET /api/projects/:id/overview  — full overview: tasks grouped by status + members
 router.get('/:id/overview', authenticate, requireMember, ctrl.getProjectOverview);
+
+// ── Project-level time entries ────────────────────────────────────────────────
+
+// GET    /api/projects/:id/time-entries              — direct project entries + per-task rollup
+router.get('/:id/time-entries',                      authenticate, requireMember, listProjectDirectEntries);
+
+// POST   /api/projects/:id/time-entries/start        — start a project-level timer (must be before /:id/time-entries/:entryId/stop)
+router.post('/:id/time-entries/start',               authenticate, requireMember, startProjectTimer);
+
+// PATCH  /api/projects/:id/time-entries/:entryId/stop — stop a running project-level timer
+router.patch('/:id/time-entries/:entryId/stop',      authenticate, requireMember, stopProjectTimer);
+
+// POST   /api/projects/:id/time-entries              — create a manual project-level entry
+router.post('/:id/time-entries',                     authenticate, requireMember, createTimeEntryValidation, createProjectEntry);
+
+// PATCH  /api/projects/:id/time-entries/:entryId     — update a project-level entry
+router.patch('/:id/time-entries/:entryId',           authenticate, requireMember, updateTimeEntryValidation, updateProjectEntry);
+
+// DELETE /api/projects/:id/time-entries/:entryId     — delete a project-level entry
+router.delete('/:id/time-entries/:entryId',          authenticate, requireMember, deleteProjectEntry);
 
 // GET /api/projects/:id/tasks     — flat task list for this project (used by delete modal)
 router.get('/:id/tasks', authenticate, requireAdmin, ctrl.getProjectTasks);

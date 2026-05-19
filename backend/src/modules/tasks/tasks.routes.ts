@@ -11,19 +11,20 @@ import {
   archiveTaskValidation,
   transitionTaskValidation,
 } from './tasks.validation';
-import {
-  createTimeLogValidation,
-  updateTimeLogValidation,
-  deleteTimeLogValidation,
-} from './time-logs.validation';
 import * as tasksController from './tasks.controller';
-import * as timeLogsController from './time-logs.controller';
 import * as attachmentsController from './attachments.controller';
+import { getRunningTimer } from '../time-entries/time-entries.controller';
+import timeEntriesRouter from '../time-entries/time-entries.routes';
 
-const router = Router();
+const router = Router({ mergeParams: true });
 
 // All task routes require authentication
 router.use(authenticate);
+
+// ─── Running-timer shortcut — must be before /:id param routes ───────────────
+
+// GET /api/tasks/me/running-timer — returns the currently-running timer for the caller
+router.get('/me/running-timer', requireMember, getRunningTimer);
 
 // POST /api/tasks — admin only: create a manual task
 router.post('/', requireAdmin, createTaskValidation, tasksController.createTask);
@@ -72,18 +73,10 @@ router.post('/:id/attachments', requireMember, attachmentsController.uploadAttac
 // DELETE /api/tasks/:id/attachments/:attId — delete an attachment
 router.delete('/:id/attachments/:attId', requireMember, attachmentsController.deleteAttachment);
 
-// ─── Time-log sub-resource ────────────────────────────────────────────────────
+// ─── Time-entries sub-resource ────────────────────────────────────────────────
 
-// GET  /api/tasks/:id/time-logs
-router.get('/:id/time-logs', requireMember, timeLogsController.listTimeLogs);
-
-// POST /api/tasks/:id/time-logs
-router.post('/:id/time-logs', requireMember, createTimeLogValidation, timeLogsController.createTimeLog);
-
-// PATCH /api/tasks/:id/time-logs/:logId
-router.patch('/:id/time-logs/:logId', requireMember, updateTimeLogValidation, timeLogsController.updateTimeLog);
-
-// DELETE /api/tasks/:id/time-logs/:logId
-router.delete('/:id/time-logs/:logId', requireMember, deleteTimeLogValidation, timeLogsController.deleteTimeLog);
+// Mount all /api/tasks/:id/time-entries/* routes via the dedicated router.
+// mergeParams on both routers ensures :id is visible inside the time-entries router.
+router.use('/:id/time-entries', timeEntriesRouter);
 
 export default router;
